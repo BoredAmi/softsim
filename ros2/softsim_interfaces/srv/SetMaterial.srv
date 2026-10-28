@@ -1,0 +1,8 @@
+# Replace a soft body's material; the model is rebuilt and the scenario resets.
+# material: a preset name ("ecoflex_00_10"), a YAML file path, or a YAML mapping,
+#   e.g. "{preset: ecoflex_00_10, elastic: {youngs_modulus: 40 kPa}}".
+string body
+string material
+---
+bool success
+string message

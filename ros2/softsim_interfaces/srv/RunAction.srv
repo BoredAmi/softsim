@@ -1,0 +1,8 @@
+# Run a scenario action (rebuilds and resets the simulation).
+# arguments: YAML mapping of keyword arguments, e.g. for drop_test action "drop":
+#   "{preset: czopek2026_w050, height: 0.2}" or "{mass: 0.03, tilt: [0.1, 0]}".
+string action
+string arguments
+---
+bool success
+string message
