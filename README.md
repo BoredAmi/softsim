@@ -4,19 +4,20 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status: M1 (core + MuJoCo drop test) and M2 (ROS 2 layer) done.** Video
-tracking and calibration (M3) and the SOFA backend (M4) are next; see
+**Status: M1 (core + MuJoCo drop test), M2 (ROS 2 layer) and M3 (video
+tracking + calibration) done.** The SOFA backend (M4) is next; see
 [docs/roadmap.md](docs/roadmap.md).
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
 *20 g weight dropped from 38 cm onto an Ecoflex 00-10 cylinder (D 40 × H 17 mm),
-about 100× slow motion, aligned at first contact. Left: high-speed camera
+about 100× slow motion, aligned at the tracked contact. Left: high-speed camera
 recording from [Czopek et al., doi:10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808)
 (CC-BY-4.0, cropped and denoised). Right: softsim + MuJoCo flex with the
-**uncalibrated** datasheet material. It is visibly too stiff (about 2 mm vs
-about 4 mm peak indentation), which is what M3 calibration will fix. The real
-weight also lands slightly tilted; the simulated one drops straight.*
+**calibrated** material (`ecoflex_00_10_drop_fit`, E = 55 kPa) and the measured
+impact speed, offset and spin. For 20 g and 50 g the calibrated model matches
+the first impact within 3–15%. The 500 g impact is not reproduced; see
+[docs/experiments.md](docs/experiments.md) for what does and doesn't fit, and why.*
 
 ![All five dataset weights simulated side by side](docs/media/drop_all_weights.gif)
 
@@ -40,7 +41,7 @@ and MuJoCo's new volumetric flex is fast but low-level. softsim adds:
   mesh resolution, volumetric locking, StVK under large compression, explicit
   stability limits, and density/mass consistency.
 - **Validation first.** Every scenario produces metrics that are meant to be
-  compared with experimental data (tracking and calibration in M3).
+  compared with experimental data (see [docs/experiments.md](docs/experiments.md)).
 
 ## Install
 
@@ -65,6 +66,8 @@ softsim run   scenarios/drop_test/cases/w020.yaml \
 softsim view  scenarios/drop_test/cases/w050.yaml   # interactive MuJoCo viewer (slowed 200x)
 softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5
 softsim export scenarios/drop_test/cases/w020.yaml --out model.xml
+softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5       # video tracking (needs the dataset zips)
+softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3    # fit E and damping to the recordings
 ```
 
 From Python:
@@ -110,10 +113,13 @@ softsim/            core library (no ROS)
   backends/         Backend interface, MuJoCo flex backend, SOFA stub
   scenarios/        Scenario base class + drop_test
   checks/           pre-run physics checks
+  experiments/      datasets, video tracking, sim-vs-experiment comparison, calibration, plots
   runner.py         Simulation / run_config
   sweep.py, cli.py
 ros2/               softsim_interfaces, softsim_ros (generic node), softsim_bringup (launch, RViz)
 scenarios/          scenario configs, cases and sweeps (data, not code)
+datasets/           experimental dataset descriptions (DOI, camera, cases)
+calibrations/       calibration configs
 data/               raw/ (not versioned) and processed/ experimental data
 tools/              helper scripts (README media generation)
 docs/               architecture, how-to guides, backend notes, media/
@@ -128,6 +134,7 @@ tests/
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
 - [Drop test scenario and dataset](docs/scenarios/drop_test.md)
 - [ROS 2 integration](docs/ros2.md)
+- [Experiments: video tracking and calibration](docs/experiments.md)
 
 ## Data and citation
 

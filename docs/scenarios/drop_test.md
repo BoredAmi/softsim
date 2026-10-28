@@ -17,10 +17,10 @@ doi:[10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808), CC-BY-4.
 
 | Weight | Diameter | Height | Notes |
 | --- | --- | --- | --- |
-| 20 g | 22.5 mm | 5.6 mm | brass finish |
-| 50 g | 27 mm | 9.9 mm | |
-| 100 g | 32 mm | 18 mm | |
-| 200 g | 40 mm | 24 mm | |
+| 20 g | 22.5 mm | 5.6 mm | brass |
+| 50 g | 27 mm | 9.9 mm | brass |
+| 100 g | 32 mm | 18 mm | black, no knob; hits the specimen edge |
+| 200 g | 40 mm | 24 mm | black; tilted edge impact |
 | 500 g | 43 mm | 38 mm | black, mushroom knob, wider than the specimen |
 
 ### What we measured from the data (Step 0)
@@ -36,9 +36,12 @@ doi:[10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808), CC-BY-4.
 - **20 g preview, rough tracking:** contact to peak takes about 7–9 frames
   (2.3–3 ms), peak indentation is about 4 mm, then the weight rebounds about
   5 mm and settles.
-- **500 g contact sheet:** the weight lands tilted, the specimen leaves the
-  table about 60 ms after contact, the weight bounces, then topples off the
-  cylinder.
+- **500 g contact sheet:** the weight lands tilted, bounces, then topples off
+  the cylinder. *Correction:* I first read the specimen as leaving the table
+  about 60 ms after contact. M3 tracking showed that the table itself moves by
+  several mm, so that was mostly support motion.
+- **Full tracking results** (contact, impact speed, offset, spin, support
+  motion) are in [experiments.md](../experiments.md).
 
 ## Scenario
 
@@ -65,7 +68,7 @@ Summary: `peak_indentation`, `t_to_peak`, `first_contact_duration`,
 Action `drop(preset=, mass=, height=, offset=, tilt=)` rebuilds the scene and
 drops again.
 
-## M1 results: uncalibrated (do not read as validation)
+## M1 results: uncalibrated (superseded by M3 calibration)
 
 These use the `ecoflex_00_10` preset (Neo-Hookean, E = 91 kPa from the
 datasheet, ν = 0.45, Rayleigh β = 2 ms placeholder), a 3.5 mm mesh, dt = 0.1 ms,
@@ -87,5 +90,8 @@ about 4 mm of peak indentation. It is also **too elastic**: it rebounds at
 0.49 m/s against roughly 0.3 m/s estimated from the rebound height. The
 restitution *rising* with mass is a signature of Rayleigh damping (heavier
 weights mean slower impacts, which are damped less). Whether real Ecoflex shows
-this is a key question for the M3 comparison. Calibration (M3) fits E and β
-jointly across all five weights.
+this is a key question for the M3 comparison. **M3 calibration** ([experiments.md](../experiments.md)) fits E = 54.8 kPa and
+β = 0.31 ms (preset `ecoflex_00_10_drop_fit`, 5 mm mesh). That matches the 20 g
+and 50 g first impacts within 3–15%, but not the 500 g, which in reality is far
+stiffer and faster than Neo-Hookean + Rayleigh allows. The 100 g and 200 g
+recordings are off-centre edge impacts and can't be used.

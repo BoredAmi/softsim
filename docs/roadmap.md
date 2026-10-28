@@ -20,7 +20,7 @@ no-penetration checks), and docs.
   bodies, metrics, contact wrenches and ground reaction.
 - `ros2/softsim_bringup`: launch with viewer on/off, headless batch mode, RViz config.
 
-## M3: tracking + calibration
+## M3: tracking + calibration (done; see [experiments.md](experiments.md))
 
 - Dataset registry (`datasets/*.yaml`: DOI, files, checksums, frame rate,
   overlay layout) and a loader that reads TIFFs straight from the zips.

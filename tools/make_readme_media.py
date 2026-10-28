@@ -2,6 +2,7 @@
 
     python tools/make_readme_media.py                      # both GIFs
     python tools/make_readme_media.py --skip-experiment    # simulation-only GIF
+    python tools/make_readme_media.py --set specimen.material=ecoflex_00_10_drop_fit --set specimen.mesh.size=0.005
 
 1. ``drop_20g_sim_vs_experiment.gif``: high-speed camera frames of the 20 g
    drop (Czopek et al., doi:10.5281/zenodo.23185808, CC-BY-4.0) next to the
@@ -9,8 +10,10 @@
    ``--dataset-dir``.
 2. ``drop_all_weights.gif``: the five dataset weights simulated side by side.
 
-The simulation uses whatever material the scenario configs specify; the
-caption states it, so the GIF can be regenerated after calibration. Rendering
+The simulation uses the scenario configs plus ``--set`` overrides; the caption
+states the material. If tracking results exist (``softsim track``), the 20 g
+simulation uses the measured impact (speed, offset, spin) and the experiment is
+aligned at the tracked contact frame. Rendering
 uses MuJoCo's offscreen renderer (set MUJOCO_GL=egl/osmesa on headless hosts).
 """
 
@@ -33,6 +36,7 @@ CAMERA_FPS = 2999.3  # measured from the overlay timestamps
 # Common overrides: start 15 mm above the specimen (impact speed unchanged) so
 # the weight is seen arriving, and use the default mesh/timestep.
 SIM_OVERRIDES = ["drop.gap=0.015", "output.save_model=false"]
+TRACKS = ROOT / "data" / "processed" / "czopek2026_ecoflex_drop"
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -129,32 +133,44 @@ def save_gif(frames: list[Image.Image], path: Path, frame_ms: int, colors: int =
     print(f"wrote {path} ({path.stat().st_size / 1e6:.2f} MB, {len(frames)} frames)")
 
 
-def material_caption() -> str:
-    sim = Simulation(CASES / "w020.yaml", ["output.save_model=false"])
+def material_caption(extra: list[str]) -> str:
+    sim = Simulation(CASES / "w020.yaml", ["output.save_model=false", *extra])
     m = sim.scene.soft_bodies[0].material
     caption = f"{m.name}: {m.elastic.model}, E={m.elastic.initial_youngs_modulus() / 1e3:.0f} kPa"
     sim.close()
-    return caption + (" (uncalibrated)" if "UNCALIBRATED" in m.source.upper() else "")
+    if "UNCALIBRATED" in m.source.upper():
+        return caption + " (uncalibrated)"
+    return caption + (" (fitted)" if m.provenance.get("fitted_by") else "")
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out", type=Path, default=ROOT / "docs" / "media")
     p.add_argument("--dataset-dir", type=Path, default=ROOT / "data" / "raw" / "czopek2026")
-    p.add_argument("--contact-frame", type=int, default=216,
-                   help="020gram.zip frame of first weight/specimen contact (picked by eye until M3 tracking)")
+    p.add_argument("--contact-frame", type=int, default=None,
+                   help="020gram.zip contact frame (default: from tracking results, else 216)")
+    p.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
+                   help="scenario override applied to every simulation (repeatable)")
     p.add_argument("--skip-experiment", action="store_true")
     args = p.parse_args()
 
-    caption = material_caption()
+    caption = material_caption(args.overrides)
+    impact: list[str] = []
+    contact_frame = args.contact_frame or 216
+    if (TRACKS / "w020.yaml").exists():
+        from softsim.experiments.compare import ExperimentCase
+
+        exp_case = ExperimentCase.load(TRACKS, "w020")
+        impact = exp_case.sim_overrides(gap=0.015)
+        contact_frame = args.contact_frame or exp_case.meta["contact_frame"]
     frame_ms = 80  # 0.75 ms of physics per frame -> ~107x slow motion
     size = 256
 
     if not args.skip_experiment:
         times = np.arange(-0.009, 0.042, 0.00075)
         zip_path = args.dataset_dir / "020gram.zip"
-        exp = experiment_frames(zip_path, "020gram", args.contact_frame, times, size, crop=(180, 300, 620, 740))
-        sim, peak = render_simulation("w020", times, size)
+        exp = experiment_frames(zip_path, "020gram", contact_frame, times, size, crop=(180, 300, 620, 740))
+        sim, peak = render_simulation("w020", times, size, extra=[*args.overrides, *impact])
         frames = []
         for t, a, b in zip(times, exp, sim):
             _label(a, ["experiment"])
@@ -170,7 +186,7 @@ def main() -> None:
     panel = 200
     panels = []
     for case, label in [("w020", "20 g"), ("w050", "50 g"), ("w100", "100 g"), ("w200", "200 g"), ("w500", "500 g")]:
-        frames, peak = render_simulation(case, times_all, panel, lookat_z=0.026, distance=0.17)
+        frames, peak = render_simulation(case, times_all, panel, extra=args.overrides, lookat_z=0.026, distance=0.17)
         panels.append([_label(f, [label, f"peak {peak * 1e3:.1f} mm"], 12) for f in frames])
         print(f"{case}: peak indentation {peak * 1e3:.2f} mm")
     frames = []

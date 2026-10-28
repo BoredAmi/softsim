@@ -51,12 +51,14 @@ the PGS solver.
 - **Peak contact force is not converged.** It is a first-contact spike on tiny
   vertex masses and changes with dt (70–140 N for 20 g). Use indentation,
   timing, rebound and ground force for calibration.
-- **Specimen lift-off is real.** In the free-base configuration the specimen's
-  elastic recoil launches it off the table after the weight separates (1 mm at
-  20 g up to 16 mm at 500 g with the uncalibrated preset). The 500 g recording
-  shows the same thing qualitatively: the cylinder is visibly airborne about
-  60 ms after contact. It is reported as `specimen_lift_off` and should be part
-  of the M3 comparison.
+- **Specimen lift-off in the simulation.** In the free-base configuration the
+  specimen's elastic recoil can launch it off the rigid table after the weight
+  separates (1 mm at 20 g up to 16 mm at 500 g with the uncalibrated preset).
+  It is reported as `specimen_lift_off`. *Correction:* I earlier said the 500 g
+  recording confirms this. M3 tracking showed that the table under the specimen
+  in the recordings is not rigid and moves by several mm from about 20 ms after
+  impact, so the apparent lift in the video is mostly support motion. See
+  [experiments.md](../experiments.md).
 - **Solver warnings.** At large dt on finer meshes, the inner M+K solve can run
   out of CG iterations (`mjWARN_INERTIA`). softsim reports this as a
   `backend-warnings` finding; raise `simulation.iterations` or lower dt.
