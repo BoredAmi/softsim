@@ -1,0 +1,38 @@
+name: ecoflex_00_10_drop_fit
+description: Ecoflex 00-10 fitted to drop tests (MuJoCo, 5 mm mesh).
+source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808)
+  by softsim calibrate.
+density: 1040.0
+elastic:
+  youngs_modulus: 54837.08105915519
+  poisson_ratio: 0.45
+  model: neo_hookean
+damping:
+  model: rayleigh
+  alpha: 0.0
+  beta: 0.00031462933844351456
+friction:
+  sliding: 1.0
+  torsional: 0.0
+  rolling: 0.0
+provenance:
+  fitted_by: softsim calibrate
+  calibration_file: calibrations/ecoflex_00_10_drop.yaml
+  dataset_doi: 10.5281/zenodo.23185808
+  cases:
+    w020: 1.0
+    w050: 1.0
+    w500: 1.0
+  backend: mujoco
+  mesh_size: 0.005
+  timestep: 0.1 ms
+  contact_timeconst: 0.2 ms
+  cost: 0.43574007454631597
+  per_case_nrmse:
+    w020: 0.15319428127741375
+    w050: 0.02835012879015775
+    w500: 1.1256758135713765
+  note: 'Effective parameters: valid only with this backend, element type and mesh
+    size.'
+  fit_ranges: first contact phase; w020 and w050 fit within 3-15 % NRMSE, w500 not
+    reproduced (113 %)

@@ -1,0 +1,20 @@
+# Fit Neo-Hookean E and Rayleigh beta of Ecoflex 00-10 to the drop-test recordings.
+#   softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5     (once)
+#   softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3
+# w100 and w200 are excluded: the weight hits the specimen edge off-centre and
+# slides/rolls off, which a model without the measured out-of-plane tilt cannot
+# reproduce (see docs/scenarios/drop_test.md).
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0, w500: 1.0}
+overrides:
+  - specimen.mesh.size=0.005       # fitted values are tied to this mesh size
+  - simulation.duration=0.022
+  - simulation.output_rate=10000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 50 kPa, bounds: [5 kPa, 2 MPa], log: true}
+  specimen.material.damping.beta: {initial: 2 ms, bounds: [0.01 ms, 30 ms], log: true}
+grid: 4
+max_evaluations: 50
+output: ../runs/calibration/ecoflex_00_10_drop

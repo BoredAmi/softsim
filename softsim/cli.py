@@ -157,6 +157,61 @@ def _cmd_view(args: argparse.Namespace) -> int:
     return 0
 
 
+def _track_one(args: tuple[str, str, str]) -> str:
+    from softsim.experiments import load_dataset
+    from softsim.experiments.video.track import track_case
+
+    dataset_path, case, out = args
+    try:
+        track = track_case(load_dataset(dataset_path), case)
+    except Exception as exc:  # report and continue with the other cases
+        return f"{case}: FAILED {type(exc).__name__}: {exc}"
+    track.save(out)
+    return track_summary_line(track.meta)
+
+
+def track_summary_line(m: dict) -> str:
+    ff = m["free_fall"]
+    return (f"{m['case']}: scale {m['scale_px_per_mm']:.3f} px/mm, elevation {m['camera_elevation_deg']:.1f} deg, "
+            f"fit frames {ff['frames']} rms {ff['rms_residual_px']:.2f} px, contact frame {m['contact_frame']}, "
+            f"impact {m['impact_speed']:.3f} m/s, offset {m['offset_at_contact_mm']:+.1f} mm, "
+            f"rotation rate {m['rotation_rate_at_contact_deg_s']:+.0f} deg/s, tracked {m['tracked_frames']}")
+
+
+def _cmd_track(args: argparse.Namespace) -> int:
+    from concurrent.futures import ProcessPoolExecutor
+
+    from softsim.experiments import load_dataset
+
+    ds = load_dataset(args.dataset)
+    cases = args.case or list(ds.cases)
+    out = args.out or str(ds.root / "data" / "processed" / ds.name)
+    tasks = [(args.dataset, c, out) for c in cases]
+    if args.jobs > 1:
+        with ProcessPoolExecutor(min(args.jobs, len(tasks))) as pool:
+            lines = list(pool.map(_track_one, tasks))
+    else:
+        lines = [_track_one(t) for t in tasks]
+    for line in lines:
+        print(line)
+    print(f"results in {out}", file=sys.stderr)
+    return 1 if any("FAILED" in line for line in lines) else 0
+
+
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    from softsim.experiments.calibrate import Calibration
+
+    report = Calibration(args.calibration, jobs=args.jobs).run()
+    print(json.dumps(report, indent=2, default=float))
+    if not args.no_plots:
+        from softsim.experiments.plots import calibration_plots
+
+        out = Path(report["material_file"]).parent
+        for path in calibration_plots(report, args.calibration, out):
+            print(f"plot: {path}", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="softsim", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -192,6 +247,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("scenarios", help="list registered scenarios and their actions")
     p.set_defaults(func=_cmd_scenarios)
+
+    p = sub.add_parser("track", help="track experimental videos of a dataset (weight, contact, bulge, lift-off)")
+    p.add_argument("dataset", help="dataset YAML, e.g. datasets/czopek2026_ecoflex_drop.yaml")
+    p.add_argument("--case", action="append", help="case name (repeatable; default: all)")
+    p.add_argument("--out", help="output directory (default: data/processed/<dataset name>)")
+    p.add_argument("--jobs", type=int, default=1)
+    p.set_defaults(func=_cmd_track)
+
+    p = sub.add_parser("calibrate", help="fit material parameters to tracked experiments")
+    p.add_argument("calibration", help="calibration YAML, e.g. calibrations/ecoflex_00_10_drop.yaml")
+    p.add_argument("--jobs", type=int, default=1, help="cases simulated in parallel")
+    p.add_argument("--no-plots", action="store_true")
+    p.set_defaults(func=_cmd_calibrate)
 
     p = sub.add_parser("view", help="interactive MuJoCo viewer (loops the scenario)")
     _add_config_args(p)
