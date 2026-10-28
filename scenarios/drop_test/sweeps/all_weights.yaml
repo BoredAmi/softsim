@@ -1,0 +1,6 @@
+# All five weights of the Czopek et al. dataset at the default (uncalibrated) material.
+#   softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5
+base: ../scenario.yaml
+grid:
+  weight.body: [czopek2026_w020, czopek2026_w050, czopek2026_w100, czopek2026_w200, czopek2026_w500]
+save_timeseries: true

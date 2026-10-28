@@ -1,0 +1,10 @@
+# Mesh and timestep convergence of the first impact (20 g), contact model fixed.
+#   softsim sweep scenarios/drop_test/sweeps/convergence.yaml --jobs 4
+base: ../cases/w020.yaml
+overrides:
+  - simulation.duration=0.008
+  - simulation.output_rate=20000
+  - contact.timeconst=0.0004
+grid:
+  specimen.mesh.size: [0.005, 0.0035, 0.0025]
+  simulation.timestep: [0.0002, 0.0001, 0.00005]

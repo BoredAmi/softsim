@@ -1,0 +1,52 @@
+# Drop test on an Ecoflex 00-10 cylinder.
+# Reference: Czopek, Superczynska, Marcinkowska, Gajewski, Bernat,
+# "Records of falling mass on Ecoflex 00-10 cylinder", Zenodo,
+# doi:10.5281/zenodo.23185808 (CC-BY-4.0).
+# Cases in cases/*.yaml extend this file and only change the weight.
+scenario: drop_test
+description: Brass weight dropped from 38 cm onto an Ecoflex 00-10 cylinder on a flat table.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms          # flex response converged (<1% vs 0.05 ms at fixed contact timeconst)
+  duration: 250 ms          # impact (~5 ms), rebound flight, re-contacts and settling
+  output_rate: 5 kHz        # every 2nd step; resampled to camera frames (2999.3 fps) when comparing
+  integrator: discrete      # MuJoCo >= 3.13: required for flex elasticity
+  solver: CG
+  iterations: 100
+
+contact:
+  # Contact compliance is part of the model, not a numerical setting: tc 0.2 ms
+  # vs 0.4 ms changes the 20 g peak indentation by ~10%. Kept fixed so changing
+  # the timestep does not change the contact model (needs timestep <= timeconst).
+  timeconst: 0.2 ms
+  dampratio: 1.0
+
+ground:
+  friction: {sliding: 0.8}
+
+specimen:
+  name: specimen
+  geometry: {type: cylinder, diameter: 40 mm, height: 17 mm}
+  material: ecoflex_00_10
+  # Measured mass. Implies 912 kg/m^3 vs 1040 kg/m^3 on the datasheet
+  # (casting flash / dimensions?); the measured mass is used.
+  mass: 19.49 g
+  mesh: {size: 3.5 mm, method: structured}
+  base: free                # resting on the table; 'bonded' pins the bottom face
+
+weight:
+  name: weight
+  body: czopek2026_w020
+  friction: {sliding: 0.5}
+
+drop:
+  height: 38 cm             # fall height of the weight's bottom face (impact ~2.73 m/s)
+  gap: 0.5 mm               # simulation starts this far above the specimen
+  offset: [0, 0]
+  tilt: [0 deg, 0 deg]
+
+output:
+  directory: runs
+  format: parquet
+  save_vertices: false

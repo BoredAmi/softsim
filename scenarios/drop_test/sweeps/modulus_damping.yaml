@@ -1,0 +1,8 @@
+# E x Rayleigh-beta grid for the 20 g case (shows how strongly they trade off).
+#   softsim sweep scenarios/drop_test/sweeps/modulus_damping.yaml --jobs 8
+base: ../cases/w020.yaml
+overrides:
+  - simulation.duration=0.03
+grid:
+  specimen.material.elastic.youngs_modulus: [30000, 50000, 70000, 90000]
+  specimen.material.damping.beta: [0.0005, 0.001, 0.002, 0.004]

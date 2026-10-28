@@ -1,0 +1,3 @@
+extends: ../scenario.yaml
+name: drop_test_w200
+weight: {body: czopek2026_w200}
