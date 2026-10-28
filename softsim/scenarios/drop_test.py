@@ -158,6 +158,8 @@ class DropTestScenario(Scenario):
             "t": state.time,
             "weight_z": float(w.position[2]),
             "weight_vz": float(w.linear_velocity[2]),
+            "weight_com_x": float(w.com[0]) if w.com is not None else float("nan"),
+            "weight_com_z": float(w.com[2]) if w.com is not None else float("nan"),
             "indentation": float(self._top + cfg.contact.soft_radius - w.position[2]),
             "top_center_z": float(verts[self._top_center, 2]),
             "compression": float(self._top - verts[self._top_center, 2]),

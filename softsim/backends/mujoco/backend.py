@@ -160,7 +160,8 @@ class MujocoBackend(Backend):
         vel = np.zeros(6)
         for name, bid in self._rigid_ids.items():
             mujoco.mj_objectVelocity(m, d, mujoco.mjtObj.mjOBJ_BODY, bid, vel, 0)
-            rigid[name] = RigidState(d.xpos[bid].copy(), d.xquat[bid].copy(), vel[3:].copy(), vel[:3].copy())
+            rigid[name] = RigidState(d.xpos[bid].copy(), d.xquat[bid].copy(), vel[3:].copy(), vel[:3].copy(),
+                                     d.xipos[bid].copy())
         soft = {}
         for name, (adr, num, bodies, dofs) in self._flex.items():
             radius_offset = np.array([0.0, 0.0, self._scene.contact.soft_radius])

@@ -26,12 +26,13 @@ from softsim.scene import Scene
 
 @dataclass(frozen=True)
 class RigidState:
-    """Pose and twist of a rigid body frame (world frame, SI)."""
+    """Pose and twist of a rigid body frame (world frame, SI); ``com`` is the centre of mass."""
 
     position: np.ndarray
     quaternion: np.ndarray
     linear_velocity: np.ndarray
     angular_velocity: np.ndarray
+    com: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
