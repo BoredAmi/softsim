@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use softsim, please cite it and the datasets you validate against."
+title: "softsim: data-driven simulation of soft materials and soft robots"
+type: software
+license: Apache-2.0
+version: 0.1.0
+authors:
+  - name: "softsim contributors"
+references:
+  - type: data
+    title: "Records of falling mass on Ecoflex 00-10 cylinder"
+    authors:
+      - family-names: Czopek
+        given-names: Paweł
+      - family-names: Superczynska
+        given-names: Paulina
+      - family-names: Marcinkowska
+        given-names: Agnieszka
+      - family-names: Gajewski
+        given-names: Piotr
+      - family-names: Bernat
+        given-names: Jakub
+    institution:
+      name: Poznań University of Technology
+    doi: 10.5281/zenodo.23185808
+    license: CC-BY-4.0
+    publisher:
+      name: Zenodo

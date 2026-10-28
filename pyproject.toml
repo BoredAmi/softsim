@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "softsim"
+version = "0.1.0"
+description = "Data-driven simulation of soft materials and soft robots, with pluggable physics backends and validation against experiments."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24,<2",          # <2 keeps ROS 2 Humble's compiled Python extensions working
+    "pyyaml>=5.4",
+    "pydantic>=2,<3",
+    "pandas>=2,<3",
+    "pyarrow>=14",
+]
+
+[project.optional-dependencies]
+mujoco = ["mujoco>=3.17,<3.18"]   # flex API changes every release; bump deliberately
+mesh = ["gmsh>=4.11"]
+calib = ["scipy>=1.11"]
+video = ["opencv-python>=4.5"]
+dev = ["pytest>=7", "softsim[mujoco,mesh,calib]"]
+
+[project.scripts]
+softsim = "softsim.cli:main"
+
+# Third-party packages can register scenarios / backends without touching the core.
+[project.entry-points."softsim.scenarios"]
+drop_test = "softsim.scenarios.drop_test:DropTestScenario"
+
+[project.entry-points."softsim.backends"]
+mujoco = "softsim.backends.mujoco:MujocoBackend"
+sofa = "softsim.backends.sofa:SofaBackend"
+
+[tool.setuptools.packages.find]
+include = ["softsim*"]
+
+[tool.setuptools.package-data]
+softsim = ["materials/presets/*.yaml", "geometry/presets/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# ROS 2 Humble registers pytest plugins that are incompatible with pytest >= 8
+addopts = "-p no:launch_testing -p no:launch_ros"
+markers = ["slow: long-running physics checks (deselect with -m 'not slow')"]
