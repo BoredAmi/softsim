@@ -1,0 +1,27 @@
+# Czopek, Superczynska, Marcinkowska, Gajewski, Bernat (Poznan University of
+# Technology): "Records of falling mass on Ecoflex 00-10 cylinder", Zenodo.
+# Raw data is not redistributed: download the zips into local_dir.
+name: czopek2026_ecoflex_drop
+title: Records of falling mass on Ecoflex 00-10 cylinder
+authors: [Paweł Czopek, Paulina Superczynska, Agnieszka Marcinkowska, Piotr Gajewski, Jakub Bernat]
+doi: 10.5281/zenodo.23185808
+license: CC-BY-4.0
+url: https://zenodo.org/doi/10.5281/zenodo.23185808
+local_dir: data/raw/czopek2026
+camera:
+  # From the burned-in overlay "frame/017866 ... T=<s>": 200 frames per 66.683 ms.
+  fps: 2999.3
+  width: 800
+  height: 800
+  overlay_top: 758
+specimen: {diameter: 40 mm, height: 17 mm, mass: 19.49 g}
+cases:
+  w020: {archive: 020gram.zip, prefix: 020gram, config: scenarios/drop_test/cases/w020.yaml, weight_mass: 20 g, weight_appearance: brass}
+  w050: {archive: 050gram.zip, prefix: 050gram, config: scenarios/drop_test/cases/w050.yaml, weight_mass: 50 g, weight_appearance: brass,
+         notes: "lands strongly tilted, tumbles and flies off the specimen"}
+  w100: {archive: 100gram.zip, prefix: 100gram, config: scenarios/drop_test/cases/w100.yaml, weight_mass: 100 g, weight_appearance: dark,
+         notes: "black weight without knob; falls tilted, hits the specimen edge off-centre, rolls off"}
+  w200: {archive: 200gram.zip, prefix: 200gram, config: scenarios/drop_test/cases/w200.yaml, weight_mass: 200 g, weight_appearance: dark,
+         notes: "black weight; ~30 deg tilt in flight, hits the specimen edge, bounces off to the side"}
+  w500: {archive: 500gram.zip, prefix: 500gram, config: scenarios/drop_test/cases/w500.yaml, weight_mass: 500 g, weight_appearance: dark,
+         notes: "black weight; lands tilted, bounces, topples off the specimen ~190 ms after contact"}

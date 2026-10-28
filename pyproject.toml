@@ -20,8 +20,8 @@ dependencies = [
 [project.optional-dependencies]
 mujoco = ["mujoco>=3.17,<3.18"]   # flex API changes every release; bump deliberately
 mesh = ["gmsh>=4.11"]
-calib = ["scipy>=1.11"]
-video = ["opencv-python>=4.5"]
+calib = ["scipy>=1.11", "matplotlib>=3.7"]
+video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
 dev = ["pytest>=7", "softsim[mujoco,mesh,calib]"]
 
