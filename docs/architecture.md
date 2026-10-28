@@ -21,7 +21,7 @@
 
 | Principle | Mechanism |
 | --- | --- |
-| Core is ROS-agnostic | `softsim/` imports no ROS; the ROS nodes (M2) wrap `Simulation`. |
+| Core is ROS-agnostic | `softsim/` imports no ROS; `ros2/softsim_ros` wraps `Simulation` (see [ros2.md](ros2.md)). |
 | Pluggable backends | `backends/base.py: Backend`; discovered through the `softsim.backends` entry-point group. |
 | Fail loudly on unsupported physics | `capabilities.py: Capability`. Scene elements declare `requires`, backends declare `capabilities` and `extra_checks()`. |
 | Data-driven | Pydantic models with `extra="forbid"` (`config/schema.py`), units in `config/units.py`, `extends:` and `--set` in `config/loader.py`. |

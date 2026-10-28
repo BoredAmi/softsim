@@ -1,0 +1,113 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Help Height: 0
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid (1 cm)
+      Enabled: true
+      Cell Size: 0.01
+      Plane Cell Count: 20
+      Plane: XY
+      Reference Frame: world
+      Color: 160; 160; 164
+      Alpha: 0.5
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Normal Cell Count: 0
+      Offset: {X: 0, Y: 0, Z: 0}
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Marker Scale: 0.02
+      Show Arrows: false
+      Show Axes: true
+      Show Names: true
+      Frame Timeout: 15
+      Update Interval: 0
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Soft bodies (mesh)
+      Enabled: true
+      Namespaces: {}
+      Topic:
+        Value: /softsim/soft_markers
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Rigid bodies
+      Enabled: true
+      Namespaces: {}
+      Topic:
+        Value: /softsim/rigid_markers
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Specimen vertices
+      Enabled: false
+      Topic:
+        Value: /softsim/soft/specimen/points
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Style: Points
+      Size (Pixels): 3
+      Size (m): 0.0005
+      Color Transformer: FlatColor
+      Color: 255; 255; 255
+      Alpha: 1
+      Decay Time: 0
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Queue Size: 10
+      Selectable: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 60; 45
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 0.15
+      Focal Point: {X: 0, Y: 0, Z: 0.015}
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.005
+      Near Clip Distance: 0.001
+      Pitch: 0.35
+      Yaw: 4.71
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 800
+  Width: 1200
+  Hide Left Dock: false
+  Hide Right Dock: true
+  Time:
+    collapsed: false

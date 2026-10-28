@@ -8,7 +8,7 @@ stub, physics checks, drop-test scenario with all five dataset weights, runner,
 sweeps, CLI, tests (including an analytic uniaxial check, convergence and
 no-penetration checks), and docs.
 
-## M2: ROS 2 layer (Humble)
+## M2: ROS 2 layer, Humble (done; see [ros2.md](ros2.md))
 
 - `ros2/softsim_interfaces` (ament_cmake): `SoftBodyState`, `ContactWrench(Stamped)`,
   `ScenarioMetrics`, and services `Reset`, `SetMaterial` (preset name or YAML),

@@ -4,8 +4,9 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status: M1 (core + MuJoCo drop test).** ROS 2 layer, video tracking and
-calibration, and the SOFA backend are planned; see [docs/roadmap.md](docs/roadmap.md).
+**Status: M1 (core + MuJoCo drop test) and M2 (ROS 2 layer) done.** Video
+tracking and calibration (M3) and the SOFA backend (M4) are next; see
+[docs/roadmap.md](docs/roadmap.md).
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
@@ -79,6 +80,20 @@ sim.action("drop", preset="czopek2026_w100", height=0.2)
 state = sim.state()            # rigid poses/twists, soft vertices, contact wrenches
 ```
 
+### ROS 2
+
+```bash
+source /opt/ros/humble/setup.bash && source .venv/bin/activate
+python -m colcon build --base-paths ros2 && source install/setup.bash
+ros2 launch softsim_bringup softsim.launch.py config:=drop_test/cases/w050.yaml   # RViz
+ros2 service call /softsim/action softsim_interfaces/srv/RunAction "{action: drop, arguments: '{mass: 0.1}'}"
+```
+
+The node publishes `/clock`, TF, poses and twists, soft-body point clouds and
+meshes, contact wrenches, ground reaction and scenario metrics. Its services
+cover reset, pause, save, material changes and scenario actions. See
+[docs/ros2.md](docs/ros2.md).
+
 A run directory contains `config.yaml` (fully resolved and re-runnable),
 `timeseries.parquet`, `summary.yaml` (summary, findings, versions, wall time)
 and `model.xml`.
@@ -97,6 +112,7 @@ softsim/            core library (no ROS)
   checks/           pre-run physics checks
   runner.py         Simulation / run_config
   sweep.py, cli.py
+ros2/               softsim_interfaces, softsim_ros (generic node), softsim_bringup (launch, RViz)
 scenarios/          scenario configs, cases and sweeps (data, not code)
 data/               raw/ (not versioned) and processed/ experimental data
 tools/              helper scripts (README media generation)
@@ -111,6 +127,7 @@ tests/
   [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md)
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
 - [Drop test scenario and dataset](docs/scenarios/drop_test.md)
+- [ROS 2 integration](docs/ros2.md)
 
 ## Data and citation
 
