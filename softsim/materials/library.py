@@ -16,14 +16,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, get_args
 
 import yaml
 
 from softsim.config.loader import deep_merge, load_yaml
 from softsim.config.schema import validate
 from softsim.errors import ConfigError
-from softsim.materials.models import Material
+from softsim.materials.models import DampingModel, ElasticModel, Material
 
 BUILTIN_DIR = Path(__file__).parent / "presets"
 
@@ -66,8 +66,26 @@ def material_data(ref: str | Mapping[str, Any], extra: Iterable[str | Path] = ()
         preset = data.pop("preset", None)
         if preset is None:
             return data
-        return deep_merge(material_data(preset, extra, base_dir), data)
+        base = material_data(preset, extra, base_dir)
+        # Switching a model type keeps only the inherited parameters the new model
+        # understands: stvk keeps E and nu from neo_hookean, mooney_rivlin keeps none.
+        for section in ("elastic", "damping"):
+            new, old = data.get(section), base.get(section)
+            if isinstance(new, Mapping) and isinstance(old, Mapping) and "model" in new \
+                    and new["model"] != old.get("model"):
+                allowed = _model_fields(section, new["model"])
+                base[section] = {k: v for k, v in old.items() if k in allowed and k != "model"}
+        return deep_merge(base, data)
     raise ConfigError(f"material must be a preset name, file path or mapping, got {type(ref).__name__}")
+
+
+def _model_fields(section: str, model: str) -> set[str]:
+    """Field names of the ``elastic``/``damping`` model class called ``model`` (empty if unknown)."""
+    union = {"elastic": ElasticModel, "damping": DampingModel}[section]
+    for cls in get_args(get_args(union)[0]):
+        if cls.model_fields["model"].default == model:
+            return set(cls.model_fields)
+    return set()
 
 
 def load_material(ref: str | Mapping[str, Any], extra: Iterable[str | Path] = (),

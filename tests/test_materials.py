@@ -86,3 +86,16 @@ def test_save_roundtrip(tmp_path):
     path = save_material(m, tmp_path / "fitted.yaml")
     again = load_material(str(path))
     assert again == m
+
+
+def test_switching_model_replaces_section():
+    m = load_material({"preset": "ecoflex_00_10",
+                       "elastic": {"model": "mooney_rivlin", "c10": 1e4, "c01": 1e3, "bulk_modulus": 1e6}})
+    assert m.elastic.model == "mooney_rivlin"
+    assert m.damping.model == "rayleigh"  # untouched sections still inherited
+    # different model with the same parameters keeps them
+    m = load_material({"preset": "ecoflex_00_10", "elastic": {"model": "stvk"}})
+    assert m.elastic.model == "stvk" and m.elastic.youngs_modulus == 91e3
+    # same model: fields merge as before
+    m = load_material({"preset": "ecoflex_00_10", "elastic": {"model": "neo_hookean", "poisson_ratio": 0.4}})
+    assert m.elastic.youngs_modulus == 91e3 and m.elastic.poisson_ratio == 0.4

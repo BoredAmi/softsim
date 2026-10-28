@@ -168,14 +168,19 @@ class Simulation:
                 verts[name].append(state.soft[name].vertices.astype(np.float32))
             if progress is not None:
                 progress((i) / max(n_samples, 1))
-        wall = time.perf_counter() - start
+        return self.make_result(rows, time.perf_counter() - start, verts)
+
+    def make_result(self, rows: list[dict[str, float]], wall_time: float,
+                    vertices: Mapping[str, list[np.ndarray]] | None = None) -> RunResult:
+        """Assemble a RunResult from metric rows recorded by any driver (run(), ROS node, ...)."""
         ts = pd.DataFrame(rows)
+        sim_time = float(ts["t"].iloc[-1] - ts["t"].iloc[0]) if "t" in ts and len(ts) > 1 else 0.0
         metadata = {
             "created": _dt.datetime.now().isoformat(timespec="seconds"),
             "backend": self.backend.name,
             "versions": _versions(self.backend),
-            "wall_time_s": wall,
-            "realtime_factor": duration / wall if wall > 0 else float("inf"),
+            "wall_time_s": wall_time,
+            "realtime_factor": sim_time / wall_time if wall_time > 0 else float("inf"),
             "mesh": {b.name: {k: float(v) for k, v in b.mesh.quality().items()} for b in self.scene.soft_bodies},
         }
         findings = list(self.findings)
@@ -188,10 +193,10 @@ class Simulation:
         return RunResult(
             config=self.raw_config,
             timeseries=ts,
-            summary=self.scenario.summarize(ts),
+            summary=self.scenario.summarize(ts) if len(ts) else {},
             findings=findings,
             metadata=metadata,
-            vertices={k: np.stack(v) for k, v in verts.items()},
+            vertices={k: np.stack(v) for k, v in (vertices or {}).items() if len(v)},
             model_text=self.backend.export_model() if self.config.output.save_model else None,
         )
 
