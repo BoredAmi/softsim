@@ -1,0 +1,47 @@
+# Rigid body presets. Mass is authoritative; knob dimensions are estimates.
+#
+# czopek2026_*: weights from Czopek et al., "Records of falling mass on
+# Ecoflex 00-10 cylinder", Zenodo, doi:10.5281/zenodo.23185808 (CC-BY-4.0).
+# Diameter/height are from the dataset description. The knob is not specified
+# there; it is estimated from the preview video (~0.2 D for both knob diameter
+# and knob height). For the 100/200/500 g weights the listed height probably
+# includes the knob (at brass/steel density a full D x H cylinder exceeds the mass);
+# only the bottom diameter and the mass affect the vertical impact.
+# Appearance differs between weights (20 g: brass; 500 g: black-painted with a
+# mushroom knob and narrower neck), which matters for video segmentation only.
+
+czopek2026_w020:
+  description: 20 g weight (brass finish)
+  source: doi:10.5281/zenodo.23185808 (knob estimated)
+  mass: 20 g
+  shape: {type: weight_with_knob, diameter: 22.5 mm, height: 5.6 mm, knob_diameter: 4.5 mm, knob_height: 4.5 mm}
+
+czopek2026_w050:
+  description: 50 g weight
+  source: doi:10.5281/zenodo.23185808 (knob estimated)
+  mass: 50 g
+  shape: {type: weight_with_knob, diameter: 27 mm, height: 9.9 mm, knob_diameter: 5.4 mm, knob_height: 5.4 mm}
+
+czopek2026_w100:
+  description: 100 g weight
+  source: doi:10.5281/zenodo.23185808 (knob estimated)
+  mass: 100 g
+  shape: {type: weight_with_knob, diameter: 32 mm, height: 18 mm, knob_diameter: 6.4 mm, knob_height: 6.4 mm}
+
+czopek2026_w200:
+  description: 200 g weight
+  source: doi:10.5281/zenodo.23185808 (knob estimated)
+  mass: 200 g
+  shape: {type: weight_with_knob, diameter: 40 mm, height: 24 mm, knob_diameter: 8 mm, knob_height: 8 mm}
+
+czopek2026_w500:
+  description: 500 g weight, black finish (wider than the 40 mm specimen)
+  source: doi:10.5281/zenodo.23185808 (knob estimated)
+  mass: 500 g
+  shape: {type: weight_with_knob, diameter: 43 mm, height: 38 mm, knob_diameter: 8.6 mm, knob_height: 8.6 mm}
+
+steel_plate_50mm:
+  description: Rigid square plate for compression tests
+  source: generic
+  mass: 100 g
+  shape: {type: plate, size: [50 mm, 50 mm, 5 mm]}
