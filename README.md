@@ -7,6 +7,23 @@ package; ROS 2 integration is a thin layer on top (milestone M2).
 **Status: M1 (core + MuJoCo drop test).** ROS 2 layer, video tracking and
 calibration, and the SOFA backend are planned; see [docs/roadmap.md](docs/roadmap.md).
 
+![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
+
+*20 g weight dropped from 38 cm onto an Ecoflex 00-10 cylinder (D 40 × H 17 mm),
+about 100× slow motion, aligned at first contact. Left: high-speed camera
+recording from [Czopek et al., doi:10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808)
+(CC-BY-4.0, cropped and denoised). Right: softsim + MuJoCo flex with the
+**uncalibrated** datasheet material. It is visibly too stiff (about 2 mm vs
+about 4 mm peak indentation), which is what M3 calibration will fix. The real
+weight also lands slightly tilted; the simulated one drops straight.*
+
+![All five dataset weights simulated side by side](docs/media/drop_all_weights.gif)
+
+*The five weights of the dataset (20–500 g) from the same YAML scenario,
+switching one preset each. Regenerate both GIFs with
+`python tools/make_readme_media.py` (needs `020gram.zip` in `data/raw/czopek2026/`
+for the left panel).*
+
 ## Why
 
 Gazebo has no deformable bodies, SOFA is powerful but hard to use from ROS,
@@ -68,7 +85,7 @@ and `model.xml`.
 
 ## Layout
 
-```
+```text
 softsim/            core library (no ROS)
   config/           YAML loading (extends, --set overrides), units, strict schemas
   materials/        constitutive models + presets/*.yaml
@@ -82,7 +99,8 @@ softsim/            core library (no ROS)
   sweep.py, cli.py
 scenarios/          scenario configs, cases and sweeps (data, not code)
 data/               raw/ (not versioned) and processed/ experimental data
-docs/               architecture, how-to guides, backend notes
+tools/              helper scripts (README media generation)
+docs/               architecture, how-to guides, backend notes, media/
 tests/
 ```
 
