@@ -1,0 +1,16 @@
+name: ecoflex_00_30
+description: Smooth-On Ecoflex 00-30 platinum-cure silicone (Shore 00-30).
+source: >
+  UNCALIBRATED datasheet estimate. Smooth-On TDS: 100% modulus 10 psi (69 kPa),
+  specific gravity 1.07. Neo-Hookean mu = 69/1.75 = 39.4 kPa, E = 2 mu (1 + nu)
+  = 114 kPa at nu = 0.45. Damping beta is a placeholder.
+density: 1070 kg/m^3
+elastic:
+  model: neo_hookean
+  youngs_modulus: 114 kPa
+  poisson_ratio: 0.45
+damping:
+  model: rayleigh
+  beta: 2 ms
+friction:
+  sliding: 1.0

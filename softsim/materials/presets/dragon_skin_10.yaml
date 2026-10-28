@@ -1,0 +1,16 @@
+name: dragon_skin_10
+description: Smooth-On Dragon Skin 10 platinum-cure silicone (Shore 10A).
+source: >
+  UNCALIBRATED datasheet estimate. Smooth-On TDS: 100% modulus 22 psi (152 kPa),
+  specific gravity 1.07. Neo-Hookean mu = 152/1.75 = 86.7 kPa, E = 2 mu (1 + nu)
+  = 251 kPa at nu = 0.45. Damping beta is a placeholder.
+density: 1070 kg/m^3
+elastic:
+  model: neo_hookean
+  youngs_modulus: 251 kPa
+  poisson_ratio: 0.45
+damping:
+  model: rayleigh
+  beta: 2 ms
+friction:
+  sliding: 1.0
