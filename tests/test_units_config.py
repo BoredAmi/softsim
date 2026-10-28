@@ -67,3 +67,10 @@ def test_unknown_keys_rejected():
         validate(DropTestConfig, apply_overrides(raw, ["specimen.youngs_modulos=1"]))
     with pytest.raises(ConfigError, match="timestep"):
         validate(DropTestConfig, apply_overrides(raw, ["simulation.timestep=-1"]))
+
+
+def test_override_into_preset_reference():
+    raw = {"specimen": {"material": "ecoflex_00_10"}}
+    out = apply_overrides(raw, ["specimen.material.elastic.youngs_modulus=40000"])
+    assert out["specimen"]["material"] == {"preset": "ecoflex_00_10", "elastic": {"youngs_modulus": 40000}}
+    assert apply_overrides(raw, ["specimen.material=generic_gel"])["specimen"]["material"] == "generic_gel"

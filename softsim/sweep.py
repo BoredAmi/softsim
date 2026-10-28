@@ -45,20 +45,6 @@ def expand(grid: Mapping[str, list] | None = None, zipped: Mapping[str, list] | 
     return [{**g, **z} for g in grid_rows for z in zip_rows]
 
 
-def _with_material_preset(raw: dict[str, Any], key: str) -> dict[str, Any]:
-    """Turn a string material reference on the path of ``key`` into ``{preset: name}``
-    so dotted overrides like ``specimen.material.elastic.youngs_modulus`` work."""
-    parts = key.split(".")
-    node = raw
-    for part in parts[:-1]:
-        if not isinstance(node, dict):
-            break
-        if part == "material" and isinstance(node.get(part), str):
-            node[part] = {"preset": node[part]}
-        node = node.get(part)
-    return raw
-
-
 def _run_one(args: tuple[dict[str, Any], str, dict[str, Any], int, str | None, str]) -> dict[str, Any]:
     from softsim.runner import Simulation
 
@@ -67,7 +53,7 @@ def _run_one(args: tuple[dict[str, Any], str, dict[str, Any], int, str | None, s
     row: dict[str, Any] = {"run": index, **params}
     try:
         for key, value in params.items():
-            raw = set_dotted(_with_material_preset(raw, key), key, value)
+            raw = set_dotted(raw, key, value)
         sim = Simulation(raw, base_dir=base_dir)
         try:
             result = sim.run()

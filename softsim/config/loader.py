@@ -6,6 +6,10 @@ Conventions:
       Mappings merge recursively, everything else is replaced.
     * Overrides use dotted keys, ``"weight.preset=w050"``; the value is parsed
       as YAML, so ``"drop.height=0.2"`` gives a float and ``"a=[1, 2]"`` a list.
+    * Descending into a string (a preset reference such as ``material:
+      ecoflex_00_10``) turns it into ``{preset: <name>}`` first, so
+      ``specimen.material.elastic.youngs_modulus=40e3`` overrides one field of
+      the preset instead of discarding it.
 """
 
 from __future__ import annotations
@@ -67,28 +71,29 @@ def parse_override(text: str) -> tuple[list[str], Any]:
     return key.strip().split("."), yaml.safe_load(raw)
 
 
+def _set_path(node: dict[str, Any], keys: list[str], value: Any) -> None:
+    for k in keys[:-1]:
+        child = node.get(k)
+        if isinstance(child, str):
+            child = {"preset": child}  # expand a preset reference instead of discarding it
+        elif not isinstance(child, dict):
+            child = {}
+        node[k] = child
+        node = child
+    node[keys[-1]] = value
+
+
 def apply_overrides(config: Mapping[str, Any], overrides: Iterable[str]) -> dict[str, Any]:
     """Apply dotted ``key=value`` overrides, creating intermediate mappings as needed."""
     out = copy.deepcopy(dict(config))
     for text in overrides:
         keys, value = parse_override(text)
-        node = out
-        for k in keys[:-1]:
-            if not isinstance(node.get(k), dict):
-                node[k] = {}
-            node = node[k]
-        node[keys[-1]] = value
+        _set_path(out, keys, value)
     return out
 
 
 def set_dotted(config: Mapping[str, Any], key: str, value: Any) -> dict[str, Any]:
     """Return a copy of ``config`` with ``key`` (dotted path) set to ``value``."""
     out = copy.deepcopy(dict(config))
-    keys = key.split(".")
-    node = out
-    for k in keys[:-1]:
-        if not isinstance(node.get(k), dict):
-            node[k] = {}
-        node = node[k]
-    node[keys[-1]] = value
+    _set_path(out, key.split("."), value)
     return out
