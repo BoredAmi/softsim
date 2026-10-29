@@ -94,7 +94,7 @@ def test_drop_action_and_set_material(drop_config, drop_base_dir):
     sim.close()
 
 
-@pytest.mark.parametrize("model", ["neo_hookean", "stvk"])
+@pytest.mark.parametrize("model", ["stable_neo_hookean", "stvk"])
 def test_static_uniaxial_compression(model, drop_base_dir):
     """Analytic check delta = m g H / (E A) at 3% strain.
 

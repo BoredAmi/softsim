@@ -68,6 +68,23 @@ class NeoHookean(_IsotropicEnu):
         return self.youngs_modulus / (2.0 * (1.0 + self.poisson_ratio))
 
 
+class StableNeoHookean(_IsotropicEnu):
+    """Stable Neo-Hookean (Smith, de Goes, Kim 2018), parametrised by its small-strain E and nu.
+
+    Same linearisation as :class:`NeoHookean` but a different energy at large
+    strain; unlike the classic ln(J) form it stays well defined for inverted
+    elements, which matters for violent impacts. MuJoCo's volumetric flex
+    "Neo-Hookean" option is this model.
+    """
+
+    model: Literal["stable_neo_hookean"] = "stable_neo_hookean"
+    requires: ClassVar[frozenset[Capability]] = frozenset({Capability.STABLE_NEO_HOOKEAN})
+
+    @property
+    def shear_modulus(self) -> float:
+        return self.youngs_modulus / (2.0 * (1.0 + self.poisson_ratio))
+
+
 class _BulkHyperelastic(StrictModel):
     """Hyperelastic models with an explicit bulk modulus for the volumetric part."""
 
@@ -140,7 +157,7 @@ class Ogden(_BulkHyperelastic):
 
 
 HyperelasticMatrix = Annotated[
-    Union[NeoHookean, MooneyRivlin, Yeoh, Ogden], Field(discriminator="model")
+    Union[NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden], Field(discriminator="model")
 ]
 
 
@@ -166,7 +183,8 @@ class MagnetoActive(StrictModel):
 
 
 ElasticModel = Annotated[
-    Union[LinearElastic, StVenantKirchhoff, NeoHookean, MooneyRivlin, Yeoh, Ogden, MagnetoActive],
+    Union[LinearElastic, StVenantKirchhoff, NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden,
+          MagnetoActive],
     Field(discriminator="model"),
 ]
 

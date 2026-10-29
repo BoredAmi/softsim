@@ -3,7 +3,7 @@ description: Generic very soft gel for quick experiments and tests.
 source: Round illustrative numbers, not a real product.
 density: 1000 kg/m^3
 elastic:
-  model: neo_hookean
+  model: stable_neo_hookean
   youngs_modulus: 10 kPa
   poisson_ratio: 0.45
 damping:

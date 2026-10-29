@@ -12,6 +12,7 @@ from softsim.materials.models import (
     Ogden,
     PronySeries,
     RayleighDamping,
+    StableNeoHookean,
     StVenantKirchhoff,
     Yeoh,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "Ogden",
     "PronySeries",
     "RayleighDamping",
+    "StableNeoHookean",
     "StVenantKirchhoff",
     "Yeoh",
     "list_presets",

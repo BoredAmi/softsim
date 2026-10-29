@@ -1,4 +1,4 @@
-# Fit Neo-Hookean E and Rayleigh beta of Ecoflex 00-10 to the drop-test recordings.
+# Fit stable Neo-Hookean E and Rayleigh beta of Ecoflex 00-10 to the drop-test recordings.
 #   softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5     (once)
 #   softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3
 # w100 and w200 are excluded: the weight hits the specimen edge off-centre and

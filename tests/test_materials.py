@@ -21,6 +21,10 @@ def test_presets_load():
         assert required in names
         m = load_material(required)
         assert m.density > 0 and m.source
+    for name in names:  # every shipped preset validates; fitted ones say where they are valid
+        m = load_material(name)
+        if "_fit" in name:
+            assert m.provenance["backend"] and m.provenance["mesh_size"]
 
 
 def test_preset_with_overrides():
@@ -73,7 +77,7 @@ def test_prony_validation():
 
 def test_requirements():
     m = load_material("ecoflex_00_10")
-    assert Capability.NEO_HOOKEAN in m.requires
+    assert Capability.STABLE_NEO_HOOKEAN in m.requires
     assert Capability.DAMPING_STIFFNESS_PROPORTIONAL in m.requires
     mag = validate(Material, {"density": 2000, "elastic": {
         "model": "magneto_active", "particle_volume_fraction": 0.3,

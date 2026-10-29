@@ -2,7 +2,7 @@
 
 The model skeleton is generated as MJCF (readable, saved for inspection) and
 then post-processed through ``mujoco.MjSpec`` for things MJCF cannot express:
-    * Neo-Hookean flex elasticity (``MjsFlex.elastic3d = 1``, spec-only in 3.17),
+    * Stable Neo-Hookean flex elasticity (``MjsFlex.elastic3d = 1``, spec-only in 3.17),
     * mass-consistent lumped vertex masses (flexcomp spreads mass uniformly
       over vertices, which is wrong for non-uniform meshes).
 
@@ -19,8 +19,8 @@ import numpy as np
 
 from softsim.materials.models import (
     KelvinVoigt,
-    NeoHookean,
     RayleighDamping,
+    StableNeoHookean,
     StVenantKirchhoff,
 )
 from softsim.materials.models import Friction
@@ -61,7 +61,7 @@ def rayleigh_beta(body: SoftBodySpec) -> float:
 
 def _soft_body_xml(parent: ET.Element, body: SoftBodySpec, scene: Scene) -> None:
     elastic = body.material.elastic
-    if not isinstance(elastic, (StVenantKirchhoff, NeoHookean)):
+    if not isinstance(elastic, (StVenantKirchhoff, StableNeoHookean)):
         raise TypeError(f"elastic model {elastic.model!r} is not supported by MuJoCo")
     contact = scene.contact
     timeconst = contact.resolved_timeconst(scene.simulation.timestep)
@@ -157,7 +157,7 @@ def build_spec(scene: Scene, mjcf: str | None = None) -> mujoco.MjSpec:
     spec = mujoco.MjSpec.from_string(mjcf or scene_to_mjcf(scene))
     flexes = {f.name: f for f in spec.flexes}
     for body in scene.soft_bodies:
-        if isinstance(body.material.elastic, NeoHookean):
+        if isinstance(body.material.elastic, StableNeoHookean):
             flexes[body.name].elastic3d = 1
         masses = body.mesh.lumped_masses(body.effective_density)
         pinned = set(body.pinned)

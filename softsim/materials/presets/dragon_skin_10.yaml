@@ -6,7 +6,7 @@ source: >
   = 251 kPa at nu = 0.45. Damping beta is a placeholder.
 density: 1070 kg/m^3
 elastic:
-  model: neo_hookean
+  model: stable_neo_hookean
   youngs_modulus: 251 kPa
   poisson_ratio: 0.45
 damping:

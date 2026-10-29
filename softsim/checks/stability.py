@@ -112,12 +112,12 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None) -> l
             if isinstance(elastic, StVenantKirchhoff) and strain > 0.3:
                 out.append(Finding("warning", "stvk-compression",
                                    f"{body.name}: StVK at ~{strain:.0%} compressive strain softens and can "
-                                   "collapse; use neo_hookean"))
+                                   "collapse; use stable_neo_hookean"))
             if strain >= 0.6:
                 out.append(Finding("warning", "extreme-compression",
                                    f"{body.name}: crude estimate predicts ~{min(strain, 1):.0%} compression; "
-                                   "results depend on large-strain stiffening that Neo-Hookean underestimates "
-                                   "for silicones (Yeoh/Ogden in a FEM backend fit better)"))
+                                   "results depend on the large-strain law, compressibility (silicone is nearly "
+                                   "incompressible) and rate effects; validate against data at this strain"))
         density = body.material.density
         if body.mass is not None and abs(body.effective_density / density - 1) > 0.05:
             out.append(Finding("info", "density-mismatch",

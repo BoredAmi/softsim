@@ -6,7 +6,7 @@ density: 1040.0
 elastic:
   youngs_modulus: 54837.08105915519
   poisson_ratio: 0.45
-  model: neo_hookean
+  model: stable_neo_hookean
 damping:
   model: rayleigh
   alpha: 0.0

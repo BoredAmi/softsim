@@ -18,6 +18,7 @@ class Capability(str, Enum):
     LINEAR_ELASTIC = "small-strain linear elasticity"
     STVK = "Saint Venant-Kirchhoff elasticity"
     NEO_HOOKEAN = "Neo-Hookean hyperelasticity"
+    STABLE_NEO_HOOKEAN = "stable Neo-Hookean hyperelasticity (Smith et al. 2018)"
     MOONEY_RIVLIN = "Mooney-Rivlin hyperelasticity"
     YEOH = "Yeoh hyperelasticity"
     OGDEN = "Ogden hyperelasticity"
