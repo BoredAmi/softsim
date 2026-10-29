@@ -1,0 +1,18 @@
+# Same fit as ecoflex_00_10_drop.yaml (stable Neo-Hookean E + Rayleigh beta) on the SOFA backend (set SOFA_ROOT).
+#   softsim calibrate calibrations/ecoflex_00_10_drop_sofa_stable_nh.yaml --jobs 3
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0, w500: 1.0}
+overrides:
+  - backend=sofa
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005   # 0.1 ms diverges for the 500 g full-face impact on SOFA
+  - simulation.duration=0.022
+  - simulation.output_rate=10000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 50 kPa, bounds: [5 kPa, 2 MPa], log: true}
+  specimen.material.damping.beta: {initial: 1 ms, bounds: [0.01 ms, 30 ms], log: true}
+grid: 3
+max_evaluations: 35
+output: ../runs/calibration/ecoflex_00_10_drop_sofa_stable_nh

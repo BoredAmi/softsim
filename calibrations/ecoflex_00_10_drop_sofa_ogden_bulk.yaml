@@ -1,0 +1,28 @@
+# Not run yet (about 3-4 h on 8 cores). Follow-up to the M4 Ogden fit: the
+# fitted model (bulk 200 kPa, nu ~ 0.47) loses ~27 % of the specimen volume
+# under 500 g, which silicone can't do. Single runs with the Ogden fit and a
+# higher bulk modulus moved the 500 g peak toward the experiment
+# (1 MPa: 7.65 mm, 5 MPa: 6.54 mm; measured 4.52 mm) while 20 g stiffened
+# 7-12 % (linear-tet locking). This refits mu, alpha, beta together with the
+# bulk modulus. Repeat with specimen.mesh.size=0.0035 to check how much of the
+# result is locking.
+#   softsim calibrate calibrations/ecoflex_00_10_drop_sofa_ogden_bulk.yaml --jobs 3
+# Starts from the M4 fit; interrupted runs resume (evaluations.jsonl).
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0, w500: 1.0}
+overrides:
+  - backend=sofa
+  - specimen.material=ecoflex_00_10_drop_fit_sofa_ogden
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005
+  - simulation.duration=0.022
+  - simulation.output_rate=10000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.mu[0]: {initial: 22.9 kPa, bounds: [2 kPa, 200 kPa], log: true}
+  specimen.material.elastic.alpha[0]: {initial: 1.2, bounds: [0.5, 12.0], log: true}
+  specimen.material.damping.beta: {initial: 0.28 ms, bounds: [0.01 ms, 30 ms], log: true}
+  specimen.material.elastic.bulk_modulus: {initial: 1 MPa, bounds: [100 kPa, 50 MPa], log: true}
+max_evaluations: 60
+output: ../runs/calibration/ecoflex_00_10_drop_sofa_ogden_bulk

@@ -1,0 +1,24 @@
+# One-term Ogden (mu, alpha) + Rayleigh beta on SOFA: can stronger large-strain
+# stiffening reconcile the 20/50 g indentation with the 500 g full-face impact?
+# Bulk modulus fixed at 200 kPa (~ nu = 0.45 at mu ~ 20 kPa). Bounds keep the
+# small-strain shear 0.5*mu*alpha mostly below 1.5*K (nu > 0); a negative
+# Poisson's ratio would be unphysical for silicone. ~4 min per evaluation.
+#   softsim calibrate calibrations/ecoflex_00_10_drop_sofa_ogden.yaml --jobs 3
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0, w500: 1.0}
+overrides:
+  - backend=sofa
+  - "specimen.material.elastic={model: ogden, mu: [20000], alpha: [2.0], bulk_modulus: 200000}"
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005   # 0.1 ms diverges for the 500 g full-face impact on SOFA
+  - simulation.duration=0.022
+  - simulation.output_rate=10000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.mu[0]: {initial: 20 kPa, bounds: [2 kPa, 200 kPa], log: true}
+  specimen.material.elastic.alpha[0]: {initial: 2.0, bounds: [0.5, 12.0], log: true}
+  specimen.material.damping.beta: {initial: 1 ms, bounds: [0.01 ms, 30 ms], log: true}
+grid: 2
+max_evaluations: 50
+output: ../runs/calibration/ecoflex_00_10_drop_sofa_ogden

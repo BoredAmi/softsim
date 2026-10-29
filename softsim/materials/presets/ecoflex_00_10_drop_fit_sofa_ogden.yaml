@@ -1,0 +1,39 @@
+name: ecoflex_00_10_drop_fit_sofa_ogden
+description: Ecoflex 00-10 fitted to drop tests (SOFA, one-term Ogden, 5 mm mesh, dt 0.05 ms).
+source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808) by softsim calibrate.
+density: 1040.0
+elastic:
+  model: ogden
+  mu:
+  - 22859.4
+  alpha:
+  - 1.2022
+  bulk_modulus: 200000.0
+damping:
+  model: rayleigh
+  alpha: 0.0
+  beta: 0.0002767
+friction:
+  sliding: 1.0
+  torsional: 0.0
+  rolling: 0.0
+provenance:
+  fitted_by: softsim calibrate
+  calibration_file: calibrations/ecoflex_00_10_drop_sofa_ogden.yaml
+  dataset_doi: 10.5281/zenodo.23185808
+  cases:
+    w020: 1.0
+    w050: 1.0
+    w500: 1.0
+  backend: sofa
+  mesh_size: 0.005
+  timestep: 0.05 ms
+  cost: 0.2424
+  per_case_nrmse:
+    w020: 0.033
+    w050: 0.113
+    w500: 0.581
+  note: 'Effective parameters: valid only with this backend, element type and mesh size.'
+  fit_ranges: 'first contact phase; w020 and w050 within 3-11 % NRMSE. w500 not reproduced: peak 9.0 mm at 5.3 ms
+    vs 4.5 mm at 2.7 ms, and SOFA contact fails (rim through the ground) from 7.6 ms, so its NRMSE is not meaningful.
+    nu ~ 0.47 (bulk 200 kPa): the specimen loses ~27 % volume under 500 g; see docs/experiments.md'
