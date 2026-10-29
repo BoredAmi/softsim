@@ -151,3 +151,47 @@ def test_calibration_parameters():
     assert e.from_unit(e.to_unit(7e3)) == pytest.approx(7e3)
     assert e.from_unit(e.to_unit(1e9)) == 1e6  # clipped to bounds
     assert b.initial == pytest.approx(2e-3) and not b.log
+
+
+def _fake_case(task):
+    """Stand-in for a case simulation: w_crash kills its worker like a native segfault."""
+    import os
+
+    if task[3] == "w_crash":
+        os._exit(11)
+    return {"rmse": 0.001, "nrmse": 0.5}
+
+
+def _bare_calibration(tmp_path, cases, jobs):
+    from softsim.experiments.calibrate import Calibration
+
+    cal = object.__new__(Calibration)
+    cal.cases = {c: 1.0 for c in cases}
+    cal._raw = {c: ({}, str(tmp_path)) for c in cases}
+    cal.history, cal.output, cal._workers, cal.tracks = [], tmp_path, jobs, str(tmp_path)
+    cal._spec_hash, cal._log, cal._done = "test", tmp_path / "evaluations.jsonl", {}
+    cal._pool = None
+    return cal
+
+
+def test_calibration_survives_worker_crash_and_resumes(tmp_path, monkeypatch):
+    from concurrent.futures import ProcessPoolExecutor
+
+    from softsim.experiments import calibrate
+
+    monkeypatch.setattr(calibrate, "_evaluate_case", _fake_case)
+    cal = _bare_calibration(tmp_path, ["w_ok", "w_crash"], 2)
+    cal._pool = ProcessPoolExecutor(2)
+    try:
+        cost = cal.evaluate({"x": 1.0})
+        assert cal.evaluate({"x": 2.0}) == cost  # the rebuilt pool keeps working
+    finally:
+        cal._pool.shutdown()
+    assert cost == pytest.approx((0.5 + 10.0) / 2)  # crashed case costs like an unstable one
+    assert "crashed" in cal.history[0]["w_crash.error"]
+
+    # a second run of the same calibration replays the log without simulating
+    monkeypatch.setattr(calibrate, "_evaluate_case", lambda task: pytest.fail("should replay"))
+    again = _bare_calibration(tmp_path, ["w_ok", "w_crash"], 1)
+    again._done = again._load_log()
+    assert again.evaluate({"x": 1.0}) == cost and len(again._done) == 2

@@ -77,7 +77,7 @@ def simulated_indentation(ts: pd.DataFrame, gravity: float = G, contact_threshol
     base = ts["specimen_min_z"].to_numpy()
     # free fall fitted (known g) on the samples before any contact force, skipping the
     # first sample (the state right after reset lags one step)
-    touching = np.nonzero(ts["contact_force_z"].to_numpy() != 0)[0]
+    touching = np.nonzero(np.abs(ts["contact_force_z"].to_numpy()) > 1e-3)[0]  # 1 mN: backends report round-off
     stop = touching[0] if len(touching) else len(t)
     flight = np.arange(1, stop)
     if len(flight) < 2:

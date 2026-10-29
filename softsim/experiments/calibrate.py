@@ -18,15 +18,23 @@ see ``ExperimentCase.sim_overrides``) and compared on the first contact phase
 (``compare.py``). Cost = weighted mean of RMSE / experimental peak. The fitted
 values are only meaningful for the mesh size, backend and model they were fitted
 with; the saved preset records that in ``provenance``.
+
+Every evaluation is appended to ``<output>/evaluations.jsonl``. Re-running the
+same calibration file replays them from there instead of simulating again
+(the optimizer is deterministic), so an interrupted run resumes where it
+stopped; changing the file starts over. A simulation that crashes its worker
+process (e.g. a native segfault) costs the same as an unstable one.
 """
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,7 +51,7 @@ from softsim.experiments.datasets import load_dataset
 from softsim.io import save_table
 
 _DIMENSIONS = {"youngs_modulus": "pressure", "beta": "time", "timeconst": "time", "c10": "pressure",
-               "c01": "pressure", "bulk_modulus": "pressure", "density": "density"}
+               "c01": "pressure", "bulk_modulus": "pressure", "density": "density", "mu": "pressure"}
 
 
 @dataclass(frozen=True)
@@ -64,7 +72,7 @@ class Parameter:
 def _parse_parameters(spec: dict[str, Any]) -> list[Parameter]:
     params = []
     for key, p in spec.items():
-        dim = _DIMENSIONS.get(key.split(".")[-1])
+        dim = _DIMENSIONS.get(key.split(".")[-1].split("[")[0])
         conv = (lambda v: parse_quantity(v, dim)) if dim else float
         lo, hi = (conv(b) for b in p["bounds"])
         init = conv(p["initial"])
@@ -88,6 +96,8 @@ def _evaluate_case(task: tuple[dict[str, Any], str, str, str]) -> dict[str, floa
         finally:
             sim.close()
         metrics = compare_case(simulated_indentation(ts), exp)
+        if "specimen_min_z" in ts:  # contact artefacts (soft body through the ground) show up here
+            metrics["ground_penetration"] = float(max(0.0, -ts["specimen_min_z"].min()))
     except Exception as exc:  # unstable / invalid parameter sets cost the maximum
         metrics = {"rmse": float("nan"), "nrmse": float("nan"), "error": f"{type(exc).__name__}: {exc}"}
     return metrics
@@ -109,7 +119,12 @@ class Calibration:
         self.max_evaluations = int(spec.get("max_evaluations", 60))
         self.output = (base / spec.get("output", "calibration_out")).resolve()
         self.jobs = jobs
+        self._workers = min(jobs, len(self.cases))
         self.history: list[dict[str, Any]] = []
+        self._pool: ProcessPoolExecutor | None = None
+        self._spec_hash = hashlib.sha256(json.dumps(spec, sort_keys=True, default=str).encode()).hexdigest()[:16]
+        self._log = self.output / "evaluations.jsonl"
+        self._done = self._load_log()
         self._raw = {}
         for case in self.cases:
             cfg_path = self.dataset.config_path(case)
@@ -124,9 +139,48 @@ class Calibration:
             tasks.append((r, base_dir, self.tracks, case))
         return tasks
 
-    def evaluate(self, values: dict[str, float], pool: ProcessPoolExecutor | None) -> float:
+    @staticmethod
+    def _key(values: dict[str, float]) -> str:
+        return json.dumps({k: float(f"{v:.12g}") for k, v in values.items()}, sort_keys=True)
+
+    def _load_log(self) -> dict[str, list[dict[str, float]]]:
+        """Results of earlier runs of this exact calibration file, keyed by parameter values."""
+        done = {}
+        if self._log.is_file():
+            for line in self._log.read_text().splitlines():
+                entry = json.loads(line)
+                if entry.get("spec") == self._spec_hash:
+                    done[self._key(entry["values"])] = entry["results"]
+        return done
+
+    def _simulate(self, tasks: list[tuple[dict[str, Any], str, str, str]]) -> list[dict[str, Any]]:
+        if self._pool is None:
+            return [_evaluate_case(t) for t in tasks]
+        try:
+            return list(self._pool.map(_evaluate_case, tasks))
+        except BrokenProcessPool:
+            # a native crash killed a worker: find out which case(s), one fresh process each
+            self._pool.shutdown(cancel_futures=True)
+            self._pool = ProcessPoolExecutor(self._workers)
+            results = []
+            for t in tasks:
+                with ProcessPoolExecutor(1) as single:
+                    try:
+                        results.append(single.submit(_evaluate_case, t).result())
+                    except BrokenProcessPool:
+                        results.append({"rmse": float("nan"), "nrmse": float("nan"),
+                                        "error": "worker process crashed (native error in the backend)"})
+            return results
+
+    def evaluate(self, values: dict[str, float]) -> float:
         tasks = self._configs(values)
-        results = list(pool.map(_evaluate_case, tasks)) if pool else [_evaluate_case(t) for t in tasks]
+        key = self._key(values)
+        replayed = key in self._done
+        results = self._done[key] if replayed else self._simulate(tasks)
+        if not replayed:
+            self.output.mkdir(parents=True, exist_ok=True)
+            with self._log.open("a") as f:
+                f.write(json.dumps({"spec": self._spec_hash, "values": values, "results": results}, default=float) + "\n")
         weights = np.array([self.cases[t[3]] for t in tasks])
         nrmse = np.array([r.get("nrmse", np.nan) for r in results])
         cost = float(np.sum(weights * np.where(np.isfinite(nrmse), nrmse, 10.0)) / weights.sum())
@@ -134,7 +188,7 @@ class Calibration:
         for t, r in zip(tasks, results):
             row.update({f"{t[3]}.{k}": v for k, v in r.items()})
         self.history.append(row)
-        print(f"  eval {row['evaluation']:3d}: cost {cost:.4f}  " +
+        print(f"  eval {row['evaluation']:3d}: cost {cost:.4f}{' (replayed)' if replayed else ''}  " +
               "  ".join(f"{k.split('.')[-1]}={v:.4g}" for k, v in values.items()), flush=True)
         return cost
 
@@ -142,10 +196,10 @@ class Calibration:
         from scipy.optimize import minimize
 
         start = time.perf_counter()
-        pool = ProcessPoolExecutor(min(self.jobs, len(self.cases))) if self.jobs > 1 else None
+        self._pool = ProcessPoolExecutor(self._workers) if self._workers > 1 else None
         try:
             def objective(u: np.ndarray) -> float:
-                return self.evaluate({p.key: p.from_unit(x) for p, x in zip(self.params, u)}, pool)
+                return self.evaluate({p.key: p.from_unit(x) for p, x in zip(self.params, u)})
 
             x0 = np.array([p.to_unit(p.initial) for p in self.params])
             if self.grid > 1:  # coarse grid in (log) space to pick the starting point
@@ -158,8 +212,9 @@ class Calibration:
             minimize(objective, x0, method="Nelder-Mead",
                      options={"maxfev": remaining, "initial_simplex": init_simplex, "xatol": 0.01, "fatol": 1e-4})
         finally:
-            if pool:
-                pool.shutdown()
+            if self._pool:
+                self._pool.shutdown()
+                self._pool = None
         best = min(self.history, key=lambda r: r["cost"])
         return self._report(best, time.perf_counter() - start)
 
