@@ -68,7 +68,7 @@ def material_data(ref: str | Mapping[str, Any], extra: Iterable[str | Path] = ()
             return data
         base = material_data(preset, extra, base_dir)
         # Switching a model type keeps only the inherited parameters the new model
-        # understands: stvk keeps E and nu from neo_hookean, mooney_rivlin keeps none.
+        # understands: stvk keeps E and nu from stable_neo_hookean, mooney_rivlin keeps none.
         for section in ("elastic", "damping"):
             new, old = data.get(section), base.get(section)
             if isinstance(new, Mapping) and isinstance(old, Mapping) and "model" in new \

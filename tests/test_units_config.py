@@ -74,3 +74,9 @@ def test_override_into_preset_reference():
     out = apply_overrides(raw, ["specimen.material.elastic.youngs_modulus=40000"])
     assert out["specimen"]["material"] == {"preset": "ecoflex_00_10", "elastic": {"youngs_modulus": 40000}}
     assert apply_overrides(raw, ["specimen.material=generic_gel"])["specimen"]["material"] == "generic_gel"
+
+
+def test_override_list_element():
+    raw = {"m": {"elastic": {"mu": [1.0, 2.0]}}}
+    assert apply_overrides(raw, ["m.elastic.mu[1]=5"])["m"]["elastic"]["mu"] == [1.0, 5]
+    assert apply_overrides({}, ["a.b[0]=3"]) == {"a": {"b": [3]}}

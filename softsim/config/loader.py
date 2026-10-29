@@ -10,6 +10,7 @@ Conventions:
       ecoflex_00_10``) turns it into ``{preset: <name>}`` first, so
       ``specimen.material.elastic.youngs_modulus=40e3`` overrides one field of
       the preset instead of discarding it.
+    * A final key may index a list: ``specimen.material.elastic.mu[0]=2e4``.
 """
 
 from __future__ import annotations
@@ -71,6 +72,14 @@ def parse_override(text: str) -> tuple[list[str], Any]:
     return key.strip().split("."), yaml.safe_load(raw)
 
 
+def _split_index(key: str) -> tuple[str, int | None]:
+    """``"mu[0]"`` -> ``("mu", 0)``; ``"mu"`` -> ``("mu", None)``."""
+    if key.endswith("]") and "[" in key:
+        name, idx = key[:-1].split("[", 1)
+        return name, int(idx)
+    return key, None
+
+
 def _set_path(node: dict[str, Any], keys: list[str], value: Any) -> None:
     for k in keys[:-1]:
         child = node.get(k)
@@ -80,7 +89,14 @@ def _set_path(node: dict[str, Any], keys: list[str], value: Any) -> None:
             child = {}
         node[k] = child
         node = child
-    node[keys[-1]] = value
+    name, idx = _split_index(keys[-1])
+    if idx is None:
+        node[name] = value
+        return
+    items = list(node.get(name) or [])
+    items.extend([None] * (idx + 1 - len(items)))
+    items[idx] = value
+    node[name] = items
 
 
 def apply_overrides(config: Mapping[str, Any], overrides: Iterable[str]) -> dict[str, Any]:
