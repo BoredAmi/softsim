@@ -5,7 +5,7 @@ Subclass `softsim.backends.base.Backend`:
 ```python
 class MyBackend(Backend):
     name = "mine"
-    capabilities = frozenset({Capability.NEO_HOOKEAN, Capability.TET_MESH, ...})
+    capabilities = frozenset({Capability.STABLE_NEO_HOOKEAN, Capability.TET_MESH, ...})
 
     @classmethod
     def extra_checks(cls, scene) -> list[str]: ...   # settings this backend rejects
@@ -38,10 +38,16 @@ Register through the entry-point group `softsim.backends` (or `_BUILTIN` in
 `tests/test_drop_test.py` with `--set backend=mine` configs, plus the static
 uniaxial compression check, which every backend must pass.
 
-## SOFA (planned, M4)
+## Example: the SOFA backend
 
-`softsim/backends/sofa/` already declares the intended capability set, so
-`softsim check` can report what SOFA would support. Plan: SofaPython3 scene
-generation from `Scene`; `TetrahedronHyperelasticityFEMForceField` for
-hyperelastic models; `FreeMotionAnimationLoop` with Lagrange-multiplier
-contact; rigid bodies as `Rigid3d` MechanicalObjects.
+`softsim/backends/sofa/backend.py` is a complete second implementation and a
+good template. It shows:
+
+- locating an external engine (`$SOFA_ROOT`) lazily, so the capability
+  declaration works without it;
+- mapping each material model to engine parameters, each mapping checked
+  against an analytic result (`tests/test_sofa_backend.py`);
+- reconstructing contact forces when the engine doesn't expose them per pair
+  (momentum balance);
+- documenting where results differ from other backends
+  ([backends/sofa.md](backends/sofa.md)).

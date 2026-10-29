@@ -9,7 +9,7 @@ The flex API changes every release, so read the changelog before bumping.
 | --- | --- |
 | Soft body | `flexcomp type="direct" dim="3"` with our tetrahedral mesh; one 3-dof body per vertex |
 | `stvk` | default flex elasticity: Saint Venant–Kirchhoff, linear tetrahedra |
-| `neo_hookean` | Stable Neo-Hookean, `MjsFlex.elastic3d = 1` (experimental since 3.15, **spec-only**, not in MJCF) |
+| `stable_neo_hookean` | Stable Neo-Hookean (Smith et al. 2018), `MjsFlex.elastic3d = 1` (experimental since 3.15, **spec-only**, not in MJCF). Classic `neo_hookean` (ln J energy) is not available and is refused. |
 | `rayleigh.beta`, `kelvin_voigt` | flex `damping` (stiffness-proportional; Kelvin–Voigt maps to beta = eta / E) |
 | `base: bonded` | `<pin>` on the bottom-face vertices |
 | Contact | soft constraints `solref = (timeconst, dampratio)`, `solimp`; friction combines by max |
@@ -24,7 +24,7 @@ the PGS solver.
 
 - **Material mapping is correct.** Under a frictionless 3% uniaxial
   compression, the result matches δ = m·g·H/(E·A) within 0.7–1.8% for both
-  `neo_hookean` and `stvk` (`tests/test_drop_test.py::test_static_uniaxial_compression`).
+  `stable_neo_hookean` and `stvk` (`tests/test_drop_test.py::test_static_uniaxial_compression`).
 - **The timestep is not the accuracy bottleneck.** With the contact model held
   fixed, peak indentation at dt = 0.1 ms and 0.05 ms differs by 0.2–0.7%. Use
   dt ≤ 0.1 ms for impacts; 0.2 ms is within about 3%.
@@ -39,11 +39,15 @@ the PGS solver.
   presets must record their mesh in `provenance`. Pushing ν toward Ecoflex's
   real ~0.49 makes this worse.
 - **StVK collapses in compression.** With 200 g and 500 g, StVK lets the weight
-  crush through the full 17 mm. Neo-Hookean stays physical (8 and 13 mm in the
-  Step 0 probe). Neo-Hookean is the default.
-- **Neo-Hookean still underestimates silicone stiffening at large strain.**
-  Expect the 200–500 g cases to fit worse than 20–50 g; Yeoh or Ogden in a FEM
-  backend (SOFA, M4) is the proper fix.
+  crush through the full 17 mm. Stable Neo-Hookean stays physical (8 and 13 mm in the
+  Step 0 probe) and is the default. *Naming:* this was called `neo_hookean`
+  until M4; it is the stable variant, a different energy at large strain from
+  classic Neo-Hookean, so it now has its own model name.
+- **The 500 g misfit is not a MuJoCo limitation.** Expect the 200–500 g
+  cases to fit worse than 20–50 g. M4 tested this on SOFA: an Ogden fit
+  doesn't reproduce 500 g either, and actually prefers *less* large-strain
+  stiffening than Neo-Hookean. Compressibility (ν = 0.45) and missing rate
+  dependence matter more; see [experiments.md](../experiments.md#backends-and-material-models-m4).
 - **Damping is a single Rayleigh beta**, a crude proxy for viscoelasticity: the
   loss factor grows linearly with frequency. Beta and E trade off strongly over
   a millisecond impact. Fit both across several impact energies at once, and

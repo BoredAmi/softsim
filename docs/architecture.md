@@ -32,7 +32,7 @@
 
 - **Model generation uses MJCF and MjSpec, not templates.** The skeleton is
   generated MJCF (readable, saved with every run). The MuJoCo Python spec then
-  applies what MJCF cannot express: Neo-Hookean flex elasticity
+  applies what MJCF cannot express: Stable Neo-Hookean flex elasticity
   (`elastic3d`, spec-only in MuJoCo 3.17) and mass-consistent lumped vertex
   masses (flexcomp spreads mass equally over vertices).
 - **Soft bodies are passed as our own tetrahedral meshes** (`flexcomp

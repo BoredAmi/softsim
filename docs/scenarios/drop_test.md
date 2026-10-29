@@ -70,7 +70,7 @@ drops again.
 
 ## M1 results: uncalibrated (superseded by M3 calibration)
 
-These use the `ecoflex_00_10` preset (Neo-Hookean, E = 91 kPa from the
+These use the `ecoflex_00_10` preset (stable Neo-Hookean, E = 91 kPa from the
 datasheet, ν = 0.45, Rayleigh β = 2 ms placeholder), a 3.5 mm mesh, dt = 0.1 ms,
 contact timeconst 0.2 ms, 250 ms per run
 (`softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5`):
@@ -94,4 +94,6 @@ this is a key question for the M3 comparison. **M3 calibration** ([experiments.m
 β = 0.31 ms (preset `ecoflex_00_10_drop_fit`, 5 mm mesh). That matches the 20 g
 and 50 g first impacts within 3–15%, but not the 500 g, which in reality is far
 stiffer and faster than Neo-Hookean + Rayleigh allows. The 100 g and 200 g
-recordings are off-centre edge impacts and can't be used.
+recordings are off-centre edge impacts and can't be used. **M4** repeated the
+fit on SOFA with an Ogden material: 20 and 50 g within 3–11%, 500 g still not
+reproduced ([experiments.md](../experiments.md#backends-and-material-models-m4)).

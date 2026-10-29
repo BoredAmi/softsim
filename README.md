@@ -4,9 +4,10 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status: M1 (core + MuJoCo drop test), M2 (ROS 2 layer) and M3 (video
-tracking + calibration) done.** The SOFA backend (M4) is next; see
-[docs/roadmap.md](docs/roadmap.md).
+**Status: M1 (core + MuJoCo drop test), M2 (ROS 2 layer), M3 (video
+tracking + calibration) and M4 (SOFA backend) done.** Backends: MuJoCo flex
+(default, fast) and SOFA (more material laws, optional install). See
+[docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
@@ -16,7 +17,8 @@ recording from [Czopek et al., doi:10.5281/zenodo.23185808](https://doi.org/10.5
 (CC-BY-4.0, cropped and denoised). Right: softsim + MuJoCo flex with the
 **calibrated** material (`ecoflex_00_10_drop_fit`, E = 55 kPa) and the measured
 impact speed, offset and spin. For 20 g and 50 g the calibrated model matches
-the first impact within 3–15%. The 500 g impact is not reproduced; see
+the first impact within 3–15%. The 500 g impact is not reproduced by any
+backend or material law tried so far; see
 [docs/experiments.md](docs/experiments.md) for what does and doesn't fit, and why.*
 
 ![All five dataset weights simulated side by side](docs/media/drop_all_weights.gif)
@@ -55,6 +57,10 @@ python3 -m venv --system-site-packages .venv
 
 `numpy<2` is pinned so ROS 2 Humble's compiled Python modules keep working.
 
+**SOFA backend (optional).** Unzip the SOFA v26.06 Linux release (Python 3.10)
+and point `SOFA_ROOT` at it; then add `--backend sofa` to any command. Without
+it, the SOFA tests skip. See [docs/backends/sofa.md](docs/backends/sofa.md).
+
 ## Quick start
 
 ```bash
@@ -68,6 +74,8 @@ softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5
 softsim export scenarios/drop_test/cases/w020.yaml --out model.xml
 softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5       # video tracking (needs the dataset zips)
 softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3    # fit E and damping to the recordings
+softsim run   scenarios/drop_test/cases/w020.yaml --backend sofa \
+    --set specimen.material=ecoflex_00_10_drop_fit_sofa_ogden --set specimen.mesh.size=5mm --set simulation.timestep=5e-5
 ```
 
 From Python:
@@ -110,7 +118,7 @@ softsim/            core library (no ROS)
   geometry/         soft and rigid primitives + rigid body presets
   meshing/          tetrahedral meshing (structured built-in, gmsh optional)
   scene.py          backend-neutral scene description
-  backends/         Backend interface, MuJoCo flex backend, SOFA stub
+  backends/         Backend interface, MuJoCo flex backend, SOFA backend
   scenarios/        Scenario base class + drop_test
   checks/           pre-run physics checks
   experiments/      datasets, video tracking, sim-vs-experiment comparison, calibration, plots
@@ -132,6 +140,7 @@ tests/
 - How to add a [material](docs/adding_a_material.md), [body](docs/adding_a_body.md),
   [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md)
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
+- [SOFA backend: setup, physics notes and limits](docs/backends/sofa.md)
 - [Drop test scenario and dataset](docs/scenarios/drop_test.md)
 - [ROS 2 integration](docs/ros2.md)
 - [Experiments: video tracking and calibration](docs/experiments.md)

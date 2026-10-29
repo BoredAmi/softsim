@@ -75,8 +75,8 @@ since contact, relative to the specimen base.
 
 ## Calibration (`softsim/experiments/calibrate.py`)
 
-`calibrations/ecoflex_00_10_drop.yaml` fits Neo-Hookean E and Rayleigh β (in log
-space) to the 20, 50 and 500 g cases at once:
+`calibrations/ecoflex_00_10_drop.yaml` fits stable Neo-Hookean E and Rayleigh
+β (in log space) on MuJoCo to the 20, 50 and 500 g cases at once:
 
 - **Optimizer:** a coarse 4×4 grid, then Nelder-Mead, 50 evaluations.
 - **Simulations:** each case uses its measured impact conditions and a 5 mm
@@ -85,6 +85,12 @@ space) to the 20, 50 and 500 g cases at once:
   contact phase.
 - **Outputs:** the fitted preset (with provenance), the evaluation history,
   `report.yaml` and plots.
+- **Failures and resuming:** an unstable parameter set, or one that crashes its
+  worker process outright, gets the maximum per-case cost (10) instead of
+  stopping the run. Each evaluation is appended to `<output>/evaluations.jsonl`.
+  Re-running an unchanged calibration file replays those evaluations, so an
+  interrupted multi-hour run resumes where it stopped. The history also records
+  each case's maximum ground penetration, which flags contact artefacts.
 
 **Result:** E = 54.8 kPa and β = 0.31 ms. This is preset
 [`ecoflex_00_10_drop_fit`](../softsim/materials/presets/ecoflex_00_10_drop_fit.yaml).
@@ -120,10 +126,68 @@ to the datasheet's 100% modulus (55 kPa).
   - energy absorbed by the compliant table, which is measurable here but not
     modelled.
 
-  These are what the SOFA backend (Yeoh/Ogden, proper viscoelasticity) and a
-  support model should address.
+  M4 tested the material-law and compressibility candidates on SOFA; see
+  [below](#backends-and-material-models-m4).
 - **The fit depends on the mesh.** With the fitted values, the 20 g peak goes
   3.32 → 3.55 → 3.79 mm as the mesh refines from 5 to 3.5 to 2.5 mm. Use the
   preset with `specimen.mesh.size=5mm`, or refit at the target resolution.
 - **50 g after first contact isn't modelled.** In reality the weight tumbles
   off after the first contact, so later times shouldn't be compared.
+
+## Backends and material models (M4)
+
+Same cases, cost and procedure on the SOFA backend, which offers more material
+laws. The question: can a different material law reproduce 500 g together with
+20 and 50 g? Both SOFA fits use a 5 mm mesh and dt = 0.05 ms (0.1 ms diverges
+for 500 g) and took about 1 h and 2.7 h on 8 cores.
+
+| Fit | Parameters | Cost | 20 g | 50 g | 500 g peak / t_peak (exp 4.52 mm / 2.7 ms) |
+| --- | --- | --- | --- | --- | --- |
+| MuJoCo, stable NH ([`ecoflex_00_10_drop_fit`](../softsim/materials/presets/ecoflex_00_10_drop_fit.yaml)) | E 54.8 kPa, ν 0.45, β 0.31 ms | 0.44 | 15% | 3% | 11.0 mm / 6.6 ms |
+| SOFA, stable NH ([calibration](../calibrations/ecoflex_00_10_drop_sofa_stable_nh.yaml)) | E 105 kPa, ν 0.45, β 0.89 ms | 0.54 | 49% | 37% | 8.3 mm / 5.7 ms |
+| SOFA, one-term Ogden ([`ecoflex_00_10_drop_fit_sofa_ogden`](../softsim/materials/presets/ecoflex_00_10_drop_fit_sofa_ogden.yaml)) | μ 22.9 kPa, α 1.20, K 200 kPa, β 0.28 ms | 0.24 | 3% | 11% | 9.0 mm / 5.3 ms |
+
+(Percentages are NRMSE over the first contact phase. Reproduce the figures
+with `python tools/make_model_comparison.py`.)
+
+![Best fit per backend and material model vs experiment](media/model_comparison_overlay.png)
+
+**What M4 shows:**
+
+- **No material law fits 500 g.** Each fit leaves 500 g about twice too deep
+  and twice too slow. The SOFA stable-NH fit is a compromise that fits nothing:
+  it stiffens to help 500 g and then misses 20 and 50 g by 37–49%.
+- **Large-strain stiffening isn't the explanation.** The Ogden fit chooses
+  α ≈ 1.2, *less* stiffening than Neo-Hookean (α = 2), and fits 20 and 50 g
+  within 3–11%, the best of the three. The M3 candidate "stronger large-strain
+  stiffening" is ruled out for this data.
+- **Same model, different backend, different parameters.** Stable NH on
+  MuJoCo and SOFA ends at E = 55 vs 105 kPa (compliant vs hard contact,
+  integrator damping; see [sofa.md](backends/sofa.md)). Fitted values are
+  effective parameters of a backend + mesh + model combination.
+- **Compressibility matters for the full-face impact.** At peak, the SOFA fits
+  lose 27% (Ogden) and 36% (stable NH) of the specimen's volume. Silicone is
+  practically incompressible, so ν = 0.45–0.47 is wrong here; under local
+  indentation the material can flow aside and ν matters much less. Single runs
+  of the Ogden fit with a higher bulk modulus (not refitted):
+
+  | Bulk modulus (ν) | 20 g peak (exp 3.74) | 500 g peak (exp 4.52) | 500 g t_peak (exp 2.7) |
+  | --- | --- | --- | --- |
+  | 200 kPa (0.466), fitted | 3.82 mm | 8.96 mm | 5.3 ms |
+  | 1 MPa (0.493) | 3.54 mm | 7.65 mm | 5.2 ms |
+  | 5 MPa (0.499) | 3.31 mm | 6.54 mm | 4.6 ms |
+
+  Near-incompressibility closes about 45% of the 500 g peak gap while 20 g
+  stiffens 12%, partly linear-tetrahedron locking. A joint refit with the bulk
+  modulus free is prepared but **not run yet**
+  ([`ecoflex_00_10_drop_sofa_ogden_bulk.yaml`](../calibrations/ecoflex_00_10_drop_sofa_ogden_bulk.yaml),
+  about 3–4 h; repeat at a 3.5 mm mesh to separate locking from material).
+- **The remaining gap** (500 g still about 45% too deep and 70% too slow at
+  ν ≈ 0.5) points to what no tested model has: rate-dependent stiffening
+  (Prony viscoelasticity; Rayleigh β can't represent it) and/or the compliant
+  table.
+- **SOFA contact fails at extreme rim flaring.** In the Ogden 500 g run the
+  specimen's rim spreads to 45 mm radius and, from 7.6 ms (after the peak at
+  5.3 ms), rim vertices pass up to 8.5 mm through the ground. No element
+  inverts. The 500 g peak and timing are before this and valid, but its 58%
+  NRMSE includes the artefact and isn't meaningful.

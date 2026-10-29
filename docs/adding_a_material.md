@@ -12,7 +12,7 @@ description: What it is.
 source: Where every number comes from. Say "uncalibrated" or "fitted to X" honestly.
 density: 1070 kg/m^3
 elastic:
-  model: neo_hookean          # linear | stvk | neo_hookean | mooney_rivlin | yeoh | ogden | magneto_active
+  model: stable_neo_hookean   # linear | stvk | neo_hookean | stable_neo_hookean | mooney_rivlin | yeoh | ogden | magneto_active
   youngs_modulus: 60 kPa      # small-strain equivalent
   poisson_ratio: 0.45
 damping:                       # optional: rayleigh | kelvin_voigt | prony

@@ -4,7 +4,7 @@
 
 Config and units, materials and presets, soft/rigid geometry, tetrahedral
 meshing, backend-neutral scene, capability system, MuJoCo flex backend, SOFA
-stub, physics checks, drop-test scenario with all five dataset weights, runner,
+stub (replaced by the real backend in M4), physics checks, drop-test scenario with all five dataset weights, runner,
 sweeps, CLI, tests (including an analytic uniaxial check, convergence and
 no-penetration checks), and docs.
 
@@ -33,10 +33,36 @@ no-penetration checks), and docs.
   saved with mesh and backend provenance. Plots: sim vs experiment overlays,
   peak compression vs mass, rebound, settling, lift-off.
 
-## M4: SOFA backend
+## M4: SOFA backend (done; see [backends/sofa.md](backends/sofa.md))
 
-Same scene through SofaPython3; Neo-Hookean vs Yeoh/Ogden on the same data, to
-quantify what MuJoCo's model family misses at large strain.
+- SOFA v26.06 backend through SofaPython3, found via `$SOFA_ROOT`: linear,
+  StVK, classic and stable Neo-Hookean, Mooney-Rivlin, one-term Ogden,
+  Rayleigh/Kelvin-Voigt damping, rigid bodies, frictional Lagrange contact,
+  bonded bases. Material mappings checked against analytic uniaxial
+  compression; SOFA tests skip without SOFA.
+- `stable_neo_hookean` split from `neo_hookean`: MuJoCo's flex model is the
+  stable variant and now says so; MuJoCo refuses classic Neo-Hookean.
+- Calibration hardening: blow-up guard in the SOFA backend (it segfaults
+  instead of producing NaN), crash-tolerant and resumable calibrations,
+  ground-penetration metric.
+- Results ([experiments.md](experiments.md#backends-and-material-models-m4)):
+  Ogden fits 20/50 g within 3–11% but no material law fits 500 g; it prefers
+  less large-strain stiffening than Neo-Hookean. Compressibility (ν = 0.45)
+  explains part of the 500 g gap; rate dependence and the table are the
+  remaining suspects.
+
+## Next
+
+- **Run the bulk-modulus refit** (`calibrations/ecoflex_00_10_drop_sofa_ogden_bulk.yaml`,
+  about 3–4 h; then again at a 3.5 mm mesh to separate locking). Needs a
+  faster machine than the development laptop.
+- Prony-series viscoelasticity to test rate dependence. The SOFA hyperelastic
+  force field softsim uses has no viscoelastic terms, so this needs another
+  SOFA component, a custom force field or another backend.
+- A compliant support (table) model, constrained by the tracked table motion.
+- Yeoh and multi-term Ogden in SOFA (custom force field).
+- The SOFA frictionless-plate contact artefact (7% stiff) and the rim-flaring
+  ground penetration.
 
 ## Later
 
