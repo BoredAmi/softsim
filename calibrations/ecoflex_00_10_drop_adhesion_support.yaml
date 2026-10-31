@@ -1,0 +1,36 @@
+# Ecoflex tack + compliant support, fitted to the whole first 100 ms of the
+# 20 g and 50 g drops (MuJoCo, 5 mm mesh). The bulk material stays at the
+# first-contact fit (ecoflex_00_10_drop_fit); its first contact is still part of
+# the compared curves.
+#
+# Why (docs/experiments.md, "After the first contact"): in the recordings the
+# 20 g weight never separates from the tacky specimen; it pulls the specimen
+# (and the cloth under it) up and both hop ~8 mm together. The 50 g weight
+# peels off and flips. Without adhesion the simulated weights fly 70-100 mm.
+#   softsim calibrate calibrations/ecoflex_00_10_drop_adhesion_support.yaml --jobs 2
+# 500 g is not used: its first contact is not reproduced by any model so far.
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases:
+  w020: {observables: {indentation_rel: [0, 100 ms], specimen_lift: [0, 100 ms]}}
+  # after ~15 ms the 50 g weight flips towards the camera and its silhouette centroid is no longer its COM
+  w050: {observables: {indentation_rel: [0, 15 ms], specimen_lift: [0, 100 ms]}}
+overrides:
+  - specimen.material=ecoflex_00_10_drop_fit
+  - "specimen.material.adhesion={strength: 20 kPa, range: 0.6 mm}"
+  - specimen.mesh.size=0.005
+  - support.enabled=true
+  - simulation.timestep=0.00003   # adhesion is explicit: omega*dt ~ 0.6 at range 0.15 mm (dt-converged)
+  - simulation.duration=0.105
+  - simulation.output_rate=5000
+  - output.save_model=false
+# A first run (bounds range >= 0.3 mm, mass <= 40 g; 69 evaluations, cost 0.48 -> 0.128) ended on
+# both bounds; this run starts from its best point with wider bounds.
+parameters:
+  specimen.material.adhesion.strength: {initial: 13.8 kPa, bounds: [2 kPa, 100 kPa], log: true}
+  specimen.material.adhesion.range: {initial: 0.3 mm, bounds: [0.15 mm, 3 mm], log: true}
+  support.stiffness: {initial: 34 N/m, bounds: [5 N/m, 3000 N/m], log: true}
+  support.damping: {initial: 0.4 N*s/m, bounds: [0.005 N*s/m, 5 N*s/m], log: true}
+  support.mass: {initial: 40 g, bounds: [2 g, 300 g], log: true}
+max_evaluations: 90   # converged: cost flat at 0.133 from about evaluation 55
+output: ../runs/calibration/ecoflex_00_10_drop_adhesion_support

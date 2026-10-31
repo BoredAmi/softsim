@@ -1,0 +1,17 @@
+# All five weights with the fitted tack and compliant (cloth) support: the model that reproduces the
+# whole first 100 ms of the 20 g and 50 g drops (calibrations/ecoflex_00_10_drop_adhesion_support.yaml).
+# MuJoCo, 5 mm mesh (the tack is fitted to it; see the preset's provenance). Nominal impacts; the
+# calibration uses each recording's measured speed, offset and spin.
+#   softsim sweep scenarios/drop_test/sweeps/fitted_tack_support.yaml --jobs 5
+base: ../scenario.yaml
+overrides:
+  - specimen.material=ecoflex_00_10_drop_fit_tacky
+  - specimen.mesh.size=0.005
+  - support.enabled=true
+  - support.stiffness=32.91
+  - support.damping=0.3458
+  - support.mass=0.04534
+  - simulation.timestep=0.00003
+grid:
+  weight.body: [czopek2026_w020, czopek2026_w050, czopek2026_w100, czopek2026_w200, czopek2026_w500]
+save_timeseries: true

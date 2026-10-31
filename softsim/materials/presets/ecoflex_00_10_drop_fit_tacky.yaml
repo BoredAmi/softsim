@@ -1,0 +1,47 @@
+name: ecoflex_00_10_drop_fit_tacky
+description: 'Ecoflex 00-10 drop fit (MuJoCo, 5 mm mesh) plus fitted tack: reproduces the whole first 100 ms of
+  the 20 g and 50 g drops together with the drop test''s compliant support (see provenance).'
+source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808) by softsim calibrate.
+density: 1040.0
+elastic:
+  youngs_modulus: 54837.08105915519
+  poisson_ratio: 0.45
+  model: stable_neo_hookean
+damping:
+  model: rayleigh
+  alpha: 0.0
+  beta: 0.00031462933844351456
+friction:
+  sliding: 1.0
+  torsional: 0.0
+  rolling: 0.0
+adhesion:
+  strength: 14590.0
+  range: 0.0002917
+provenance:
+  fitted_by: softsim calibrate
+  calibration_file: calibrations/ecoflex_00_10_drop_adhesion_support.yaml
+  dataset_doi: 10.5281/zenodo.23185808
+  cases:
+    w020: 1.0
+    w050: 1.0
+  backend: mujoco
+  mesh_size: 0.005
+  timestep: 0.03 ms
+  cost: 0.1328
+  per_case_nrmse:
+    w020: 0.183
+    w050: 0.083
+  note: 'Effective parameters: valid only with this backend, element type, mesh size and the support above. The
+    tack is NOT mesh-converged: its cohesive zone (~4 mm) is not resolved by the 5 mm mesh, and on a 3.5 mm mesh
+    the 20 g weight peels off. 500 g is not reproduced (its first contact is unexplained).'
+  fitted_parameters: adhesion only; elastic and damping from ecoflex_00_10_drop_fit
+  support:
+    enabled: true
+    stiffness: 32.91
+    damping: 0.3458
+    mass: 0.04534
+  contact_timeconst: 0.2 ms
+  compared:
+    w020: indentation_rel and specimen_lift, 0-100 ms
+    w050: indentation_rel 0-15 ms, specimen_lift 0-100 ms
