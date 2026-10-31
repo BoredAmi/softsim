@@ -54,17 +54,22 @@ since contact, relative to the specimen base.
 
 - **Frame rate is 2999.3 fps** (overlay timestamps). Impact speeds are 2–10%
   below the nominal 2.73 m/s, so simulations use the measured value per case.
-- **Perspective.** The camera looks down, so a falling weight also moves away
-  from it. Its apparent acceleration in the image is only about 3–4 m/s². A
-  free fall with g fixed in the image is therefore wrong over long distances,
-  and the tracker fits a free quadratic locally, just before contact.
-- **The table is not rigid.** Next to the specimen, the table texture moves by
-  several mm (up to about 5 mm up for 20 g) from about 20 ms after impact,
-  while the backdrop stays still. Everything after the first contact phase,
-  including rebound height, settling and the apparent specimen lift, is
-  contaminated by this support motion. Only the first contact phase (0 to
-  about 8 ms; 15 ms for 500 g), measured relative to the specimen base, is
-  compared with rigid-ground simulations.
+- **Local free-fall fit.** Just before contact the tracker fits a free quadratic
+  to the weight's height. Its apparent acceleration comes out at only
+  3–4 m/s², but over the 8 ms fit window that is a difference of about 1 px
+  from free fall. M3 blamed perspective; that is not established (the
+  specimen's hop, below, decelerates *faster* than g). It doesn't matter for
+  contact detection, and the fitted impact speeds agree with the nominal drop
+  speed.
+- **The specimen hops; the table does not move.** After impact the specimen
+  rises 8–20 mm and lands again 70–110 ms later. The green cloth it sits on
+  rises next to it (most near the specimen, less 55 mm away, with ripples
+  spreading out), while the backdrop lighting band stays within ±1 px, so the
+  camera is still. The 200 g specimen visibly tilts and slides in mid-air.
+  The tacky specimen sticks to the cloth and drags it up, which is also why
+  its hop decelerates at 13–20 m/s², faster than g. *Correction:* M3 read this
+  as the table moving and discarded everything after the first contact; see
+  [After the first contact](#after-the-first-contact-tack-and-the-hopping-specimen).
 - **Out-of-plane tilt can't be measured** from a single side view. Simulations
   get the measured horizontal offset and in-plane spin; tilt stays zero.
 - **Rotation is the less precise output.** On synthetic sequences the tracker
@@ -88,8 +93,10 @@ since contact, relative to the specimen base.
 - **Failures and resuming:** an unstable parameter set, or one that crashes its
   worker process outright, gets the maximum per-case cost (10) instead of
   stopping the run. Each evaluation is appended to `<output>/evaluations.jsonl`.
-  Re-running an unchanged calibration file replays those evaluations, so an
-  interrupted multi-hour run resumes where it stopped. The history also records
+  Re-running the calibration replays those evaluations, so an interrupted
+  multi-hour run resumes where it stopped. Changing `max_evaluations`, `grid`,
+  bounds or initial values keeps them. The log does not know about code
+  changes: delete it after changing simulation code. The history also records
   each case's maximum ground penetration, which flags contact artefacts.
 
 **Result:** E = 54.8 kPa and β = 0.31 ms. This is preset
@@ -191,3 +198,140 @@ with `python tools/make_model_comparison.py`.)
   5.3 ms), rim vertices pass up to 8.5 mm through the ground. No element
   inverts. The 500 g peak and timing are before this and valid, but its 58%
   NRMSE includes the artefact and isn't meaningful.
+
+## After the first contact: tack and the hopping specimen
+
+M3 and M4 compared only the first ~8 ms, because M3 had read the later motion
+as the table moving. That was wrong (see the findings above): the specimen
+itself hops. The whole first 100 ms is usable data, and it shows that the
+simulations got the physics after the first contact wrong. Without any
+adhesion, the simulated 20 g weight flies off at 1.2 m/s and rises 70 mm. The
+real one never leaves the specimen.
+
+**What the recordings show:**
+
+- **20 g: the weight sticks.** It comes off the compressed material at
+  1.0–1.2 m/s relative to the base, as fast as in the simulation, and then
+  stops within about 1 mm and stays there for 90 ms while rocking. Momentum
+  says why: 20 g × 1.0 m/s ≈ 42 g × 0.45 m/s, and weight plus specimen then
+  hop together at about 0.45 m/s (7.6 mm apex). The weight is stuck to the
+  tacky Ecoflex and pulls the whole specimen off the cloth.
+- **50 g: the weight peels off.** With 2.5× the momentum, the bond can't hold
+  the weight. It separates while rotating (a peel from one edge) at about
+  1 m/s relative to the specimen, the same as the simulation up to 22 ms.
+  After that it tumbles away from the camera and lands on the table *behind*
+  the specimen (it lies still there from ~210 ms). Its image height then mixes
+  height with depth, so the side view can't measure its rebound. The specimen
+  still hops 8 mm.
+- **500 g: the weight lifts the specimen with it** by 20 mm, and separates
+  only around 70–100 ms.
+- **The cloth comes along.** The green cloth next to the specimen rises with
+  it and ripples, and the hop decelerates at 13–20 m/s², faster than g: the
+  specimen sticks to the cloth too.
+
+**Model.** Two scene elements, both general features of softsim:
+
+- **Adhesion** (`material.adhesion: {strength, range}`), an exponential
+  cohesive law for the normal traction between the soft surface and what it
+  touches (t = σ (g/δ) e^(1 − g/δ); work of separation e·σ·δ). Bonds form on
+  contact and break beyond 6δ. Verified against analytic equilibria on MuJoCo
+  and SOFA (`tests/test_adhesion.py`).
+- **A compliant support** (`support:` in the drop test): a carrier plate under
+  the specimen that can lift off the table against a spring and damper. It is
+  a lumped stand-in for the cloth, and its parameters are effective ones.
+
+**Fit** (`calibrations/ecoflex_00_10_drop_adhesion_support.yaml`, MuJoCo,
+5 mm mesh). Compared quantities:
+- 20 g: weight position relative to the specimen base and specimen lift over
+  0–100 ms;
+- 50 g: relative position over 0–15 ms (later, the flipping weight's centroid
+  is not its centre of mass) and specimen lift over 0–100 ms.
+
+500 g is not used (below).
+
+Only the tack and support are fitted; the bulk material stays at its M3
+first-contact values (preset
+[`ecoflex_00_10_drop_fit_tacky`](../softsim/materials/presets/ecoflex_00_10_drop_fit_tacky.yaml);
+`softsim sweep scenarios/drop_test/sweeps/fitted_tack_support.yaml` runs all five weights with it):
+
+| | Fitted value |
+| --- | --- |
+| tack strength σ | 14.6 kPa |
+| tack range δ | 0.29 mm (work of separation e·σ·δ ≈ 11.6 J/m²) |
+| support stiffness, damping, mass | 33 N/m, 0.35 N·s/m, 45 g |
+
+| Case | Observable | Without tack (rigid table) | With tack + support |
+| --- | --- | --- | --- |
+| 20 g | weight rel. to base, 0–100 ms | flies off (−75 mm at 100 ms) | stays seated; NRMSE 25% |
+| 20 g | specimen hop | 6.2 mm, too slow | 7.0 mm (exp. 7.8), lands at ~80 ms; NRMSE 12% |
+| 50 g | weight rel. to base, 0–15 ms | | NRMSE 6% (first contact and separation) |
+| 50 g | specimen hop | 29 mm | 8 mm (exp. 9); NRMSE 11% |
+
+Total cost 0.133 (90 evaluations, flat from about the 55th), against 0.48 at
+the first initial guess.
+
+**What to make of it:**
+
+- **Tack, not dissipation, is why the simulations flew too high.** In the
+  MuJoCo model the weight already leaves the compressed specimen at the
+  measured speed. What was missing is that it stays stuck.
+- **The parameters are effective, and tied to the mesh.** The tack is a
+  cohesive law whose process zone (~4 mm) the 5 mm mesh doesn't resolve. On a
+  3.5 mm mesh the same values let the 20 g weight peel off. The support is a
+  lumped stand-in for a cloth that sticks, stretches and ripples, so 45 g and
+  33 N/m are not the cloth's mass and stiffness.
+- **Checked:** halving the timestep changes the errors by less than 0.01.
+- **The cloth pulls back harder than gravity** (13–20 m/s² in the
+  recordings). The fit captures that through the spring, which is why the
+  simulated hop is about 10% too low but lands on time.
+- **500 g is outside this model** (below). With its first contact 2.4× too
+  deep, the weight rebounds too fast for any bond and tears off.
+
+![Whole trajectories after contact: simulation vs experiment](media/after_contact_trajectories.png)
+
+### The 500 g first contact
+
+The 500 g weight stops within 4.5 mm in 2.7 ms. No simulation so far gets
+close: every material law, both backends and a near-incompressible bulk
+modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:
+
+- **The tracking is right.** Tracking the top edge of the weight's knob
+  against the plain backdrop, independently of the tracker, gives the same
+  motion within 0.5–1 mm. The weight travels almost freely for the first
+  ~1 ms, then decelerates at ~1750 m/s² (~900 N), and comes back up at
+  ~0.85 m/s.
+- **It lands tilted, but that is not the explanation.** Before impact the
+  weight is tilted by 7° in the image plane (consistent over 4 frames). The
+  simulation with that tilt peaks at 9.7 mm at 5.0 ms instead of 11.0 mm at
+  6.6 ms: closer, but not close.
+- **No elastomer explanation fits.** As a linear spring, the stop needs
+  ~170 kN/m, an effective modulus above 1 MPa, against ~55 kPa from the light
+  weights. That is 19× the 50 g case's stiffness, with a shorter time to peak
+  than 20 g despite 25× the mass. No string or guide is visible above the
+  weight.
+- **It is not a modelling artefact of the tetrahedral backends.** The
+  locking-free axisymmetric reference ([reference_fem.md](reference_fem.md))
+  is nearly incompressible (ν = 0.4995) with sticking contact on both faces,
+  so it has none of the suspects: locking, volume loss, friction slip. It
+  still peaks at 8.1 mm (E = 100 kPa) and 6.4 mm (E = 200 kPa), against the
+  measured 4.5 mm. Statically, sticking faces stiffen 26% compression only
+  1.7× over frictionless.
+
+The cause is unknown. Possibilities include something in the 500 g setup that
+the recording doesn't show, or a strongly rate-dependent response under
+full-face confinement. Until it is understood, 500 g is kept out of the fits.
+
+## What the fitted modulus means
+
+All fits on this page are *effective* models of a backend, mesh and contact
+model, not the silicone's material constants. The axisymmetric reference
+solver ([reference_fem.md](reference_fem.md)) cross-checks this:
+- it agrees with MuJoCo's 3.5 mm mesh within 2–5% for static indentation;
+- in the drop, MuJoCo's impact loses energy to friction slip and contact
+  mechanics that the reference doesn't have;
+- on the reference, the first contacts need **E ≈ 100–130 kPa** plus some
+  damping, consistent with the datasheet (≈ 94 kPa). MuJoCo's 55 kPa
+  compensates for MuJoCo's own losses.
+
+Use the MuJoCo presets with MuJoCo at their mesh size. Take the material's
+actual modulus from the reference.

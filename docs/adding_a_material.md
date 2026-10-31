@@ -19,8 +19,13 @@ damping:                       # optional: rayleigh | kelvin_voigt | prony
   model: rayleigh
   beta: 2 ms
 friction: {sliding: 1.0, torsional: 0, rolling: 0}
+adhesion: {strength: 14 kPa, range: 0.36 mm}   # optional tack against rigid bodies (MuJoCo only)
 provenance: {}                 # e.g. the mesh size/backend a calibrated value is tied to
 ```
+
+`adhesion` is a cohesive law (peak tensile traction `strength` at an opening
+of `range`; work of separation e·strength·range per area). Leave it out for
+non-tacky materials. The ground has its own `ground.adhesion`.
 
 Use it by name (`material: my_silicone`), override part of it
 (`material: {preset: my_silicone, elastic: {youngs_modulus: 50 kPa}}`), or

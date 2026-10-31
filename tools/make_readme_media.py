@@ -136,11 +136,22 @@ def save_gif(frames: list[Image.Image], path: Path, frame_ms: int, colors: int =
 def material_caption(extra: list[str]) -> str:
     sim = Simulation(CASES / "w020.yaml", ["output.save_model=false", *extra])
     m = sim.scene.soft_bodies[0].material
-    caption = f"{m.name}: {m.elastic.model}, E={m.elastic.initial_youngs_modulus() / 1e3:.0f} kPa"
-    sim.close()
+    caption = f"{m.elastic.model.replace('stable_neo_hookean', 'stable NH')}, E={m.elastic.initial_youngs_modulus() / 1e3:.0f} kPa"
     if "UNCALIBRATED" in m.source.upper():
-        return caption + " (uncalibrated)"
-    return caption + (" (fitted)" if m.provenance.get("fitted_by") else "")
+        caption += " (uncalibrated)"
+    elif m.provenance.get("fitted_by"):
+        caption += " (fitted)"
+    if m.adhesion is not None:
+        caption += " + tack"
+    if sim.config.support.enabled:
+        caption += " + cloth support"
+    sim.close()
+    return caption
+
+
+def _times(start: float, impact_end: float, end: float) -> np.ndarray:
+    """0.75 ms per frame through the impact (~107x slow motion), then 2 ms per frame."""
+    return np.r_[np.arange(start, impact_end, 0.00075), np.arange(impact_end, end, 0.002)]
 
 
 def main() -> None:
@@ -163,11 +174,11 @@ def main() -> None:
         exp_case = ExperimentCase.load(TRACKS, "w020")
         impact = exp_case.sim_overrides(gap=0.015)
         contact_frame = args.contact_frame or exp_case.meta["contact_frame"]
-    frame_ms = 80  # 0.75 ms of physics per frame -> ~107x slow motion
+    frame_ms = 80  # 0.75 ms of physics per frame through the impact -> ~107x slow motion
     size = 256
 
     if not args.skip_experiment:
-        times = np.arange(-0.009, 0.042, 0.00075)
+        times = _times(-0.009, 0.015, 0.095)
         zip_path = args.dataset_dir / "020gram.zip"
         exp = experiment_frames(zip_path, "020gram", contact_frame, times, size, crop=(180, 300, 620, 740))
         sim, peak = render_simulation("w020", times, size, extra=[*args.overrides, *impact])
@@ -182,7 +193,7 @@ def main() -> None:
         save_gif(frames, args.out / "drop_20g_sim_vs_experiment.gif", frame_ms)
         print(f"simulated peak indentation 20 g: {peak * 1e3:.2f} mm")
 
-    times_all = np.arange(-0.006, 0.05, 0.00075)
+    times_all = _times(-0.006, 0.015, 0.095)
     panel = 200
     panels = []
     for case, label in [("w020", "20 g"), ("w050", "50 g"), ("w100", "100 g"), ("w200", "200 g"), ("w500", "500 g")]:

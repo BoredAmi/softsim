@@ -6,25 +6,29 @@ package; ROS 2 integration is a thin layer on top (milestone M2).
 
 **Status: M1 (core + MuJoCo drop test), M2 (ROS 2 layer), M3 (video
 tracking + calibration) and M4 (SOFA backend) done.** Backends: MuJoCo flex
-(default, fast) and SOFA (more material laws, optional install). See
+(default, fast) and SOFA (more material laws, optional install), plus an
+axisymmetric reference FEM (locking-free, for verification; in progress). See
 [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
 *20 g weight dropped from 38 cm onto an Ecoflex 00-10 cylinder (D 40 × H 17 mm),
-about 100× slow motion, aligned at the tracked contact. Left: high-speed camera
-recording from [Czopek et al., doi:10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808)
+aligned at the tracked contact: ~100× slow motion through the impact, then
+2 ms per frame. Left: high-speed camera recording from
+[Czopek et al., doi:10.5281/zenodo.23185808](https://doi.org/10.5281/zenodo.23185808)
 (CC-BY-4.0, cropped and denoised). Right: softsim + MuJoCo flex with the
-**calibrated** material (`ecoflex_00_10_drop_fit`, E = 55 kPa) and the measured
-impact speed, offset and spin. For 20 g and 50 g the calibrated model matches
-the first impact within 3–15%. The 500 g impact is not reproduced by any
-backend or material law tried so far; see
-[docs/experiments.md](docs/experiments.md) for what does and doesn't fit, and why.*
+**calibrated** material and the measured impact speed, offset and spin. The
+weight sticks to the tacky silicone and the specimen hops, dragging the cloth
+under it (green plate), as in the recording. The fit reproduces the whole first
+100 ms of the 20 g and 50 g drops (12–25% error); without the tack the weight
+flies 7 cm high. The 500 g impact is not reproduced; see
+[docs/experiments.md](docs/experiments.md) for what fits, what doesn't, and why.*
 
 ![All five dataset weights simulated side by side](docs/media/drop_all_weights.gif)
 
 *The five weights of the dataset (20–500 g) from the same YAML scenario,
-switching one preset each. Regenerate both GIFs with
+switching one preset each (nominal centred impacts; fitted tack and cloth
+support). Regenerate both GIFs with
 `python tools/make_readme_media.py` (needs `020gram.zip` in `data/raw/czopek2026/`
 for the left panel).*
 
@@ -56,6 +60,10 @@ python3 -m venv --system-site-packages .venv
 ```
 
 `numpy<2` is pinned so ROS 2 Humble's compiled Python modules keep working.
+
+**Reference FEM (optional).** `pip install -e ".[fem]"` adds JAX (CPU,
+float64) for `softsim.fem`, the axisymmetric locking-free solver used to
+cross-check the backends ([docs/reference_fem.md](docs/reference_fem.md)).
 
 **SOFA backend (optional).** Unzip the SOFA v26.06 Linux release (Python 3.10)
 and point `SOFA_ROOT` at it; then add `--backend sofa` to any command. Without
@@ -141,6 +149,7 @@ tests/
   [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md)
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
 - [SOFA backend: setup, physics notes and limits](docs/backends/sofa.md)
+- [Reference FEM (axisymmetric, locking-free) and backend cross-checks](docs/reference_fem.md)
 - [Drop test scenario and dataset](docs/scenarios/drop_test.md)
 - [ROS 2 integration](docs/ros2.md)
 - [Experiments: video tracking and calibration](docs/experiments.md)

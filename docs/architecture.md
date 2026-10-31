@@ -26,7 +26,8 @@
 | Fail loudly on unsupported physics | `capabilities.py: Capability`. Scene elements declare `requires`, backends declare `capabilities` and `extra_checks()`. |
 | Data-driven | Pydantic models with `extra="forbid"` (`config/schema.py`), units in `config/units.py`, `extends:` and `--set` in `config/loader.py`. |
 | New phenomenon = new scenario | `scenarios/base.py: Scenario`, discovered through the `softsim.scenarios` entry-point group. |
-| Comparable to experiments | Scenarios emit named metrics in SI units at a configurable output rate. Datasets and calibration come in M3. |
+| Comparable to experiments | Scenarios emit named metrics in SI units at a configurable output rate. `experiments/`: datasets, video tracking, comparison over any observable and window, calibration. |
+| Physics shared across backends | Backend-neutral models a backend applies as external forces, e.g. `contact/adhesion.py` (cohesive tack from analytic signed distances). |
 
 ## Key decisions
 
@@ -47,6 +48,10 @@
 - **Contact compliance is a physical parameter.** `contact.timeconst` is fixed
   in scenario configs (not tied to the timestep), because it changes results
   about as much as the material does.
+- **Model the experiment, not only the material.** What happens after impact
+  in the drop recordings is set by the specimen's tack and the cloth under it
+  as much as by its elasticity, so both are scene elements (`adhesion`,
+  `support`) with their own fitted parameters, not hidden in the material.
 
 ## State and units
 

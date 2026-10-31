@@ -19,11 +19,13 @@ Image convention: x right, y down. Reported physical quantities: z up,
 ``indentation`` positive downward since contact (like the simulation), angles
 in degrees, positive = clockwise on screen.
 
-The table the specimen rests on is not rigid in these recordings: next to the
-specimen it moves by several mm from ~20 ms after impact. ``indentation_rel``
-(weight centre of mass relative to the specimen base) removes that motion and
-is the quantity to compare with a rigid-ground simulation; ``specimen_lift``
-is the base height and mostly shows the table motion.
+After impact the specimen hops off the green cloth it rests on, by several mm,
+and pulls the cloth up with it (the specimen is tacky): the cloth texture next
+to the specimen rises with it while the backdrop and camera stay still.
+``indentation_rel`` (weight centre of mass relative to the specimen base) and
+``specimen_lift`` (height of the specimen's lowest silhouette point above its
+rest position) are the quantities to compare with simulations. (An earlier
+version of these notes read the cloth motion as a moving table.)
 """
 
 from __future__ import annotations
@@ -313,9 +315,9 @@ def track_case(dataset: Dataset, case: str, params: TrackingParams | None = None
         "silhouette_angle_deg": df["w_angle_deg"],                            # raw, unreliable with knobs
         "weight_area_px": df["w_area"],
         "bulge_diameter": df["s_width"] / s * 1e-3,                             # m
-        "specimen_lift": lift,                                                 # m, + up (base moves with the table)
+        "specimen_lift": lift,                                                 # m, + up (the specimen hops)
         # weight centre-of-mass displacement relative to the specimen base: removes the
-        # motion of the (compliant) table the specimen rests on
+        # specimen's own hop off its support
         "indentation_rel": (y_tr - y_c) / s_v * 1e-3 + (lift - lift_c),
         "free_fall_residual_px": residual,
     })

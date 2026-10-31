@@ -13,6 +13,8 @@ The flex API changes every release, so read the changelog before bumping.
 | `rayleigh.beta`, `kelvin_voigt` | flex `damping` (stiffness-proportional; Kelvin–Voigt maps to beta = eta / E) |
 | `base: bonded` | `<pin>` on the bottom-face vertices |
 | Contact | soft constraints `solref = (timeconst, dampratio)`, `solimp`; friction combines by max |
+| `adhesion` (material, ground) | external forces (`xfrc_applied`) on surface vertices and rigid bodies, recomputed before every step from analytic signed distances (`softsim/contact/adhesion.py`) |
+| `mount: slider_z` | `slide` joint along z with `stiffness`, `damping`, `springref = 0` (rest = initial pose) |
 | Integrator | `discrete` (new in 3.13, Sept 2026, experimental): implicit in position, so flex stiffness has no explicit stability limit |
 
 **Not supported, and refused:** small-strain linear elasticity, Mooney-Rivlin,
@@ -52,22 +54,63 @@ the PGS solver.
   loss factor grows linearly with frequency. Beta and E trade off strongly over
   a millisecond impact. Fit both across several impact energies at once, and
   read the leftover misfit as a model limitation.
+- **Friction changes the impact a lot.** 50 g drop, no material damping, 5 mm
+  mesh: peak 4.89, 5.72 and 6.80 mm at sliding friction 1, 0.3 and 0. The
+  bulging specimen slides against the weight and the table, and that matters
+  as much as the modulus.
+- **An undamped impact still loses much of the weight's energy.** With no
+  material damping the 50 g weight rebounds at 1.75–1.95 m/s from 2.47 m/s,
+  independent of the timestep (0.1–0.01 ms) and of the contact damping
+  ratio. How much of it stays in the specimen (vibration, hop) is not known,
+  since MuJoCo doesn't report flex strain energy. Fitted damping (β) is
+  therefore an effective value on top of this.
+- **Mesh stiffness against a converged reference:** for a static flat punch
+  (small strain) the 5 mm mesh is 20–60% stiffer than the locking-free
+  reference ([reference_fem.md](../reference_fem.md)).
 - **Peak contact force is not converged.** It is a first-contact spike on tiny
   vertex masses and changes with dt (70–140 N for 20 g). Use indentation,
   timing, rebound and ground force for calibration.
-- **Specimen lift-off in the simulation.** In the free-base configuration the
-  specimen's elastic recoil can launch it off the rigid table after the weight
-  separates (1 mm at 20 g up to 16 mm at 500 g with the uncalibrated preset).
-  It is reported as `specimen_lift_off`. *Correction:* I earlier said the 500 g
-  recording confirms this. M3 tracking showed that the table under the specimen
-  in the recordings is not rigid and moves by several mm from about 20 ms after
-  impact, so the apparent lift in the video is mostly support motion. See
-  [experiments.md](../experiments.md).
+- **Specimen lift-off.** In the free-base configuration the specimen's
+  elastic recoil can launch it off the rigid table after the weight separates
+  (1 mm at 20 g up to 16 mm at 500 g with the uncalibrated preset). It is
+  reported as `specimen_lift_off`. The real specimens do hop, by 8–20 mm, but
+  for a different reason: the tacky specimen is pulled up by the weight stuck
+  to it, and drags the cloth under it along. Reproducing that needs adhesion
+  and the compliant support (below). *Correction history:* M3 read the
+  specimen's hop as table motion; that was wrong. See
+  [experiments.md](../experiments.md#after-the-first-contact-tack-and-the-hopping-specimen).
 - **Solver warnings.** At large dt on finer meshes, the inner M+K solve can run
   out of CG iterations (`mjWARN_INERTIA`). softsim reports this as a
   `backend-warnings` finding; raise `simulation.iterations` or lower dt.
 - **Divergence.** MuJoCo resets the state itself on NaN; softsim detects this
   through the bad-qacc/qpos/qvel warning counters and raises `StabilityError`.
+
+## Adhesion (tack)
+
+- **Model:** an exponential cohesive law in the normal direction,
+  t(g) = σ (g/δ) e^(1 − g/δ), acting on the surface area that faces the
+  counterpart. A bond forms on contact and breaks for good beyond 6δ. Work of
+  separation is e·σ·δ per area. See `softsim.materials.Adhesion`.
+- **Explicit.** The forces are computed from the state at the start of each
+  step, so the adhesive stiffness e·σ/δ per vertex area must be resolvable:
+  `softsim check` reports `adhesion-stiff` (ω·dt > 0.3) and refuses
+  `adhesion-unstable` (ω·dt > 1). Lower the timestep or raise `range`.
+- **No damping of its own.** A body held only by adhesion oscillates on the
+  bond undamped (Rayleigh β damps strain, not rigid motion). The energy still
+  stored in a bond when it breaks is the only loss. Rate-dependent tack is not
+  modelled.
+- **Verified** (`tests/test_adhesion.py`): a stiff block held to the ground,
+  and a disc held to a block, under slowly reversed gravity settle at the
+  analytic opening of the traction law within 2%. Above the bond capacity
+  the block tears off. The reported contact force equals the load.
+- **Mesh dependence.** Tractions are lumped on surface vertices, so the bonded
+  area is resolved at the mesh size (a 12 mm disc on a 5 mm mesh bonds about
+  10% too much area). More importantly, *peeling* is only mesh-converged when
+  the cohesive zone, l ≈ E*·(e·σ·δ)/σ², spans several elements. For the
+  drop-test fit (σ ≈ 14 kPa, δ = 0.3 mm, E* ≈ 73 kPa) that is about 4 mm,
+  less than the 5 mm mesh. On 5 mm the bond acts all-or-nothing; on 3.5 mm
+  it peels and lets the 20 g weight go. Fitted tack parameters are therefore
+  effective values for the mesh they were fitted on, like the fitted moduli.
 
 ## Performance
 
