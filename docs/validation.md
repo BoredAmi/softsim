@@ -10,7 +10,7 @@ building it.
 | [Drop card → independent tension test](#1-a-drop-fitted-card-predicts-an-independent-tension-test) | the 20 and 50 g drop videos | quasi-static tension of Ecoflex 00-10, another lab, optical strain | **3–22%** up to 100% strain |
 | [Tension → compression](#2-tension-only-cards-predict-compression) | tension specimens | compression specimens, same lab | **4–17%** |
 | [Compression → tension](#3-compression-only-cards-predict-tension) | compression specimens (to 25%) | tension specimens to 100% | **4.5–20%** (Mold Max 32%) |
-| [Leave one weight out](#4-leave-one-weight-out-whole-bounce) | one drop recording | the other drop recording | see below |
+| [Leave one weight out](#4-leave-one-weight-out-whole-bounce) | one drop recording | the other drop recording | weight trajectory **22–28%**; the specimen's hop **fails** (51–93%) |
 | [Labs against each other](#5-how-much-do-labs-disagree) | – | the same product measured by different labs | up to **3×** apart |
 
 Regenerate: `python tools/validate_materials.py` (sections 2, 3 and 5) and
@@ -90,7 +90,28 @@ parameters) is refitted to one recording only, from neutral starting values,
 and then predicts the other recording's first 100 ms
 (`calibrations/loo_ecoflex_00_10_fit_w0x0.yaml`, `tools/leave_one_out.py`).
 
-*Running; results follow.*
+Error = NRMSE over the first 100 ms: the mean of the weight's trajectory
+(`indentation`) and the specimen's hop (`specimen_lift`).
+
+| Fitted on | Own recording | **Predicting the other** | Fitted on both, same recording |
+| --- | --- | --- | --- |
+| 20 g | 13% | **50 g: 60%** (weight 28%, hop 93%) | 8% |
+| 50 g | 15% | **20 g: 37%** (weight 22%, hop 51%) | 18% |
+
+**The material transfers; the setup model does not.**
+- **The material agrees between the folds:** E = 45 vs 53 kPa, β = 0.87 vs
+  1.0 ms (the MuJoCo effective values). Each fold also predicts the other
+  weight's trajectory nearly as well as it fits its own (22–28% against
+  18–20%), and the first-contact peak within 2% (4.39 vs 4.31 mm, fitted on
+  20 g) and 23% (2.89 vs 3.74 mm, fitted on 50 g).
+- **The cloth support is not identified by one recording.** The folds put its
+  mass at 2 g and 77 g, its damping at 1.25 and 0.32 N s/m, and the tack range
+  at 1.2 and 0.3 mm. Each fits its own hop (8–10%), but predicts the other's
+  poorly (51–93%).
+- So the support and tack values in the drop cards describe the two recordings
+  together. They aren't properties of the material or the table, and the
+  specimen-hop results in [experiments.md](experiments.md) hold for these two
+  weights, not as predictions for others.
 
 ## 5. How much do labs disagree?
 

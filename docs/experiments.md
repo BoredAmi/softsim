@@ -525,7 +525,10 @@ These are the axisymmetric fit's values. Nothing was refitted for 3D.
   | Physical (3D reference) | 143 kPa | 0.69 | 2.0 ms | – |
   | SOFA, 5 mm, ν = 0.45 | 79.6 kPa | 0.77 | 2.7 ms | 6.8% / 2.6% |
   | MuJoCo, 5 mm, ν = 0.45 | 66 kPa | 0.94 | 5.5 ms | 9.7% / 3.4% |
-- **Refining it** (E0, g, τ free, both cases, 3D) is prepared in
-  `calibrations/ecoflex_00_10_drop_fem_prony.yaml`. It takes about
-  8 minutes per case per evaluation, so run it overnight or on a faster
-  machine; it resumes if interrupted.
+- **Refined in 3D** (E0, g, τ free, both cases;
+  `calibrations/ecoflex_00_10_drop_fem_prony.yaml`, 40 evaluations, 5.4 h):
+  E0 = 147 kPa, g = 0.70, τ = 2.24 ms. The cost falls only from 0.084 to
+  0.080 (first contact NRMSE 9.5% for 20 g and 6.4% for 50 g; peak indentation
+  3.86 vs 3.74 mm and 4.31 vs 4.31 mm). The 3D fit confirms the card: E0 and
+  g move by 3% or less, τ by 12%, all within the spread between the two
+  weights. The card and its transfers keep the values above.

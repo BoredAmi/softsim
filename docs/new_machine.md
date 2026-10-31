@@ -55,7 +55,7 @@ about 45% element kernels and 30% PARDISO
 
 | Job | Command | Laptop time | What it answers |
 | --- | --- | --- | --- |
-| Drop-only physical card on the 3D reference | `softsim calibrate calibrations/ecoflex_00_10_drop_fem_prony.yaml --jobs 2` | ~6 h (40 evaluations) | E0, g, τ of Ecoflex 00-10 from 20 and 50 g, free of backend artefacts |
+| Drop-only physical card on the 3D reference | `softsim calibrate calibrations/ecoflex_00_10_drop_fem_prony.yaml --jobs 2` | ~6 h (40 evaluations) | E0, g, τ of Ecoflex 00-10 from 20 and 50 g, free of backend artefacts. **Done on the laptop** (147 kPa, 0.70, 2.24 ms; docs/experiments.md) |
 | Joint fit: drop + datasheet | `softsim calibrate calibrations/ecoflex_00_10_drop_fem_joint.yaml --jobs 2` | ~6 h | whether one card fits impacts and the quasi-static stiffness ([materials.md](materials.md#joint-fits-lab-tests-and-dynamic-data-together)) |
 | Reference tracks of the fitted card | `python tools/make_reference_tracks.py --calibration calibrations/ecoflex_00_10_drop_fem_joint.yaml --force` | ~20 min | the target for the backend transfers |
 | MuJoCo and SOFA transfers | `softsim calibrate calibrations/transfer_ecoflex_00_10_{mujoco,sofa}.yaml --jobs 2` | 5 min / 35 min | each backend's effective card and its error bar |
