@@ -214,11 +214,13 @@ Done so far ([actuation.md](actuation.md)):
   SOFA, per-element material data on MuJoCo. Check: a two-material
   cable beam against composite Euler–Bernoulli (reference within 1.4% at small
   load).
+- **PneuNet finger** (`pneunet` shape: chambers, channel, conforming
+  strain-limiting layer). MuJoCo and SOFA agree to 0.1% and bend 24% less than
+  the reference at 8 kPa.
 
 Still to do:
 - **Geometry:** mesh and CAD import (STL/OBJ/STEP through gmsh, .msh/.vtk), with
-  physical groups mapped to regions. Parametric bodies with internal cavities
-  (PneuNet finger, cable-finger body). Zones from shape regions and imported
+  physical groups mapped to regions. Parametric cable-finger body. Zones from shape regions and imported
   physical groups (today: boxes); zones with their own density or damping.
 - **More actuators:** cable length (displacement) control, region force and
   prescribed displacement, with Python control callbacks.

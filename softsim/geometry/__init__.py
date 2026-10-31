@@ -16,6 +16,7 @@ from softsim.geometry.soft import (
     SoftClosedTube,
     SoftCylinder,
     SoftHollowSphere,
+    SoftPneuNet,
     SoftShape,
     check_resolution,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "SoftClosedTube",
     "SoftCylinder",
     "SoftHollowSphere",
+    "SoftPneuNet",
     "SoftShape",
     "WeightWithKnob",
     "check_resolution",

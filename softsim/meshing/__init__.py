@@ -6,9 +6,11 @@ from softsim.meshing.tet import (
     gmsh_closed_tube,
     gmsh_cylinder,
     gmsh_hollow_sphere,
+    gmsh_pneunet,
     structured_box,
     structured_cylinder,
 )
 
-__all__ = ["TetMesh", "gmsh_box", "gmsh_closed_tube", "gmsh_cylinder", "gmsh_hollow_sphere", "structured_box",
+__all__ = ["TetMesh", "gmsh_box", "gmsh_closed_tube", "gmsh_cylinder", "gmsh_hollow_sphere", "gmsh_pneunet",
+           "structured_box",
            "structured_cylinder"]

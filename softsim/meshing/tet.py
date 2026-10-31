@@ -248,6 +248,26 @@ def gmsh_closed_tube(inner: float, outer: float, height: float, cap: float, size
     return _gmsh_mesh(build, size)
 
 
+def gmsh_pneunet(length: float, width: float, height: float, chambers: list[tuple[float, float]],
+                 chamber_y: float, chamber_z: tuple[float, float], channel: tuple[float, float, float, float],
+                 layer: float, size: float) -> TetMesh:
+    """Block ``[0, length] x [-width/2, width/2] x [0, height]`` around closed chambers (each spans
+    ``chambers[i] = (x0, x1)``, ``|y| < chamber_y``, ``chamber_z``) joined by a channel ``(x0, x1,
+    half-width, z1)`` from ``chamber_z[0]`` up to ``z1``. With ``layer`` > 0 the mesh conforms to the plane
+    z = layer (a strain-limiting layer below it is then an exact set of elements)."""
+
+    def build(occ):
+        tools = [(3, occ.addBox(x0, -chamber_y, chamber_z[0], x1 - x0, 2 * chamber_y, chamber_z[1] - chamber_z[0]))
+                 for x0, x1 in chambers]
+        cx0, cx1, cy, cz1 = channel
+        tools.append((3, occ.addBox(cx0, -cy, chamber_z[0], cx1 - cx0, 2 * cy, cz1 - chamber_z[0])))
+        body, _ = occ.cut([(3, occ.addBox(0, -width / 2, 0, length, width, height))], tools)
+        if layer > 0:
+            occ.fragment(body, [(3, occ.addBox(0, -width / 2, 0, length, width, layer))])
+
+    return _gmsh_mesh(build, size)
+
+
 def gmsh_cylinder(radius: float, height: float, size: float) -> TetMesh:
     """Unstructured cylinder mesh via gmsh."""
     return _gmsh_mesh(lambda occ: occ.addCylinder(0, 0, 0, 0, 0, height, radius), size)

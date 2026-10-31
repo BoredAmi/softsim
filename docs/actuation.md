@@ -344,3 +344,44 @@ The tip angle at 0.7 N falls from 15.4° to 12.7°.
   (`softsim transfer`).
 - **MuJoCo's StVK flex locks more than its Stable Neo-Hookean flex** in bending
   (−39% against −30% at 2 mm), so prefer Stable Neo-Hookean.
+
+## A PneuNet finger
+
+`geometry: {type: pneunet, ...}` is a parametric PneuNet bending actuator:
+- a block along +x, its base face at x = 0;
+- `chambers` closed chambers in its upper part, joined by a channel just above
+  a solid base slab, so they form one cavity;
+- an optional strain-limiting `layer` at the bottom of the slab. The mesh
+  conforms to it, and a zone takes it by name (`region: layer`).
+
+Regions: `cavity`, `base`, `tip`, `bottom`, `top`, `side`. The tip angle is
+the `tip` face's rotation from its rest orientation.
+
+`scenarios/actuation/pneunet.yaml`:
+- six 6 mm chambers in Ecoflex 00-30 (datasheet card), 54 × 16 × 16 mm;
+- 2 mm walls, a 5 mm slab whose bottom 1.5 mm is a 1 MPa silicone layer;
+- base bonded, no gravity, a smooth ramp to 8 kPa
+  (`python tools/compare_pneunet.py`; 1.5 mm mesh, 17.9k tetrahedra).
+
+| Model | 4 kPa: tip angle | 4 kPa: V/V0 | 8 kPa: tip angle | 8 kPa: V/V0 | Wall time |
+| --- | --- | --- | --- | --- | --- |
+| **fem reference** | 5.29° | 1.232 | 13.51° | 1.562 | 7 min |
+| MuJoCo | 4.29° (−19%) | 1.169 (−27%) | 10.25° (−24%) | 1.404 (−28%) | 6.4 min |
+| SOFA | 4.22° (−20%) | 1.168 (−28%) | 10.25° (−24%) | 1.404 (−28%) | 17 min |
+
+(Volume errors are relative to the reference's volume change.)
+
+- **MuJoCo and SOFA agree with each other** to 0.1% at 8 kPa, and both bend
+  24% less than the reference, as on the beams. Locking is the same story with
+  2 mm walls only one or two elements thick. `softsim transfer` with the body's
+  and the layer's moduli as parameters is the fix (not run yet: about 15
+  MuJoCo runs of 6 min).
+- **Above about 15 kPa the walls balloon.** On MuJoCo the volume runs away:
+  V/V0 2.85 and 39° at 16 kPa, then the run diverges. These thin Ecoflex
+  chambers approach their limit pressure, like the sphere. The reference,
+  which is softer, gets there sooner, so this scenario stops at 8 kPa.
+- **Not yet compared with a real finger.** I found no open dataset of
+  bending angle against pressure with full geometry and material. Measured
+  data is M7 (PneuNet datasets with DOI and licence). Until then these numbers
+  check the backends against each other and the reference, not against
+  reality.

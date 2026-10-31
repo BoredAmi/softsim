@@ -15,7 +15,7 @@ import math
 from typing import Annotated, Literal, Union
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from softsim.config.schema import StrictModel
 from softsim.config.units import Length
@@ -26,6 +26,7 @@ from softsim.meshing import (
     gmsh_closed_tube,
     gmsh_cylinder,
     gmsh_hollow_sphere,
+    gmsh_pneunet,
     structured_box,
     structured_cylinder,
 )
@@ -176,7 +177,87 @@ class SoftClosedTube(StrictModel):
                                "top": lambda p: p[:, 2] > h - tol, "side": lambda p: rad(p) > ro - tol})
 
 
-SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube], Field(discriminator="type")]
+class SoftPneuNet(StrictModel):
+    """PneuNet bending actuator (finger): a block along +x, base face at x = 0, ``chambers`` closed
+    chambers in its upper part, joined by a channel just above the solid base slab, so they form one
+    cavity. Pressure expands the chambers' thin walls; the base slab (and a stiffer ``layer`` at its
+    bottom, given as a material zone on the ``layer`` volume region) resists stretching, so the finger
+    curls towards -z. Meshed with gmsh; with ``layer`` > 0 the mesh conforms to z = layer.
+
+    Regions: ``cavity``, ``base`` (x = 0), ``tip`` (x = length), ``bottom``, ``top``, ``side``.
+    Volume regions: ``layer`` (z < layer), ``body`` (the rest)."""
+
+    type: Literal["pneunet"] = "pneunet"
+    chambers: int = Field(ge=1)
+    chamber_length: PositiveLength           # along x
+    wall: PositiveLength                     # between chambers
+    end_wall: PositiveLength                 # at both ends
+    width: PositiveLength                    # y
+    side_wall: PositiveLength
+    height: PositiveLength                   # z
+    base: PositiveLength                     # solid slab below the chambers
+    top_wall: PositiveLength
+    channel_width: PositiveLength
+    channel_height: PositiveLength           # from the slab up
+    layer: Length = 0.0                      # strain-limiting layer thickness (in the slab), 0 = none
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "SoftPneuNet":
+        if not (self.layer < self.base and self.base + self.top_wall < self.height
+                and self.channel_height < self.height - self.base - self.top_wall
+                and self.channel_width < self.width - 2 * self.side_wall and 2 * self.side_wall < self.width):
+            raise ValueError("pneunet: need layer < base, base + top_wall < height, a channel lower than the "
+                             "chambers and narrower than them, and side walls thinner than half the width")
+        return self
+
+    @property
+    def length(self) -> float:
+        return 2 * self.end_wall + self.chambers * self.chamber_length + (self.chambers - 1) * self.wall
+
+    @property
+    def top_height(self) -> float:
+        return self.height
+
+    @property
+    def min_feature(self) -> float:
+        return min(self.wall, self.end_wall, self.side_wall, self.top_wall, self.base - self.layer,
+                   *([self.layer] if self.layer > 0 else []))
+
+    def _chambers(self) -> list[tuple[float, float]]:
+        pitch = self.chamber_length + self.wall
+        return [(self.end_wall + i * pitch, self.end_wall + i * pitch + self.chamber_length)
+                for i in range(self.chambers)]
+
+    def volume(self) -> float:
+        cy = self.width / 2 - self.side_wall
+        ch = self.height - self.base - self.top_wall
+        n_gaps = self.chambers - 1
+        return (self.length * self.width * self.height - self.chambers * self.chamber_length * 2 * cy * ch
+                - n_gaps * self.wall * self.channel_width * self.channel_height)
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        chambers = self._chambers()
+        return gmsh_pneunet(self.length, self.width, self.height, chambers, self.width / 2 - self.side_wall,
+                            (self.base, self.height - self.top_wall),
+                            (chambers[0][0], chambers[-1][1], self.channel_width / 2, self.base + self.channel_height),
+                            self.layer, settings.size)
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        tol = _tol(mesh)
+        length, hw, h = self.length, self.width / 2, self.height
+        inside = lambda p: ((p[:, 0] > tol) & (p[:, 0] < length - tol) & (np.abs(p[:, 1]) < hw - tol)  # noqa: E731
+                            & (p[:, 2] > tol) & (p[:, 2] < h - tol))
+        return _resolve(mesh, {"cavity": inside, "base": lambda p: p[:, 0] < tol,
+                               "tip": lambda p: p[:, 0] > length - tol, "bottom": lambda p: p[:, 2] < tol,
+                               "top": lambda p: p[:, 2] > h - tol, "side": lambda p: np.abs(p[:, 1]) > hw - tol})
+
+    def volume_regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        below = mesh.points[mesh.tets].mean(axis=1)[:, 2] < self.layer
+        return {"layer": np.nonzero(below)[0], "body": np.nonzero(~below)[0]}
+
+
+SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet],
+                      Field(discriminator="type")]
 
 
 def _tol(mesh: TetMesh) -> float:
