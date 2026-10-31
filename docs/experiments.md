@@ -242,6 +242,7 @@ real one never leaves the specimen.
 
 **Fit** (`calibrations/ecoflex_00_10_drop_adhesion_support.yaml`, MuJoCo,
 5 mm mesh). Compared quantities:
+
 - 20 g: weight position relative to the specimen base and specimen lift over
   0–100 ms;
 - 50 g: relative position over 0–15 ms (later, the flipping weight's centroid
@@ -289,6 +290,82 @@ the first initial guess.
 
 ![Whole trajectories after contact: simulation vs experiment](media/after_contact_trajectories.png)
 
+### Every weight, whole bounce (validation)
+
+`python tools/validate_drop_bounces.py` (about 1 min on 8 cores) runs all five
+weights with each recording's measured impact for 200 ms. It compares the
+first contact, the weight's rebound (its height above its contact height) and
+the specimen's hop (`runs/bounce_validation/metrics.csv`, figure
+`docs/media/bounce_validation.png`). It covers the two MuJoCo models above
+and, since 2026-10-31, the MuJoCo and SOFA transfers of the physical card,
+plus the 3D reference's first contacts.
+
+- The transfers reproduce the first contact best: 6–8% at 20 g, 8–14% at
+  50 g.
+- They have no tack, so the weight then flies 38 mm high instead of staying
+  seated.
+- They diverge where their strong relaxation lets heavy weights crush the
+  specimen: MuJoCo from 100 g, SOFA at 500 g.
+
+`python tools/make_comparison_media.py` writes `docs/media/compare_wXXX.gif`:
+for each weight, the recording next to the MuJoCo tack-and-support model,
+with the same scale and view angle.
+
+| Case | | First peak mm (t ms) | Weight max rise mm | Specimen hop mm (t ms) | Specimen landed ms |
+| --- | --- | --- | --- | --- | --- |
+| 20 g | experiment | 3.7 (3.3) | 9.1 | 7.8 (33) | 73 |
+| | rigid, no tack | 3.3 (3.0) | **71** | 6.2 (44) | 83 |
+| | tack + support | 3.5 (3.2) | 7.5 | 7.0 (41) | 74 |
+| 50 g | experiment | 4.3 (3.7) | 10.1 (to 15 ms) | 9.2 (48) | 79 |
+| | rigid, no tack | 4.3 (3.6) | 10.8 | **29** (85) | 161 |
+| | tack + support | 4.5 (3.8) | 9.2 | 7.8 (44) | 78 |
+| 100 g (edge) | experiment | rolls off the rim | falls 25 mm beside it | 11.4 (48) | 94 |
+| | tack + support | 8.1 (6.1) | 48 (bounces up) | 0.1 | |
+| 200 g (edge) | experiment | 4.5 (3.3) | 42 | 18.9 (50) | 108 |
+| | tack + support | 8.7 (4.6) | 96 | 0.3 | |
+| 500 g | experiment | 4.5 (2.7) | 31 | 21.8 (66) | after 200 |
+| | tack + support | 9.0 (5.0) | 105 | **20.1 (62)** | 111 |
+| | (same, dropped flat) | 10.7 (6.7) | 126 | 10.4 (54) | 93 |
+
+The 100, 200 and 500 g simulations get each recording's measured in-plane tilt
+at contact (−7.6°, −8.7° and −11.0°; `tools/measure_tilts.py`,
+`softsim.experiments.video.tilt`). It is measured from the straight side edges
+of the dark weights' silhouettes 15 frames before contact, with 0.5–1.6 px
+residuals and less than 1.3° of spread. The brass weights' reflections and
+knobs make their edges unusable, so 20 and 50 g stay untilted. The rigid model
+gives the same as tack + support for 100–500 g within a few mm. All weight
+numbers after 15 ms are unusable for 50 g: the weight flips.
+
+![Every weight: first contact, weight rebound and specimen hop vs experiment](media/bounce_validation.png)
+
+- **20 g and 50 g are reproduced over the whole bounce:** hop height within
+  10–15%, landing time within 2 ms, and the 20 g weight stays seated. That is
+  what the tack and the support were fitted to.
+- **100, 200 and 500 g all fail.** In every simulation the weight
+  rebounds 45–130 mm and leaves the specimen behind. The real heavy weights
+  rise only 30–40 mm (or roll off) and carry the specimen up 11–22 mm with
+  them. Two of the three are not comparable impacts, though: the simulations
+  drop every weight flat, and the heavy weights don't land flat.
+  - **200 g** comes down strongly tilted: its bottom face is visible from
+    the camera above. It digs in with its edge and keeps rotating, so its
+    shallow 4.5 mm "first contact" is an edge impact, not evidence of a
+    stiffer material.
+  - **100 g** lands 14 mm off centre and tilted. It rolls off the rim,
+    falls 25 mm beside the specimen and still drags the specimen up 11 mm.
+  - **500 g** lands least tilted: 11° in the image plane, rotating only 2°
+    in the first 20 ms, with an unknown out-of-plane tilt.
+    - Applying the measured tilt brings the specimen's hop from 10 to 20 mm
+      (measured 21.8 mm) and its first contact from 10.7 to 9.0 mm.
+    - It still stops at 4.5 mm in 2.7 ms in the recording.
+    - Its rise height means an upward speed of about 0.8 m/s (restitution
+      about 0.3), against about 1.4 m/s simulated, so the real impact is
+      still stiffer and more lossy than the model.
+    - The tack doesn't change it.
+- **Next:** compare the heavy weights only with the measured attitude. The
+  in-plane tilt can be measured. The out-of-plane tilt needs either a second
+  view or a 3D fit in which it is a free parameter. Until then, the material
+  question rests on the flat impacts (20 and 50 g) and on 500 g (below).
+
 ### The 500 g first contact
 
 The 500 g weight stops within 4.5 mm in 2.7 ms. No simulation so far gets
@@ -300,10 +377,10 @@ modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:
   motion within 0.5–1 mm. The weight travels almost freely for the first
   ~1 ms, then decelerates at ~1750 m/s² (~900 N), and comes back up at
   ~0.85 m/s.
-- **It lands tilted, but that is not the explanation.** Before impact the
-  weight is tilted by 7° in the image plane (consistent over 4 frames). The
-  simulation with that tilt peaks at 9.7 mm at 5.0 ms instead of 11.0 mm at
-  6.6 ms: closer, but not close.
+- **It lands tilted, which explains part of it.** Before impact the weight
+  is tilted by 11° in the image plane (side-edge fits, see the bounce
+  validation). The simulation with that tilt peaks at 9.0 mm at 5.0 ms
+  instead of 10.7 mm at 6.7 ms: closer, but not close.
 - **No elastomer explanation fits.** As a linear spring, the stop needs
   ~170 kN/m, an effective modulus above 1 MPa, against ~55 kPa from the light
   weights. That is 19× the 50 g case's stiffness, with a shorter time to peak
@@ -317,15 +394,72 @@ modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:
   measured 4.5 mm. Statically, sticking faces stiffen 26% compression only
   1.7× over frictionless.
 
-The cause is unknown. Possibilities include something in the 500 g setup that
-the recording doesn't show, or a strongly rate-dependent response under
-full-face confinement. Until it is understood, 500 g is kept out of the fits.
+- **Rate dependence does not explain it either.** This was tested with Prony
+  viscoelasticity on MuJoCo: 48 combinations of instantaneous modulus
+  E0 = 100–800 kPa, relaxing fraction g = 0.5–0.95 and τ = 0.3–3 ms, each case
+  with its measured impact. Every material that stops 500 g near the
+  measured depth stops 50 g at a quarter of its measured depth. For example,
+  E0 = 800 kPa, g = 0.5, τ = 1 ms gives 3.85 mm at 2.9 ms for 500 g (measured
+  4.52 mm at 2.7 ms) but 1.10 mm at 1.1 ms for 50 g (measured 4.31 mm at
+  3.7 ms). Both weights hit at the same speed, so their strain rates are
+  similar, and no linear viscoelastic spectrum can stiffen one and not the
+  other. (Materials with a soft long-term modulus made MuJoCo diverge under
+  500 g; the trend is clear without them.)
+- **It does not land flat.** The frame montages show the weight squashing
+  the specimen into a wedge, and it rotates only 2° in the first 20 ms. Its
+  side edges give an 11° in-plane tilt (the earlier 7° estimate is
+  superseded). With that tilt, MuJoCo's first contact goes from 10.7 to
+  9.0 mm and the specimen's hop from 10 to 20 mm (measured 21.8 mm).
+- **Out-of-plane tilt does not explain it.** That tilt can't be seen from one
+  view, so it was swept on MuJoCo (`python tools/sweep_out_of_plane_tilt.py`,
+  first-contact fit card, measured impact and in-plane tilt):
+
+  | Out-of-plane tilt | 0° | 5° | 10° | 15° | 20° | measured |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | First contact [mm] | 9.08 | 8.69 | 8.42 | 8.04 | 7.53 | **4.52** |
+  | Time of peak [ms] | 4.8 | 4.6 | 4.4 | 4.2 | 4.0 | **2.67** |
+
+  Even 20°, more than the side view could hide, takes off only 17% of a 2×
+  gap. The MuJoCo transfer of the physical card (Prony g = 0.94) inverts
+  elements under 500 g and can't be used for this case.
+
+- **No passive specimen can do it (a model-free check).** The force on the
+  weight at its peak indentation is m·(a + g), with the deceleration a taken
+  from a parabola through the tracked indentation (±0.8 ms around the peak):
+
+  | Weight | Peak indentation | Time of peak | Deceleration at peak | Force at peak |
+  | --- | --- | --- | --- | --- |
+  | 20 g | 3.74 mm | 3.33 ms | 750 m/s² | 15 N |
+  | 50 g | 4.31 mm | 3.67 ms | 1285 m/s² | 65 N |
+  | 200 g (tilted) | 4.47 mm | 3.33 ms | 615 m/s² | 125 N |
+  | 500 g | 4.52 mm | 2.67 ms | 1572 m/s² | 791 N |
+
+  The tracked decelerations hardly depend on the mass, which spans 25×. 50 and
+  500 g hit at the same speed and push the specimen along nearly the same
+  path: 4.3 against 4.5 mm, reached in 3.7 against 2.7 ms. A specimen deformed
+  along nearly the same path pushes back with nearly the same force, whatever
+  its material law, viscoelasticity and inertia included. The 500 g recording
+  needs 12× the force. Rate sensitivity would need force ∝ rate⁷ to bridge the
+  1.4× difference in rate.
+
+The cause is still unknown, but it is not the material. The 500 g track does
+not show the specimen alone stopping the weight. What is left is the setup and
+the measurement:
+
+- what is under the specimen (cloth and table compliance, a stiffer support
+  under heavy loads);
+- the side view's projection of depth motion: the camera looks down at 18.6°,
+  so a weight moving away from it appears to rise by 0.32× that motion.
+
+500 g is therefore kept out of the fits, on physical grounds and not only
+because no model matches it.
 
 ## What the fitted modulus means
 
 All fits on this page are *effective* models of a backend, mesh and contact
 model, not the silicone's material constants. The axisymmetric reference
 solver ([reference_fem.md](reference_fem.md)) cross-checks this:
+
 - it agrees with MuJoCo's 3.5 mm mesh within 2–5% for static indentation;
 - in the drop, MuJoCo's impact loses energy to friction slip and contact
   mechanics that the reference doesn't have;
@@ -335,3 +469,63 @@ solver ([reference_fem.md](reference_fem.md)) cross-checks this:
 
 Use the MuJoCo presets with MuJoCo at their mesh size. Take the material's
 actual modulus from the reference.
+
+## A physical card on the 3D reference (`--backend fem`)
+
+The 3D locking-free reference ([reference_fem.md](reference_fem.md)) runs the
+drop test with each recording's measured offset, spin and tilt. It answers
+the material question without the axisymmetric solver's limits: the 20 g
+weight lands 6 mm off centre and spinning. The card:
+
+- Neo-Hookean, E0 = 143 kPa, ν = 0.4995;
+- one Prony term, g = 0.69 at τ = 2 ms;
+- sticking contact.
+
+These are the axisymmetric fit's values. Nothing was refitted for 3D.
+
+| Case | Measured first contact | 3D reference, physical card | NRMSE (first contact) |
+| --- | --- | --- | --- |
+| 20 g (6 mm off centre, 317°/s) | 3.74 mm at 3.33 ms | 3.94 mm at 3.00 ms | **6.6%** |
+| 50 g | 4.31 mm at 3.67 ms | 4.41 mm at 3.40 ms | **9.9%** |
+| 500 g (11° in-plane tilt) | 4.52 mm at 2.67 ms | 7.41 mm at 4.20 ms | 60% (over 0–6 ms) |
+
+(Each run takes 4–9 minutes on a laptop with a 5 mm quadratic mesh.)
+
+- **One physical, locking-free material reproduces both light weights within
+  10%.** The axisymmetric joint fit's 20 g/50 g conflict (15–20%) was the
+  centred approximation of the off-centre 20 g, not the material.
+- **The card describes the silicone at impact rates.** Its instantaneous
+  modulus is 143 kPa, relaxing about 70% within a few milliseconds, so the
+  long-term modulus is about 45 kPa. The Marechal et al. tension data give
+  31 kPa (Neo-Hookean over 0–200%) at 0.23/s. Those data probably understate
+  the modulus, since their strain was measured at the crosshead. So the
+  slow tension test and the relaxed drop card are consistent within that
+  uncertainty, while impacts see a 3× stiffer material.
+- **500 g is not reproduced** here either, now without any backend artefact:
+  no locking, no contact losses, the measured tilt, a material that fits the
+  light weights. It stops 1.6× deeper and 1.6× later than recorded. The
+  out-of-plane tilt and the model-free force check above show it isn't the
+  material.
+- **Transfer to MuJoCo.** The reference runs are saved as tracks
+  (`tools/make_reference_tracks.py`), and MuJoCo is calibrated against them
+  (`calibrations/transfer_ecoflex_00_10_mujoco.yaml`, 3 min). At a 5 mm
+  mesh and ν = 0.45, MuJoCo reproduces the physical card with E0 = 66 kPa,
+  g = 0.94, τ = 5.5 ms, within **3.4% (50 g) and 9.7% (20 g)** of the
+  reference. Those are MuJoCo's effective values for this card, and its
+  error bar.
+- **Transfer to SOFA** (`calibrations/transfer_ecoflex_00_10_sofa.yaml`,
+  43 min): E0 = 79.6 kPa, g = 0.77, τ = 2.7 ms, within **2.6% (50 g) and
+  6.8% (20 g)**. SOFA needs much less extra relaxation than MuJoCo (g 0.77
+  against 0.94), because MuJoCo loses impact energy on its own through
+  friction slip and numerical damping
+  ([backends/mujoco.md](backends/mujoco.md#energy-and-contact-fidelity)).
+
+  | Card | E0 | g | τ | Error vs reference (20 / 50 g) |
+  | --- | --- | --- | --- | --- |
+  | Physical (3D reference) | 143 kPa | 0.69 | 2.0 ms | – |
+  | SOFA, 5 mm, ν = 0.45 | 79.6 kPa | 0.77 | 2.7 ms | 6.8% / 2.6% |
+  | MuJoCo, 5 mm, ν = 0.45 | 66 kPa | 0.94 | 5.5 ms | 9.7% / 3.4% |
+- **Refining it** (E0, g, τ free, both cases, 3D) is prepared in
+  `calibrations/ecoflex_00_10_drop_fem_prony.yaml`. It takes about
+  8 minutes per case per evaluation, so run it overnight or on a faster
+  machine; it resumes if interrupted.

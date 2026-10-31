@@ -1,0 +1,26 @@
+# Leave-one-out validation: the whole-bounce MuJoCo model (stiffness, damping, tack, cloth support)
+# fitted on the w020 recording ONLY, from neutral starting values, then used to predict w050
+# (python tools/leave_one_out.py). Compare with ecoflex_00_10_drop_adhesion_support.yaml, which saw both.
+#   softsim calibrate calibrations/loo_ecoflex_00_10_fit_w020.yaml
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases:
+  w020: {observables: {indentation_rel: [0, 100 ms], specimen_lift: [0, 100 ms]}}
+overrides:
+  - "specimen.material={name: ecoflex_00_10_loo, density: 1040, elastic: {model: stable_neo_hookean, youngs_modulus: 50 kPa, poisson_ratio: 0.45}, damping: {model: rayleigh, beta: 1 ms}, friction: {sliding: 1.0}, adhesion: {strength: 20 kPa, range: 0.3 mm}}"
+  - specimen.mesh.size=0.005
+  - support.enabled=true
+  - simulation.timestep=0.00003
+  - simulation.duration=0.105
+  - simulation.output_rate=5000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 50 kPa, bounds: [10 kPa, 500 kPa], log: true}
+  specimen.material.damping.beta: {initial: 1 ms, bounds: [0.01 ms, 30 ms], log: true}
+  specimen.material.adhesion.strength: {initial: 20 kPa, bounds: [2 kPa, 100 kPa], log: true}
+  specimen.material.adhesion.range: {initial: 0.3 mm, bounds: [0.15 mm, 3 mm], log: true}
+  support.stiffness: {initial: 30 N/m, bounds: [5 N/m, 3000 N/m], log: true}
+  support.damping: {initial: 0.4 N*s/m, bounds: [0.005 N*s/m, 5 N*s/m], log: true}
+  support.mass: {initial: 40 g, bounds: [2 g, 300 g], log: true}
+max_evaluations: 120
+output: ../runs/calibration/loo_ecoflex_00_10_fit_w020

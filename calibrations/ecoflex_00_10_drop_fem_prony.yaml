@@ -1,0 +1,30 @@
+# A PHYSICAL Ecoflex 00-10 card from the drop test: Neo-Hookean + one Prony term, fitted on the
+# locking-free 3D reference backend (fem), so the result is not tied to a backend's locking or
+# contact losses (unlike ecoflex_00_10_drop_fit*). 20 g is simulated off-centre and spinning as
+# measured, which the axisymmetric reference could not.
+#
+# ~8 min per case and evaluation on a laptop (5 mm quadratic mesh, 0.05 ms steps) -> run it
+# overnight or on a faster machine; it resumes where it stopped:
+#   pip install -e ".[fem,fast]"
+#   softsim calibrate calibrations/ecoflex_00_10_drop_fem_prony.yaml --jobs 2
+#
+# Starting point: the axisymmetric reference fit (docs/reference_fem.md), E0 = 143 kPa, g = 0.69 at
+# tau = 2 ms, which on this backend already gives 50 g within 10% (peak 4.41 vs 4.31 mm).
+# Tack and the cloth support are left out: the window is the first contact.
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0}
+overrides:
+  - backend=fem
+  - "specimen.material={density: 1040, elastic: {model: neo_hookean, youngs_modulus: 143 kPa, poisson_ratio: 0.4995}, damping: {model: prony, g: [0.69], tau: [2 ms]}, friction: {sliding: 1.0}}"
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005
+  - simulation.duration=0.011
+  - simulation.output_rate=5000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 143 kPa, bounds: [50 kPa, 600 kPa], log: true}
+  specimen.material.damping.g[0]: {initial: 0.69, bounds: [0.05, 0.95]}
+  specimen.material.damping.tau[0]: {initial: 2 ms, bounds: [0.1 ms, 50 ms], log: true}
+max_evaluations: 40
+output: ../runs/calibration/ecoflex_00_10_drop_fem_prony

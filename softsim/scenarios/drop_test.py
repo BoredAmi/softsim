@@ -31,7 +31,7 @@ from pydantic import Field
 
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
-from softsim.config.units import Angle, Length, Mass, Stiffness, Velocity, ViscousDamping
+from softsim.config.units import Angle, AngularVelocity, Length, Mass, Stiffness, Velocity, ViscousDamping
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution, load_rigid_body
 from softsim.geometry.rigid import Part
@@ -64,7 +64,7 @@ class DropConfig(StrictModel):
     gap: Annotated[Length, Field(gt=0)] = 0.0005
     offset: tuple[Length, Length] = (0.0, 0.0)
     tilt: tuple[Angle, Angle] = (0.0, 0.0)
-    angular_velocity: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    angular_velocity: tuple[AngularVelocity, AngularVelocity, AngularVelocity] = (0.0, 0.0, 0.0)
 
 
 class SupportConfig(StrictModel):

@@ -1,0 +1,23 @@
+# Transfer of the physical Ecoflex 00-10 card to SOFA: which SOFA parameters (5 mm linear tets,
+# stable Neo-Hookean, nu = 0.45 against locking, Prony as an explicit overstress) reproduce the
+# locking-free 3D reference? Same "experiment" as transfer_ecoflex_00_10_mujoco.yaml: the reference
+# run of the physical card with each recording's measured impact (python tools/make_reference_tracks.py).
+# The raw physical card on SOFA stops 50 g at 3.28 mm against the reference's 4.41 mm (NRMSE 37%).
+#   export SOFA_ROOT=...; softsim calibrate calibrations/transfer_ecoflex_00_10_sofa.yaml --jobs 2   (~35 min)
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../runs/reference_tracks/ecoflex_00_10_physical
+cases: {w020: 1.0, w050: 1.0}
+overrides:
+  - backend=sofa
+  - "specimen.material={name: ecoflex_00_10_physical, density: 1040, elastic: {model: stable_neo_hookean, youngs_modulus: 143 kPa, poisson_ratio: 0.45}, damping: {model: prony, g: [0.69], tau: [2 ms]}, friction: {sliding: 1.0}}"
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005
+  - simulation.duration=0.012
+  - simulation.output_rate=10000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 100 kPa, bounds: [20 kPa, 600 kPa], log: true}
+  specimen.material.damping.g[0]: {initial: 0.69, bounds: [0.05, 0.95], log: false}
+  specimen.material.damping.tau[0]: {initial: 2 ms, bounds: [0.1 ms, 50 ms], log: true}
+max_evaluations: 40
+output: ../runs/calibration/transfer_ecoflex_00_10_sofa

@@ -86,6 +86,10 @@ def test_drop_action_and_set_material(drop_config, drop_base_dir):
     soft = sim.run().summary["peak_indentation"]
     assert soft > base * 1.2
     assert sim.raw_config["specimen"]["material"]["elastic"]["youngs_modulus"] == 40e3
+    sim.set_material("specimen", None, ["elastic.poisson_ratio=0.4", "damping.beta=1 ms"])  # change the current one
+    m = sim.scene.soft_bodies[0].material
+    assert (m.elastic.youngs_modulus, m.elastic.poisson_ratio, m.damping.beta) == (40e3, 0.4, 1e-3)
+    assert sim.raw_config["specimen"]["material"]["elastic"]["poisson_ratio"] == 0.4
     sim.action("drop", preset="czopek2026_w050", height=0.2)
     assert sim.scene.rigid_bodies[0].mass == pytest.approx(0.050)
     assert sim.scenario.impact_speed() == pytest.approx(math.sqrt(2 * 9.81 * 0.2))

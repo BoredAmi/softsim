@@ -21,8 +21,27 @@ see ``ExperimentCase.sim_overrides``) and compared on the first contact phase
       w020: {weight: 1.0, observables: {indentation_rel: [0, 100 ms], specimen_lift: [0, 100 ms]}}
       w050: {observables: {indentation_rel: first_contact}}
 
+Material-test data can join the same cost (a joint fit of lab tests and the
+drop), one term per entry, evaluated on the card's homogeneous-test curves
+(``softsim.materials.homogeneous``; milliseconds, no simulation)::
+
+    material_tests:
+      - {dataset: ../datasets/roels2025_elastomers.yaml, material: ecoflex_00_30, kind: tension,
+         strain: [0, 1.0], weight: 0.5}
+      - {dataset: ../datasets/roels2025_elastomers.yaml, material: ecoflex_00_30, kind: compression,
+         strain: [-0.25, 0]}
+      - {name: datasheet, points: {strain: [1.0], stress: [55 kPa]}, weight: 0.5}   # e.g. "100% modulus"
+    material_key: specimen.material      # where the fitted card sits in the scenario (default)
+
+A term's NRMSE is the mean over the specimens of RMSE / the specimen's largest
+stress. ``kind: relaxation`` compares the normalised hold instead (stress over
+its value at the recorded hold's start): the card is ramped at ``rate``
+(default 0.4/s) to each recording's hold strain, and the recorded hold starts
+``hold_offset`` (default 1.3 s) after the ramp, as in Roels et al. 2025. With a Prony card and a test rate (dataset ``strain_rate``, or ``rate:``
+in the entry) the curve is loaded at that rate, otherwise fully relaxed.
+
 Per-case cost = mean over its observables of RMSE / largest experimental value
-in the window; total cost = weighted mean over cases. The fitted
+in the window; total cost = weighted mean over cases and material-test terms. The fitted
 values are only meaningful for the mesh size, backend and model they were fitted
 with; the saved preset records that in ``provenance``.
 
@@ -54,7 +73,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from softsim.config.loader import apply_overrides, load_yaml, set_dotted
+from softsim.config.loader import apply_overrides, get_dotted, load_yaml, set_dotted
 from softsim.config.units import parse_quantity
 from softsim.errors import ConfigError
 from softsim.experiments.compare import OBSERVABLES, ExperimentCase, compare_observable, simulated_indentation
@@ -64,7 +83,8 @@ from softsim.io import save_table
 _DIMENSIONS = {"youngs_modulus": "pressure", "beta": "time", "timeconst": "time", "c10": "pressure",
                "c01": "pressure", "bulk_modulus": "pressure", "density": "density", "mu": "pressure",
                "strength": "pressure", "range": "length", "stiffness": "stiffness", "damping": "viscous_damping",
-               "mass": "mass"}
+               "mass": "mass", "tau": "time", "c20": "pressure", "c30": "pressure", "shear_modulus": "pressure",
+               "viscosity": "viscosity"}
 FIRST_CONTACT = "first_contact"
 
 
@@ -124,6 +144,108 @@ def _parse_cases(spec: dict[str, Any]) -> tuple[dict[str, float], dict[str, dict
     return weights, observables
 
 
+@dataclass(frozen=True)
+class MaterialTestTerm:
+    """One ``material_tests`` entry: specimens' curves of one test kind, compared with the card's."""
+
+    name: str
+    weight: float
+    curves: tuple
+    material_key: str = "specimen.material"
+    kind: str = "curve"                   # "curve" (stress vs stretch) or "relaxation" (normalised hold)
+    ramp_rate: float = 0.4                # relaxation: loading rate before the hold [1/s]
+    hold_offset: float = 1.3              # relaxation: recorded hold starts this long after the ramp [s]
+
+    def _relaxation_errors(self, card, c) -> np.ndarray:
+        """Normalised relaxation of the card along the recording's history: ramp to the hold strain at
+        ``ramp_rate``, hold; both curves divided by their value at the recorded hold's start."""
+        from softsim.materials.homogeneous import history
+
+        hold = float(c.meta["hold_strain"])
+        ramp = hold / self.ramp_rate
+        t0 = ramp + self.hold_offset
+        t = np.unique(np.concatenate([np.linspace(0.0, ramp, 41), ramp + np.geomspace(1e-4, self.hold_offset, 40),
+                                      t0 + np.asarray(c.time, float)]))
+        x = 1.0 - hold * np.minimum(t / ramp, 1.0)  # compression
+        s = history(card, "uniaxial", t, x).stress.to_numpy()
+        model = np.interp(t0 + np.asarray(c.time, float), t, s)
+        return model / model[0] - c.stress / c.stress[0]
+
+    def evaluate(self, raw: dict[str, Any], base_dir: str) -> dict[str, float]:
+        from softsim.materials import load_material
+        from softsim.materials.fit import _model_stress
+
+        try:
+            card = load_material(get_dotted(raw, self.material_key), base_dir=Path(base_dir))
+            if self.kind == "relaxation":
+                errors = [self._relaxation_errors(card, c) for c in self.curves]
+            else:
+                errors = [(_model_stress(card, c) - c.stress) / float(np.abs(c.stress).max()) for c in self.curves]
+            nrmse = [float(np.sqrt(np.mean(e**2))) for e in errors]
+            return {"nrmse": float(np.mean(nrmse)), "max_error": float(max(np.abs(e).max() for e in errors)),
+                    "specimens": len(self.curves)}
+        except Exception as exc:  # noqa: BLE001 - an invalid card costs the maximum
+            return {"nrmse": float("nan"), "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _parse_material_tests(spec: list[dict[str, Any]] | None, base: Path, material_key: str) -> list[MaterialTestTerm]:
+    from softsim.experiments.material_tests import load_material_tests
+    from softsim.materials.fit import _resample
+
+    terms = []
+    for i, t in enumerate(spec or []):
+        if "points" in t:  # inline points, e.g. a datasheet's 100% modulus
+            terms.append(_points_term(i, t, material_key))
+            continue
+        missing = {"dataset", "material"} - set(t)
+        if missing:
+            raise ConfigError(f"material_tests[{i}]: missing {', '.join(sorted(missing))}")
+        ds = load_material_tests(base / t["dataset"])
+        kind = t.get("kind", "tension")
+        if kind not in ("tension", "compression", "relaxation"):
+            raise ConfigError(f"material_tests[{i}]: kind must be tension, compression or relaxation, got {kind!r}")
+        if kind == "relaxation":
+            curves = tuple(ds.curves(t["material"], "relaxation"))
+            terms.append(MaterialTestTerm(t.get("name", f"{t['material']}.relaxation"), float(t.get("weight", 1.0)),
+                                          curves, material_key, "relaxation",
+                                          parse_quantity(t.get("rate", 0.4), "rate"),
+                                          parse_quantity(t.get("hold_offset", 1.3), "time")))
+            continue
+        entry = ds.entry(t["material"])
+        curves = [ds.curve(t["material"])] if entry.member is not None else ds.curves(t["material"], kind)
+        lo, hi = (float(v) for v in t.get("strain", [-1.0, 10.0]))
+        rate = parse_quantity(t["rate"], "rate") if "rate" in t else None
+        kept = []
+        for c in curves:
+            c = _resample(c.within(lo, hi))
+            if len(c.stretch) >= 3:
+                kept.append(c if rate is None else type(c)(c.stretch, c.stress, c.time, c.material, c.mode, rate,
+                                                           dict(c.meta)))
+        if not kept:
+            raise ConfigError(f"material_tests[{i}]: no {kind} data of {t['material']} in strain [{lo}, {hi}]")
+        terms.append(MaterialTestTerm(t.get("name", f"{t['material']}.{kind}"), float(t.get("weight", 1.0)),
+                                      tuple(kept), material_key))
+    return terms
+
+
+def _points_term(i: int, t: dict[str, Any], material_key: str) -> MaterialTestTerm:
+    """``{points: {strain: [1.0], stress: [55 kPa]}, mode: uniaxial, name: datasheet}``: nominal stress at
+    engineering strains (shear strain for simple shear), fully relaxed unless ``rate`` is given."""
+    from softsim.experiments.material_tests import TestCurve
+
+    pts = t["points"]
+    strain = np.atleast_1d(np.asarray(pts.get("strain", []), float))
+    stress = np.array([parse_quantity(v, "pressure") for v in np.atleast_1d(pts.get("stress", []))])
+    if len(strain) == 0 or len(strain) != len(stress):
+        raise ConfigError(f"material_tests[{i}]: points need equally many strain and stress values")
+    mode = t.get("mode", "uniaxial")
+    x = strain if mode == "simple_shear" else 1.0 + strain
+    rate = parse_quantity(t["rate"], "rate") if "rate" in t else None
+    order = np.argsort(x)
+    return MaterialTestTerm(t.get("name", f"points{i}"), float(t.get("weight", 1.0)),
+                            (TestCurve(x[order], stress[order], None, "", mode, rate),), material_key)
+
+
 def _evaluate_case(task: tuple) -> dict[str, float]:
     """Run one case (worker process) and return its comparison metrics.
 
@@ -174,6 +296,8 @@ class Calibration:
         self.cases, self.observables = _parse_cases(spec["cases"])
         self.params = _parse_parameters(spec["parameters"])
         self.overrides = list(spec.get("overrides", []))
+        self.material_tests = _parse_material_tests(spec.get("material_tests"), base,
+                                                    spec.get("material_key", "specimen.material"))
         self.grid = int(spec.get("grid", 0))
         self.max_evaluations = int(spec.get("max_evaluations", 60))
         self.output = (base / spec.get("output", "calibration_out")).resolve()
@@ -190,6 +314,10 @@ class Calibration:
         for case in self.cases:
             cfg_path = self.dataset.config_path(case)
             self._raw[case] = (apply_overrides(load_yaml(cfg_path), self.overrides), str(cfg_path.parent))
+
+    @property
+    def _term_names(self) -> list[str]:
+        return [t.name for t in self.material_tests]
 
     def _configs(self, values: dict[str, float]) -> list[tuple]:
         tasks = []
@@ -242,12 +370,20 @@ class Calibration:
             self.output.mkdir(parents=True, exist_ok=True)
             with self._log.open("a") as f:
                 f.write(json.dumps({"spec": self._spec_hash, "values": values, "results": results}, default=float) + "\n")
-        weights = np.array([self.cases[t[3]] for t in tasks])
+        names = [t[3] for t in tasks]
+        weights = [self.cases[n] for n in names]
+        if self.material_tests:
+            raw, base_dir = tasks[0][0], tasks[0][1]
+            for term in self.material_tests:
+                names.append(term.name)
+                weights.append(term.weight)
+                results = [*results, term.evaluate(raw, base_dir)]
+        weights = np.array(weights)
         nrmse = np.array([r.get("nrmse", np.nan) for r in results])
         cost = float(np.sum(weights * np.where(np.isfinite(nrmse), nrmse, 10.0)) / weights.sum())
         row = {"evaluation": len(self.history), "cost": cost, **values}
-        for t, r in zip(tasks, results):
-            row.update({f"{t[3]}.{k}": v for k, v in r.items()})
+        for name, r in zip(names, results):
+            row.update({f"{name}.{k}": v for k, v in r.items()})
         self.history.append(row)
         print(f"  eval {row['evaluation']:3d}: cost {cost:.4f}{' (replayed)' if replayed else ''}  " +
               "  ".join(f"{k.split('.')[-1]}={v:.4g}" for k, v in values.items()), flush=True)
@@ -301,14 +437,16 @@ class Calibration:
             "dataset_doi": self.dataset.doi,
             "cases": self.cases,
             "backend": raw.get("backend", "mujoco"),
-            "mesh_size": mesh.get("size"),
+            "mesh_size": mesh.get("size") or "scenario default",
+            "element": "linear tetrahedra",
             "timestep": raw.get("simulation", {}).get("timestep"),
             "contact_timeconst": raw.get("contact", {}).get("timeconst"),
             "cost": best["cost"],
-            "per_case_nrmse": {c: best.get(f"{c}.nrmse") for c in self.cases},
+            "per_case_nrmse": {c: best.get(f"{c}.nrmse") for c in [*self.cases, *self._term_names]},
             "note": "Effective parameters: valid only with this backend, element type and mesh size.",
         }
         fitted = material.model_copy(update={
+            "kind": "effective",
             "name": f"{material.name}_fit_{self.dataset.name}",
             "source": f"Fitted to {self.dataset.title} (doi:{self.dataset.doi}) by softsim calibrate.",
             "provenance": provenance,
@@ -316,8 +454,8 @@ class Calibration:
         save_material(fitted, self.output / f"{fitted.name}.yaml")
         report = {"best": {k: float(v) for k, v in values.items()}, "cost": best["cost"],
                   "evaluations": len(self.history), "wall_time_s": wall,
-                  "per_case": {c: {k.split(".", 1)[1]: best[k] for k in best if k.startswith(c + ".")}
-                               for c in self.cases},
+                  "per_case": {c: {k[len(c) + 1:]: best[k] for k in best if k.startswith(c + ".")}
+                               for c in [*self.cases, *self._term_names]},
                   "material_file": str(self.output / f"{fitted.name}.yaml")}
         (self.output / "report.yaml").write_text(yaml.safe_dump(json.loads(json.dumps(report, default=float)),
                                                                 sort_keys=False))

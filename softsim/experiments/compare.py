@@ -60,15 +60,19 @@ class ExperimentCase:
 
     def sim_overrides(self, gap: float = 0.002) -> list[str]:
         """Scenario overrides reproducing the measured impact (speed, horizontal offset,
-        in-plane rotation rate). Out-of-plane tilt is not observable and left at zero."""
+        in-plane rotation rate, and in-plane tilt where it was measured reliably, see
+        ``softsim.experiments.video.tilt``). Out-of-plane tilt is not observable and left at zero."""
         v = self.meta["impact_speed"]
         v0 = math.sqrt(max(v**2 - 2 * G * gap, 0.0))
         omega_y = math.radians(self.meta.get("rotation_rate_at_contact_deg_s", 0.0))  # clockwise on screen = +y
+        tilt = self.meta.get("tilt_at_contact", {})
+        tilt_y = math.radians(tilt["tilt_deg"]) if tilt.get("reliable") else 0.0
         return [
             f"drop.gap={gap}",
             f"drop.initial_speed={v0}",
             f"drop.offset=[{self.meta['offset_at_contact_mm'] * 1e-3}, 0.0]",
             f"drop.angular_velocity=[0.0, {omega_y}, 0.0]",
+            *([f"drop.tilt=[0.0, {tilt_y}]"] if tilt_y else []),
         ]
 
 

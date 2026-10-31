@@ -15,6 +15,10 @@ is therefore fitted locally (last frames before the approach) and the first
 frame departing from it marks contact (+-1 frame). The fitted impact speed is a
 check of the scale against the nominal 2.73 m/s.
 
+The in-plane tilt at contact comes from the side edges of the weight's
+silhouette on frames well before contact (``softsim.experiments.video.tilt``);
+it is flagged ``reliable`` only for clean, consistent fits (the dark weights).
+
 Image convention: x right, y down. Reported physical quantities: z up,
 ``indentation`` positive downward since contact (like the simulation), angles
 in degrees, positive = clockwise on screen.
@@ -348,4 +352,13 @@ def track_case(dataset: Dataset, case: str, params: TrackingParams | None = None
         "offset_at_contact_mm": float(np.nanmedian(out["weight_x"].to_numpy()[pre]) * 1e3),
         "params": asdict(p),
     }
+    from softsim.experiments.video.tilt import measure_tilt
+
+    rot_deg = np.degrees(theta)
+    try:
+        tilt = measure_tilt(dataset, case, contact, params=p.segmentation, reference_frames=p.reference_frames,
+                            rotation_since=lambda f: rot_deg[contact] - rot_deg[f])
+    except ValueError as exc:
+        tilt = {"reliable": False, "error": str(exc)}
+    meta["tilt_at_contact"] = {k: (float(v) if isinstance(v, (float, np.floating)) else v) for k, v in tilt.items()}
     return CaseTrack(case, out, meta)

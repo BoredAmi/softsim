@@ -172,6 +172,7 @@ def _bare_calibration(tmp_path, cases, jobs):
     cal.history, cal.output, cal._workers, cal.tracks = [], tmp_path, jobs, str(tmp_path)
     cal._spec_hash, cal._legacy_hash, cal._log, cal._done = "test", "legacy", tmp_path / "evaluations.jsonl", {}
     cal._pool = None
+    cal.material_tests = []
     return cal
 
 
@@ -196,3 +197,103 @@ def test_calibration_survives_worker_crash_and_resumes(tmp_path, monkeypatch):
     again = _bare_calibration(tmp_path, ["w_ok", "w_crash"], 1)
     again._done = again._load_log()
     assert again.evaluate({"x": 1.0}) == cost and len(again._done) == 2
+
+
+def test_calibration_joint_cost_with_material_tests(tmp_path, monkeypatch):
+    """Material-test terms join the case costs; at the true modulus their error vanishes."""
+    pytest.importorskip("jax")
+    from softsim.experiments import calibrate
+    from softsim.experiments.material_tests import TestCurve
+    from softsim.materials import load_material
+    from softsim.materials.homogeneous import curve
+
+    card = {"density": 1000, "elastic": {"model": "yeoh", "c10": 12e3, "c20": 200.0, "poisson_ratio": 0.49}}
+    x = np.linspace(1.05, 2.0, 30)
+    data = TestCurve(x, curve(load_material(card), "uniaxial", x).stress.to_numpy())
+    monkeypatch.setattr(calibrate, "_evaluate_case", _fake_case)
+    cal = _bare_calibration(tmp_path, ["w_ok"], 1)
+    cal._raw = {"w_ok": ({"specimen": {"material": card}}, str(tmp_path))}
+    cal.material_tests = [calibrate.MaterialTestTerm("gel.tension", 3.0, (data,))]
+    assert cal.evaluate({"specimen.material.elastic.c10": 12e3}) == pytest.approx(0.5 / 4, rel=1e-6)
+    off = cal.evaluate({"specimen.material.elastic.c10": 15e3})
+    assert cal.history[1]["gel.tension.nrmse"] > 0.05 and off == pytest.approx(
+        (0.5 + 3.0 * cal.history[1]["gel.tension.nrmse"]) / 4)
+    assert cal.history[0]["gel.tension.specimens"] == 1
+
+
+@pytest.mark.parametrize("angle", [-11.0, 0.0, 7.5])
+def test_silhouette_tilt_of_a_rotated_weight(angle):
+    """A rectangle body with a narrower knob on top, rotated in the image (clockwise positive)."""
+    import cv2
+
+    from softsim.experiments.video.tilt import silhouette_tilt
+
+    mask = np.zeros((400, 400), np.uint8)
+    body = cv2.boxPoints(((200, 230), (120, 100), angle))           # cv2: clockwise angle in image coords
+    centre = np.array([200.0, 230.0])
+    a = np.radians(angle)
+    knob_c = centre + np.array([np.sin(a), -np.cos(a)]) * 70          # 70 px "up" the rotated axis
+    knob = cv2.boxPoints((tuple(knob_c), (30, 40), angle))
+    cv2.fillPoly(mask, [body.astype(np.int32), knob.astype(np.int32)], 1)
+    tilt, residual = silhouette_tilt(mask.astype(bool))
+    assert tilt == pytest.approx(angle, abs=0.6) and residual < 1.0
+
+
+def test_reference_track_round_trip(tmp_path):
+    """A simulation saved as a track compares to itself with zero error and keeps the recording's metadata."""
+    from softsim.experiments.compare import ExperimentCase, compare_case, simulated_indentation
+    from softsim.experiments.reference_tracks import write_reference_track
+
+    t = np.linspace(0, 0.02, 401)
+    z = np.where(t < 0.005, 0.03 - 2.5 * t - 0.5 * 9.81 * t**2, 0.0)
+    hit = t >= 0.005
+    tau = t[hit] - 0.005
+    z[hit] = (0.03 - 2.5 * 0.005 - 0.5 * 9.81 * 0.005**2) - 0.004 * np.sin(np.pi * tau / 0.008)
+    ts = pd.DataFrame({"t": t, "weight_com_z": z, "specimen_min_z": 0.0,
+                       "contact_force_z": np.where(hit, 5.0, 0.0)})
+    exp = ExperimentCase("w999", pd.DataFrame({"t": [0.0], "indentation_rel": [0.0]}),
+                         {"impact_speed": 2.5, "offset_at_contact_mm": 1.0})
+    write_reference_track(ts, exp, tmp_path, "unit test")
+    ref = ExperimentCase.load(tmp_path, "w999")
+    assert ref.meta["impact_speed"] == 2.5 and ref.meta["source"] == "unit test"
+    m = compare_case(simulated_indentation(ts), ref)
+    assert m["nrmse"] == pytest.approx(0.0, abs=1e-12) and m["peak_exp"] == pytest.approx(0.004, rel=0.05)
+
+
+def test_material_test_points_term():
+    """Inline points (a datasheet's 100% modulus) as a calibration term, with units."""
+    pytest.importorskip("jax")
+    from pathlib import Path
+
+    from softsim.errors import ConfigError
+    from softsim.experiments.calibrate import _parse_material_tests
+
+    (term,) = _parse_material_tests([{"name": "ds", "points": {"strain": [1.0], "stress": ["55 kPa"]}}],
+                                    Path("."), "specimen.material")
+    card = {"density": 1040, "elastic": {"model": "neo_hookean", "youngs_modulus": "94.3 kPa", "poisson_ratio": 0.4995}}
+    assert term.evaluate({"specimen": {"material": card}}, ".")["nrmse"] < 0.005  # NH: E/3 (2 - 1/4) = 55 kPa
+    with pytest.raises(ConfigError, match="equally many"):
+        _parse_material_tests([{"points": {"strain": [0.5, 1.0], "stress": ["55 kPa"]}}], Path("."), "x")
+
+
+def test_material_test_relaxation_term_recovers_its_own_history():
+    """A relaxation recording made from a card's own ramp-and-hold history costs ~0 for that card."""
+    pytest.importorskip("jax")
+    from softsim.experiments.calibrate import MaterialTestTerm
+    from softsim.experiments.material_tests import TestCurve
+    from softsim.materials import load_material
+    from softsim.materials.homogeneous import history
+
+    card = {"density": 1070, "elastic": {"model": "neo_hookean", "youngs_modulus": 90e3, "poisson_ratio": 0.49},
+            "damping": {"model": "prony", "g": [0.03, 0.02], "tau": [10.0, 300.0]}}
+    hold, rate, offset = 0.25, 0.4, 1.3
+    ramp = hold / rate
+    t_rec = np.r_[0.0, np.geomspace(0.01, 2000.0, 60)]
+    t = np.unique(np.r_[np.linspace(0, ramp, 41), ramp + offset + t_rec])
+    s = history(load_material(card), "uniaxial", t, 1.0 - hold * np.minimum(t / ramp, 1.0)).stress.to_numpy()
+    rec = np.interp(ramp + offset + t_rec, t, s)
+    curve = TestCurve(np.full_like(t_rec, 1.0 - hold), rec, t_rec, meta={"hold_strain": hold})
+    term = MaterialTestTerm("relax", 1.0, (curve,), "m", "relaxation", rate, offset)
+    assert term.evaluate({"m": card}, ".")["nrmse"] < 2e-3
+    elastic = {**card, "damping": None}
+    assert term.evaluate({"m": elastic}, ".")["nrmse"] > 0.01  # misses the ~4% relaxation
