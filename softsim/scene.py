@@ -110,6 +110,17 @@ def quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 @dataclass(frozen=True)
+class MaterialZone:
+    """Elements ``elements`` (tetrahedron indices) of a soft body made of ``material`` instead of the
+    body's own (e.g. a strain-limiting layer). It must have the body's density and damping, so masses
+    and the viscous history stay those of one material."""
+
+    name: str
+    elements: np.ndarray
+    material: Material
+
+
+@dataclass(frozen=True)
 class SoftBodySpec:
     """A deformable body.
 
@@ -124,6 +135,8 @@ class SoftBodySpec:
         rgba: Display colour.
         regions: Named surface regions: boundary triangles (K, 3) of mesh vertex
             indices, outward normals (see softsim.geometry.soft).
+        zones: Groups of elements with their own material (multi-material bodies);
+            the other elements are made of ``material``.
     """
 
     name: str
@@ -135,6 +148,29 @@ class SoftBodySpec:
     self_collision: bool = False
     rgba: tuple[float, float, float, float] = (0.85, 0.92, 0.85, 1.0)
     regions: dict[str, np.ndarray] = field(default_factory=dict)
+    zones: tuple[MaterialZone, ...] = ()
+
+    def __post_init__(self) -> None:
+        seen = np.zeros(len(self.mesh.tets), bool)
+        for z in self.zones:
+            if len(z.elements) == 0:
+                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} has no elements")
+            if seen[z.elements].any():
+                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} overlaps another zone")
+            seen[z.elements] = True
+            if not math.isclose(z.material.density, self.material.density, rel_tol=1e-9):
+                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} has density {z.material.density:g} kg/m^3, "
+                                 f"the body {self.material.density:g}; zones must share the body's density")
+            if z.material.damping != self.material.damping:
+                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} must have the body's damping "
+                                 f"({self.material.damping!r})")
+
+    def material_groups(self) -> list[tuple[Material, np.ndarray]]:
+        """(material, element indices) for the body's own material, then each zone."""
+        rest = np.ones(len(self.mesh.tets), bool)
+        for z in self.zones:
+            rest[z.elements] = False
+        return [(self.material, np.nonzero(rest)[0]), *((z.material, np.asarray(z.elements)) for z in self.zones)]
 
     def region(self, name: str) -> np.ndarray:
         if name not in self.regions:
@@ -152,6 +188,8 @@ class SoftBodySpec:
     @property
     def requires(self) -> frozenset[Capability]:
         req = set(self.material.requires) | {Capability.TET_MESH}
+        for z in self.zones:
+            req |= z.material.requires | {Capability.MULTI_MATERIAL}
         if self.pinned:
             req.add(Capability.PINNED_VERTICES)
         if self.self_collision:

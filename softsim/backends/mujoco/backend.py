@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 from typing import ClassVar
 
@@ -55,6 +56,7 @@ class MujocoBackend(Backend):
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.MULTI_MATERIAL,
     })
 
     def __init__(self) -> None:
@@ -81,6 +83,12 @@ class MujocoBackend(Backend):
         for body in scene.soft_bodies:
             if body.material.elastic.initial_poisson_ratio() < 0:
                 problems.append(f"{body.name}: negative Poisson's ratio (MuJoCo accepts [0, 0.5))")
+            for z in body.zones:
+                if type(z.material.elastic) is not type(body.material.elastic):
+                    problems.append(f"{body.name}: material zone {z.name!r} needs the body's elastic model "
+                                    f"({body.material.elastic.model}; one flex has one model)")
+                if prony_of(body.material) is not None:
+                    problems.append(f"{body.name}: material zones with Prony viscoelasticity")
         return problems
 
     # -- lifecycle ---------------------------------------------------------
@@ -98,17 +106,45 @@ class MujocoBackend(Backend):
             f"lumped vertex masses for {[b.name for b in scene.soft_bodies]}"
             + (f"; Stable Neo-Hookean elasticity (elastic3d=1) for {neo}" if neo else "")
         )
+        self.model = self._compile(self.spec)
+        self._apply_zones(native)
+        self.data = mujoco.MjData(self.model)
+        self._index()
+        self.reset()
+
+    @staticmethod
+    def _compile(spec) -> "mujoco.MjModel":
         try:
             with warnings.catch_warnings():
                 # MuJoCo counts only flex damping as "passive forces" here; the 3D elasticity
                 # (elastic3d, set on the spec) is active all the same
                 warnings.filterwarnings("ignore", message=".*has no equality constraints or passive forces")
-                self.model = self.spec.compile()
+                return spec.compile()
         except ValueError as exc:
             raise SoftSimError(f"MuJoCo rejected the generated model: {exc}") from None
-        self.data = mujoco.MjData(self.model)
-        self._index()
-        self.reset()
+
+    @staticmethod
+    def _stiffness_rows(m: "mujoco.MjModel", flex: str) -> np.ndarray:
+        """View of a flex's per-element precomputed elasticity data (elements, values per element)."""
+        f = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_FLEX, flex)
+        n = m.flex_elemnum[f]
+        end = m.flex_stiffnessadr[f + 1] if f + 1 < m.nflex else len(m.flex_stiffness)
+        return m.flex_stiffness[m.flex_stiffnessadr[f]:end].reshape(n, -1)
+
+    def _apply_zones(self, native: Scene) -> None:
+        """Material zones. MuJoCo precomputes each element's elasticity data from the flex's material
+        (24 values: the material constants times element geometry, and geometry alone), so the zone
+        elements' rows are copied from a model compiled with the zone's material on the whole body."""
+        for body in native.soft_bodies:
+            if not body.zones:
+                continue
+            rows = self._stiffness_rows(self.model, body.name)
+            for z in body.zones:
+                probe = native.with_material(body.name, z.material)
+                probe = dataclasses.replace(probe, soft_bodies=tuple(
+                    dataclasses.replace(b, zones=()) if b.name == body.name else b for b in probe.soft_bodies))
+                rows[np.asarray(z.elements)] = self._stiffness_rows(
+                    self._compile(build_spec(probe, scene_to_mjcf(probe))), body.name)[np.asarray(z.elements)]
 
     def _index(self) -> None:
         m = self.model

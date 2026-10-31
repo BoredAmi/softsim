@@ -476,6 +476,7 @@ class Problem3D:
     fixed_dofs: np.ndarray = field(default_factory=lambda: np.zeros(0, int))  # single dofs (3 * node + axis)
     pressure_faces: tuple[np.ndarray, ...] = ()  # per pressure load: outward faces (K, 6); ``Solid3DSolver.pressures``
     cables: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per cable: via-point (nodes, weights); ``.tensions``
+    zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
 
 
 class Solid3DSolver:
@@ -490,8 +491,11 @@ class Solid3DSolver:
         if quadrature not in _STIFFNESS_RULES:
             raise ValueError(f"quadrature must be one of {sorted(_STIFFNESS_RULES)}, got {quadrature}")
         w_q, dn_q = _STIFFNESS_RULES[quadrature]
-        if isinstance(problem.law, OgdenIso):  # the axisymmetric form assumes a block-diagonal C
-            problem = Problem3D(**{**problem.__dict__, "law": OgdenGeneralIso(problem.law.mu, problem.law.alpha)})
+        def general(law):  # the axisymmetric Ogden form assumes a block-diagonal C
+            return OgdenGeneralIso(law.mu, law.alpha) if isinstance(law, OgdenIso) else law
+
+        problem = Problem3D(**{**problem.__dict__, "law": general(problem.law),
+                               "zones": tuple((np.asarray(e, int), general(law), k) for e, law, k in problem.zones)})
         self.p = problem
         self.dynamic = dynamic
         self.viscous = dynamic if viscous is None else viscous
@@ -597,8 +601,44 @@ class Solid3DSolver:
     # -- kernels (JAX) -----------------------------------------------------------------------------
 
     def _build_kernels(self) -> None:
+        """Element kernels per material group (the body's law, then each zone's), behind dispatchers
+        that keep the single-material call signatures."""
         p = self.p
-        law, kappa = p.law, p.bulk_modulus
+        rest = np.ones(len(p.mesh.tets), bool)
+        for elements, _, _ in p.zones:
+            rest[elements] = False
+        groups = [(slice(None) if rest.all() else np.nonzero(rest)[0], p.law, p.bulk_modulus),
+                  *((e, law, kappa) for e, law, kappa in p.zones)]
+        kernels = [(idx, self._group_kernels(law, kappa)) for idx, law, kappa in groups if np.size(rest[idx])]
+        n_elem = len(p.mesh.tets)
+
+        def elem_grad_hess(u, dndx, wv, c, b):
+            if len(kernels) == 1:
+                return kernels[0][1][1](u, dndx, wv, c, b)
+            ge, he = np.zeros((n_elem, 30)), np.zeros((n_elem, 30, 30))
+            for idx, k in kernels:
+                g, h = k[1](u[idx], dndx[idx], wv[idx], c, b[idx])
+                ge[idx], he[idx] = g, h
+            return ge, he
+
+        def elem_energy(u, c, b):
+            return sum(k[0](u[idx], self._dndx_j[idx], self._wv_j[idx], c, b[idx]) for idx, k in kernels)
+
+        def iso_stress(u, dndx):
+            if len(kernels) == 1:
+                return kernels[0][1][2](u, dndx)
+            out = np.zeros((*self._wv.shape, 3, 3))
+            for idx, k in kernels:
+                out[idx] = k[2](u[idx], dndx[idx])
+            return out
+
+        self._dndx_j, self._wv_j = jnp.asarray(self._dndx), jnp.asarray(self._wv)
+        self._elem_grad_hess, self._elem_energy, self._iso_stress = elem_grad_hess, elem_energy, iso_stress
+        self._build_load_kernels()
+
+    @staticmethod
+    def _group_kernels(law, kappa):
+        """(energy(u, dndx, wv, c, b) summed, grad_hess per element, iso_stress per quadrature point) for one law."""
 
         def element_energy(ue, dndx_e, wv_e, c_iso, b_e):
             ue = ue.reshape(10, 3)
@@ -638,17 +678,17 @@ class Solid3DSolver:
             h = jnp.einsum("q,qiJkL,qnJ,qmL->nimk", wv_e, a4 + du * d2j, dndx_e, dndx_e).reshape(30, 30)
             return g_iso + du * g_j, h + d2u / ve * jnp.outer(g_j, g_j)
 
-        self._elem_grad_hess = jax.jit(jax.vmap(element_grad_hess, in_axes=(0, 0, 0, None, 0)))
-        dndx, wv = jnp.asarray(self._dndx), jnp.asarray(self._wv)
-        self._elem_energy = jax.jit(lambda u, c, b: jnp.sum(jax.vmap(element_energy, in_axes=(0, 0, 0, None, 0))(
-            u, dndx, wv, c, b)))
-
         def iso_stress(ue, dn):
             f = jnp.eye(3) + ue.reshape(10, 3).T @ dn
             return 2.0 * jax.grad(law.energy)(f.T @ f)
 
-        self._iso_stress = jax.jit(jax.vmap(jax.vmap(iso_stress, in_axes=(None, 0)), in_axes=(0, 0)))
+        return (jax.jit(lambda u, dndx, wv, c, b: jnp.sum(jax.vmap(element_energy, in_axes=(0, 0, 0, None, 0))(
+                    u, dndx, wv, c, b))),
+                jax.jit(jax.vmap(element_grad_hess, in_axes=(0, 0, 0, None, 0))),
+                jax.jit(jax.vmap(jax.vmap(iso_stress, in_axes=(None, 0)), in_axes=(0, 0))))
 
+    def _build_load_kernels(self) -> None:
+        p = self.p
         n_tri, dn_tri, w_tri = jnp.asarray(_TRI_N), jnp.asarray(_TRI_DN), jnp.asarray(_TRI_W)
 
         def face_s(xf):  # 1/3 int x . n dA over one 6-node face, xf (18,)

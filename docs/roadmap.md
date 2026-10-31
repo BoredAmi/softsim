@@ -209,12 +209,17 @@ Done so far ([actuation.md](actuation.md)):
 - **Check:** the cable-bent cantilever. The reference matches Euler–Bernoulli
   within 0.3% up to 0.27 rad, with the Neo-Hookean tangent under the cable's
   pre-compression.
+- **Multi-material bodies** (`body.zones`: elements with their own material, e.g.
+  a strain-limiting layer): any law in the reference, per-zone force fields on
+  SOFA, per-element material data on MuJoCo. Check: a two-material
+  cable beam against composite Euler–Bernoulli (reference within 1.4% at small
+  load).
 
 Still to do:
 - **Geometry:** mesh and CAD import (STL/OBJ/STEP through gmsh, .msh/.vtk), with
   physical groups mapped to regions. Parametric bodies with internal cavities
-  (PneuNet finger, cable-finger body). Multi-material bodies
-  (strain-limiting layer).
+  (PneuNet finger, cable-finger body). Zones from shape regions and imported
+  physical groups (today: boxes); zones with their own density or damping.
 - **More actuators:** cable length (displacement) control, region force and
   prescribed displacement, with Python control callbacks.
 - **Backend mappings (optional, for speed or stability):** SoftRobots

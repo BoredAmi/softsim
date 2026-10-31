@@ -32,3 +32,26 @@ def hollow_sphere_linear(youngs: float, poisson: float, inner: float, outer: flo
     ``pressure`` (Lame): ``u = p a^3 / (E (b^3 - a^3)) [(1 - 2 nu) r + (1 + nu) b^3 / (2 r^2)]``."""
     a3, b3 = inner**3, outer**3
     return pressure * a3 / (youngs * (b3 - a3)) * ((1 - 2 * poisson) * r + (1 + poisson) * b3 / (2 * r * r))
+
+
+def composite_section(youngs: list[float], edges: list[float], width: float) -> tuple[float, float, float]:
+    """(neutral axis x [m], bending stiffness EI [N m^2], axial stiffness EA [N]) of a rectangular
+    section of ``width`` made of layers: layer ``i`` spans ``edges[i]`` to ``edges[i + 1]`` along x with
+    Young's modulus ``youngs[i]`` (Euler-Bernoulli composite beam, plane sections)."""
+    e = np.asarray(youngs, float)
+    lo, hi = np.asarray(edges[:-1], float), np.asarray(edges[1:], float)
+    area, centre = (hi - lo) * width, 0.5 * (lo + hi)
+    ea = float(np.sum(e * area))
+    x_na = float(np.sum(e * area * centre) / ea)
+    ei = float(np.sum(e * (width * (hi - lo) ** 3 / 12 + area * (centre - x_na) ** 2)))
+    return x_na, ei, ea
+
+
+def cable_beam_tip_angle(tension: float, cable_x: float, length: float, youngs: list[float], edges: list[float],
+                         width: float) -> float:
+    """Tip rotation [rad] of a clamped (composite) beam bent by a cable at ``cable_x`` anchored at
+    ``length``: a pure moment ``T (cable_x - x_na)``, so ``theta = T (cable_x - x_na) L / (E_t I)``, exact
+    at any rotation in Euler-Bernoulli. ``E_t = E (1 + 2 T / EA)`` is the Neo-Hookean tangent under the
+    cable's axial pre-compression."""
+    x_na, ei, ea = composite_section(youngs, edges, width)
+    return tension * (cable_x - x_na) * length / (ei * (1 + 2 * tension / ea))

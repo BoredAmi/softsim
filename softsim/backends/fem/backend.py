@@ -21,6 +21,7 @@ Mapping:
     * pressure actuators: the potential ``-p V`` of the volume the region encloses, on the
       quadratic faces (exact follower load, softsim.actuation), at the end-of-step value of the
       control; the region must be closed (or bounded only by pinned vertices).
+    * material zones: each zone's elements with their own law (any law the reference has);
     * cable actuators: the potential ``T L`` of the cable's length through its via points,
       interpolated with the quadratic shape functions, at the end-of-step tension.
 Refused: several soft bodies, linear, StVK, Rayleigh/Kelvin-Voigt damping (use
@@ -84,6 +85,7 @@ class FemBackend(Backend):
         Capability.CONTACT_ADHESION,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.MULTI_MATERIAL,
     })
 
     def __init__(self) -> None:
@@ -160,7 +162,9 @@ class FemBackend(Backend):
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
                                   pinned=np.array(pinned, int),
                                   pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in self._pressure),
-                                  cables=tuple(cables))
+                                  cables=tuple(cables),
+                                  zones=tuple((elements, *from_material(m)[:2]) for m, elements in
+                                              body.material_groups()[1:]))
         self._names = [GROUND_NAME] * scene.ground.enabled + [rb.name for rb in scene.rigid_bodies]
         self._solver_cls = Solid3DSolver
         self.solver = Solid3DSolver(self._problem)

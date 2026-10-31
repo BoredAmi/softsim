@@ -1,0 +1,45 @@
+# Two-material cable-bent cantilever: the verification case for material zones
+# (docs/actuation.md). The cable cantilever (cable_cantilever.yaml) with a
+# 2 mm layer ten times stiffer (5 MPa) along its -x face, away from the cable,
+# like a strain-limiting layer. Composite Euler-Bernoulli: the neutral axis
+# moves to x_na = -2.57 mm, EI grows 2.3x and the cable's moment arm to
+# 5.57 mm, so the tip angle is 0.221 rad at 0.7 N (0.270 without the layer).
+#   softsim run scenarios/actuation/cable_cantilever_layered.yaml --backend fem --set simulation.timestep=2ms
+# MuJoCo needs StVK for zones (tools/compare_cable.py --layered sets it).
+scenario: actuation
+description: Cable-bent cantilever with a 5 MPa layer (10 x 10 x 60 mm, E = 500 kPa), 0-0.7 N.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+  zones:
+    - name: layer
+      material:
+        density: 1070 kg/m^3
+        elastic: {model: stable_neo_hookean, youngs_modulus: 5 MPa, poisson_ratio: 0.45}
+      box: [[-5 mm, -5 mm, 0 mm], [-3 mm, 5 mm, 60 mm]]
+
+actuators:
+  - name: cable
+    type: cable
+    path: [[3 mm, 0 mm, 0 mm], [3 mm, 0 mm, 55 mm]]
+    schedule: [[0 ms, 0 N], [25 ms, 0.0016 N], [50 ms, 0.0112 N], [75 ms, 0.0341 N], [100 ms, 0.0725 N],
+               [125 ms, 0.1260 N], [150 ms, 0.1926 N], [175 ms, 0.2688 N], [200 ms, 0.3500 N],
+               [225 ms, 0.4312 N], [250 ms, 0.5074 N], [275 ms, 0.5740 N], [300 ms, 0.6275 N],
+               [325 ms, 0.6659 N], [350 ms, 0.6888 N], [375 ms, 0.6984 N], [400 ms, 0.7000 N],
+               [500 ms, 0.7000 N]]

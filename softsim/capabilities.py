@@ -45,3 +45,4 @@ class Capability(str, Enum):
     # Actuation.
     PRESSURE_ACTUATION = "pressure actuators on surface regions"
     CABLE_ACTUATION = "cable actuators routed through the body"
+    MULTI_MATERIAL = "soft bodies with zones of other materials"

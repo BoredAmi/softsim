@@ -280,3 +280,67 @@ error against Euler–Bernoulli with `E_t`):
   timestep only takes ω·dt to 1.15, because the implicit elastic stiffness
   already dominates the step. Spacing the via points 3 mm apart (ω·dt ≈ 0.8)
   runs clean. The cable path is straight, so it follows the beam just as well.
+
+## Multi-material bodies
+
+```yaml
+body:
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material: {density: 1070 kg/m^3, elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}}
+  zones:
+    - name: layer                     # e.g. a strain-limiting layer
+      material: {density: 1070 kg/m^3, elastic: {model: stable_neo_hookean, youngs_modulus: 5 MPa, poisson_ratio: 0.45}}
+      box: [[-5 mm, -5 mm, 0], [-3 mm, 5 mm, 60 mm]]   # elements whose centroid is inside (body frame)
+```
+
+A zone gives some elements their own material. Make the mesh resolve the
+zone: a zone smaller than the elements catches only the elements whose centroid
+falls inside it. For now, a zone must have the body's density and damping;
+other values are refused, because masses and the viscous history are those of
+one material.
+
+| Backend | Zones |
+| --- | --- |
+| fem (reference) | any law per zone; Prony applies to each zone's own stress |
+| SOFA | one force field per material, each in a child node on that material's elements |
+| MuJoCo | the body's elastic model (Stable Neo-Hookean or StVK, one per flex), any modulus and Poisson's ratio. MuJoCo precomputes 24 values per element: the material constants times the element's geometry, plus geometry alone. A zone's rows are copied from a model compiled with the zone's material, so they match it exactly (`tests/test_zones.py`). Scaling the rows is wrong, because it also scales the geometry-only value. |
+
+**Verification: a two-material cable beam**
+(`scenarios/actuation/cable_cantilever_layered.yaml`,
+`python tools/compare_cable.py --layered`). This is the cable cantilever with
+a 2 mm layer, ten times stiffer, on the face away from the cable. In composite
+Euler–Bernoulli (`softsim.analytic.cable_beam_tip_angle`):
+- the neutral axis moves to x = −2.57 mm;
+- EI grows 2.3×;
+- the cable's moment arm grows to 5.57 mm.
+
+The tip angle at 0.7 N falls from 15.4° to 12.7°.
+
+| Model | 0.35 N | 0.7 N | Layered ÷ homogeneous, 0.7 N |
+| --- | --- | --- | --- |
+| Composite Euler–Bernoulli | 6.36° | 12.66° | 0.820 |
+| **fem reference**, 2 mm | 6.28° (−1.4%) | 12.35° (−2.4%) | 0.805 |
+| SOFA, 2 mm | 4.18° (−34%) | 8.35° (−34%) | 0.774 |
+| MuJoCo, 2 mm | 4.20° (−34%) | 8.35° (−34%) | 0.774 |
+| MuJoCo StVK, 2 mm | 3.48° (−45%) | 7.07° (−44%) | 0.745 |
+| MuJoCo StVK, 1 mm | 5.16° (−19%) | 10.51° (−17%) | 0.772 |
+
+- **The reference matches composite beam theory** within 0.55% at 0.1 N
+  (`tests/test_zones.py`). Its gap at 0.7 N is Neo-Hookean nonlinearity, not a
+  zone error: the stiff layer works in compression and the soft part in
+  tension, so the two no longer cancel as in one material. The gap halves on a
+  beam twice as long at the same angle.
+- **MuJoCo and SOFA agree on the layered beam to 0.1%** (8.35° both), with
+  two independent zone implementations.
+- **A zone with the body's own material reproduces the plain body exactly**
+  (to 1e-9 on MuJoCo, 1e-6 on SOFA, and on the reference). SOFA needs a child
+  node per material: a force field's `topology` link is ignored, and two force
+  fields in one node both act on every element. The identity test caught that.
+- **On MuJoCo and SOFA the layer stiffens the beam more than theory says**
+  (ratio 0.75–0.77, against 0.82). With linear tetrahedra, a stiff layer one
+  element thick locks even more than the soft body does. At 1 mm the MuJoCo
+  ratio moves from 0.745 to 0.772, towards theory, so this is discretisation.
+  Resolve a stiff layer with two or more elements, or transfer the card
+  (`softsim transfer`).
+- **MuJoCo's StVK flex locks more than its Stable Neo-Hookean flex** in bending
+  (−39% against −30% at 2 mm), so prefer Stable Neo-Hookean.

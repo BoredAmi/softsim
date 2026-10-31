@@ -196,6 +196,7 @@ class SofaBackend(Backend):
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.MULTI_MATERIAL,
     })
 
     def __init__(self) -> None:
@@ -208,9 +209,11 @@ class SofaBackend(Backend):
     def extra_checks(cls, scene: Scene) -> list[str]:
         problems = []
         for body in scene.soft_bodies:
-            e = body.material.elastic
-            if isinstance(e, Ogden) and len(e.mu) > 1:
-                problems.append(f"{body.name}: SOFA's Ogden material has a single term ({len(e.mu)} given)")
+            for e in (body.material.elastic, *(z.material.elastic for z in body.zones)):
+                if isinstance(e, Ogden) and len(e.mu) > 1:
+                    problems.append(f"{body.name}: SOFA's Ogden material has a single term ({len(e.mu)} given)")
+            if body.zones and prony_of(body.material) is not None:
+                problems.append(f"{body.name}: material zones with Prony viscoelasticity")
         return problems
 
     # -- build --------------------------------------------------------------
@@ -276,8 +279,21 @@ class SofaBackend(Backend):
         node.addObject("TetrahedronSetTopologyContainer", position=pts.tolist(), tetrahedra=body.mesh.tets.tolist())
         dofs = node.addObject("MechanicalObject", template="Vec3d", position=pts.tolist())
         node.addObject("MeshMatrixMass", massDensity=body.effective_density, lumping=True)
-        ff, args = force_field_args(native)
-        node.addObject(ff, **args)
+        groups = native.material_groups()
+        if len(groups) == 1:
+            ff, args = force_field_args(native)
+            node.addObject(ff, **args)
+        else:  # material zones: one child node per material, its elements' topology and force field
+            # acting on the parent's dofs (a force field's topology link is not honoured: it takes the
+            # first topology of its node, so each needs its own node)
+            for k, (material, elements) in enumerate(groups):
+                if not len(elements):
+                    continue
+                child = node.addChild(f"material{k}")
+                child.addObject("TetrahedronSetTopologyContainer", position=pts.tolist(),
+                                tetrahedra=body.mesh.tets[elements].tolist())
+                ff, args = force_field_args(dataclasses.replace(native, material=material, zones=()))
+                child.addObject(ff, **args)
         if body.pinned:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
         node.addObject("LinearSolverConstraintCorrection")
