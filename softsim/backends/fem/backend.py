@@ -21,6 +21,8 @@ Mapping:
     * pressure actuators: the potential ``-p V`` of the volume the region encloses, on the
       quadratic faces (exact follower load, softsim.actuation), at the end-of-step value of the
       control; the region must be closed (or bounded only by pinned vertices).
+    * cable actuators: the potential ``T L`` of the cable's length through its via points,
+      interpolated with the quadratic shape functions, at the end-of-step tension.
 Refused: several soft bodies, linear, StVK, Rayleigh/Kelvin-Voigt damping (use
 Prony), self-collision, torsional/rolling friction, open pressure regions.
 """
@@ -31,7 +33,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import open_edges
+from softsim.actuation import CableActuator, PressureActuator, embed, open_edges
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.errors import StabilityError
@@ -63,6 +65,7 @@ class FemBackend(Backend):
 
     name: ClassVar[str] = "fem"
     locking_free: ClassVar[bool] = True
+    implicit_actuation: ClassVar[bool] = True
     capabilities: ClassVar[frozenset[Capability]] = frozenset({
         Capability.NEO_HOOKEAN,
         Capability.STABLE_NEO_HOOKEAN,
@@ -80,6 +83,7 @@ class FemBackend(Backend):
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
         Capability.PRESSURE_ACTUATION,
+        Capability.CABLE_ACTUATION,
     })
 
     def __init__(self) -> None:
@@ -94,6 +98,8 @@ class FemBackend(Backend):
         if any(b.self_collision for b in scene.soft_bodies):
             out.append("soft-body self-collision")
         for a in scene.actuators:
+            if not isinstance(a, PressureActuator):
+                continue
             body = scene.soft(a.body)
             loose = set(open_edges(body.region(a.region)).ravel().tolist()) - set(body.pinned)
             if loose:
@@ -106,7 +112,8 @@ class FemBackend(Backend):
     def build(self, scene: Scene) -> None:
         from softsim.fem.axisym import ContactSettings
         from softsim.fem.materials import from_material
-        from softsim.fem.solid3d import Problem3D, QuadraticTetMesh, RigidBody3D, Solid3DSolver, quat_to_matrix
+        from softsim.fem.solid3d import (Problem3D, QuadraticTetMesh, RigidBody3D, Solid3DSolver, quat_to_matrix,
+                                         tet10_shape)
 
         self.check(scene)
         self._scene = scene
@@ -142,10 +149,18 @@ class FemBackend(Backend):
         pins = set(int(i) for i in body.pinned)
         pinned = sorted(pins | {int(t[4 + k]) for t in mesh.tets for k, (i, j) in enumerate(
             ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))) if int(t[i]) in pins and int(t[j]) in pins})
+        self._pressure = [a for a in scene.actuators if isinstance(a, PressureActuator)]
+        self._cables = [a for a in scene.actuators if isinstance(a, CableActuator)]
+        cables = []
+        for a in self._cables:
+            via = np.array(a.via) @ rot.T + np.asarray(body.pose.position, float)
+            elems, bary = embed(mesh.nodes, mesh.tets[:, :4], via)
+            cables.append((mesh.tets[elems], tet10_shape(bary[:, 1:])[0]))
         self._problem = Problem3D(mesh, law, kappa, body.effective_density, prony=prony,
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
                                   pinned=np.array(pinned, int),
-                                  pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in scene.actuators))
+                                  pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in self._pressure),
+                                  cables=tuple(cables))
         self._names = [GROUND_NAME] * scene.ground.enabled + [rb.name for rb in scene.rigid_bodies]
         self._solver_cls = Solid3DSolver
         self.solver = Solid3DSolver(self._problem)
@@ -159,8 +174,10 @@ class FemBackend(Backend):
     def step(self, n: int = 1) -> None:
         dt = self._scene.simulation.timestep
         for _ in range(n):
-            for k, a in enumerate(self._scene.actuators):
+            for k, a in enumerate(self._pressure):
                 self.solver.pressures[k] = self.control(a.name, self.solver.t + dt)
+            for k, a in enumerate(self._cables):
+                self.solver.tensions[k] = self.control(a.name, self.solver.t + dt)
             if not self.solver.advance(dt):
                 raise StabilityError(f"fem: Newton did not converge at t = {self.solver.t:.6f} s even with "
                                      f"{dt / 16:.2e} s substeps")

@@ -8,7 +8,7 @@ from typing import ClassVar
 import mujoco
 import numpy as np
 
-from softsim.actuation import pressure_forces
+from softsim.actuation import CableActuator, PressureActuator, cable_forces, embed, pressure_forces
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.backends.mujoco.builder import GROUND, build_spec, scene_to_mjcf
 from softsim.capabilities import Capability
@@ -33,7 +33,7 @@ class MujocoBackend(Backend):
         * Native damping is stiffness-proportional (Rayleigh beta) only. Prony
           viscoelasticity: the flex carries the long-term law and the Maxwell-branch
           overstresses (``softsim.materials.viscoelastic``) are explicit vertex forces.
-        * Adhesion, the Prony overstress and pressure actuators are applied as explicit
+        * Adhesion, the Prony overstress and pressure and cable actuators are applied as explicit
           external forces (``xfrc_applied``) on vertices and rigid bodies, recomputed
           every step.
     """
@@ -54,11 +54,13 @@ class MujocoBackend(Backend):
         Capability.CONTACT_ADHESION,
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
+        Capability.CABLE_ACTUATION,
     })
 
     def __init__(self) -> None:
         self._scene: Scene | None = None
         self._pressure: list = []
+        self._cables: list = []
         self.spec: mujoco.MjSpec | None = None
         self.model: mujoco.MjModel | None = None
         self.data: mujoco.MjData | None = None
@@ -135,11 +137,16 @@ class MujocoBackend(Backend):
                 adr, num, bodies, dofs = self._flex[body.name]
                 overstress = PronyOverstress(body.material, body.mesh.points, body.mesh.tets)
                 self._prony.append((overstress, adr + np.arange(num), bodies, dofs[:, 0] >= 0))
-        self._pressure = []
+        self._pressure, self._cables = [], []
         for a in self._scene.actuators:
             adr, num, bodies, dofs = self._flex[a.body]
-            self._pressure.append((a.name, self._scene.soft(a.body).region(a.region), adr + np.arange(num), bodies,
-                                   dofs[:, 0] >= 0))
+            soft = self._scene.soft(a.body)
+            if isinstance(a, PressureActuator):
+                self._pressure.append((a.name, soft.region(a.region), adr + np.arange(num), bodies, dofs[:, 0] >= 0))
+            elif isinstance(a, CableActuator):
+                elems, bary = embed(soft.mesh.points, soft.mesh.tets, np.array(a.via))
+                self._cables.append((a.name, soft.mesh.tets[elems], bary, adr + np.arange(num), bodies,
+                                     dofs[:, 0] >= 0))
         self._adhesion = adhesion_fields(self._scene)
         self._adhesion_bodies = {}
         for f in self._adhesion:
@@ -166,7 +173,7 @@ class MujocoBackend(Backend):
         mujoco.mj_forward(m, d)
 
     def step(self, n: int = 1) -> None:
-        if not self._adhesion and not self._prony and not self._pressure:
+        if not self._adhesion and not self._prony and not self._pressure and not self._cables:
             mujoco.mj_step(self.model, self.data, nstep=n)
             return
         for _ in range(n):
@@ -174,7 +181,7 @@ class MujocoBackend(Backend):
             mujoco.mj_step(self.model, self.data)
 
     def _apply_external(self) -> None:
-        """Recompute the explicit forces (adhesion, Prony overstress, pressure) from the current state
+        """Recompute the explicit forces (adhesion, Prony overstress, actuators) from the current state
         into ``xfrc_applied``."""
         d = self.data
         d.xfrc_applied[:] = 0.0
@@ -184,6 +191,9 @@ class MujocoBackend(Backend):
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
         for name, tris, rows, bodies, movable in self._pressure:
             f = pressure_forces(d.flexvert_xpos[rows], tris, self.control(name))
+            np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
+        for name, nodes, weights, rows, bodies, movable in self._cables:
+            f = cable_forces(d.flexvert_xpos[rows], nodes, weights, self.control(name))
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
         self._apply_adhesion()
 

@@ -1,4 +1,4 @@
-"""Actuators: inputs that drive soft bodies (pressure now; cables and others later).
+"""Actuators: inputs that drive soft bodies (pressure and cables).
 
 A :class:`PressureActuator` loads a named surface region of a soft body (e.g. a
 hollow shape's ``cavity``) with a gauge pressure ``p``: the traction ``-p n``,
@@ -13,6 +13,16 @@ Backends apply it as follows:
       planes through the origin; :func:`open_edges` finds regions that are not.
     * MuJoCo, SOFA: :func:`pressure_forces` on the linear surface triangles,
       recomputed every step from the current positions (explicit).
+
+A :class:`CableActuator` is a tendon of tension ``T`` routed through the body
+along a polyline of via points that are embedded in its elements (frictionless
+guides that move with the material). Its first point is where it leaves the
+body towards the motor, which is mounted on the body there: the cable is
+internal, so the net force on the body is zero. Its load is the potential
+``T L(x)``, ``L`` the cable's current length through the via points (follower,
+symmetric positive semi-definite tangent). The reference interpolates the via
+points with its quadratic shape functions; MuJoCo and SOFA with the linear ones
+(:func:`cable_forces`, explicit). The cable stays taut: pulling with ``T > 0``.
 """
 
 from __future__ import annotations
@@ -25,7 +35,7 @@ from pydantic import Field
 
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
-from softsim.config.units import Pressure, Time
+from softsim.config.units import Force, Length, Pressure, Time
 
 
 class PressureActuatorConfig(StrictModel):
@@ -62,6 +72,96 @@ class PressureActuator:
     @property
     def requires(self) -> frozenset[Capability]:
         return frozenset({Capability.PRESSURE_ACTUATION})
+
+
+class CableActuatorConfig(StrictModel):
+    """YAML form of a cable actuator: ``path`` is ``[[x, y, z], ...]`` in the body's frame (its mesh
+    coordinates), from the exit towards the motor to the anchor; ``schedule`` is
+    ``[[time, tension], ...]``. Via points are placed along the path at most ``spacing`` apart
+    (default: the body's mesh size)."""
+
+    name: str = "cable"
+    type: Literal["cable"] = "cable"
+    path: list[tuple[Length, Length, Length]] = Field(min_length=2)
+    tension: Annotated[Force, Field(ge=0)] = 0.0
+    schedule: list[tuple[Annotated[Time, Field(ge=0)], Annotated[Force, Field(ge=0)]]] = []
+    spacing: Annotated[Length, Field(gt=0)] | None = None
+
+
+@dataclass(frozen=True)
+class CableActuator:
+    """Cable of tension [N] through ``via`` points (body frame) of soft body ``body``; see module
+    docstring."""
+
+    name: str
+    body: str
+    via: tuple[tuple[float, float, float], ...]
+    tension: float = 0.0
+    schedule: tuple[tuple[float, float], ...] = ()
+
+    @classmethod
+    def from_config(cls, cfg: CableActuatorConfig, body: str, spacing: float) -> "CableActuator":
+        return cls(cfg.name, body, tuple(map(tuple, resample(np.array(cfg.path, float), cfg.spacing or spacing))),
+                   cfg.tension, tuple(map(tuple, cfg.schedule)))
+
+    def value(self, t: float) -> float:
+        if not self.schedule:
+            return self.tension
+        times, values = zip(*self.schedule)
+        return float(np.interp(t, times, values))
+
+    @property
+    def requires(self) -> frozenset[Capability]:
+        return frozenset({Capability.CABLE_ACTUATION})
+
+
+Actuator = PressureActuator | CableActuator
+ActuatorConfig = PressureActuatorConfig | CableActuatorConfig
+
+
+def resample(path: np.ndarray, spacing: float) -> np.ndarray:
+    """``path``'s corners plus equally spaced points on each leg, at most ``spacing`` apart."""
+    out = [path[0]]
+    for a, b in zip(path[:-1], path[1:]):
+        n = max(int(np.ceil(np.linalg.norm(b - a) / spacing - 1e-9)), 1)
+        out.extend(a + (b - a) * (k / n) for k in range(1, n + 1))
+    return np.array(out)
+
+
+def embed(points: np.ndarray, tets: np.ndarray, via: np.ndarray, tol: float = 1e-6) -> tuple[np.ndarray, np.ndarray]:
+    """Containing tetrahedron (K,) and barycentric coordinates (K, 4) of each via point; on a shared
+    face or edge, any containing element. Raises ``ValueError`` for points outside the mesh."""
+    x = points[tets]                                               # (E, 4, 3)
+    inv = np.linalg.inv(np.swapaxes(x[:, 1:] - x[:, :1], 1, 2))    # (E, 3, 3)
+    elems, bary = [], []
+    for k, v in enumerate(np.asarray(via, float)):
+        lam = np.einsum("eij,ej->ei", inv, v - x[:, 0])
+        lam = np.concatenate([1.0 - lam.sum(axis=1, keepdims=True), lam], axis=1)
+        e = int(np.argmax(lam.min(axis=1)))
+        if lam[e].min() < -tol:
+            raise ValueError(f"cable via point {k} at {np.round(v * 1e3, 3).tolist()} mm is outside the body")
+        w = np.clip(lam[e], 0.0, None)
+        elems.append(e)
+        bary.append(w / w.sum())
+    return np.array(elems), np.array(bary)
+
+
+def cable_length(points: np.ndarray, nodes: np.ndarray, weights: np.ndarray) -> float:
+    """Length of the polyline through the via points ``sum_j weights[k, j] points[nodes[k, j]]``."""
+    p = np.einsum("kj,kji->ki", weights, points[nodes])
+    return float(np.linalg.norm(np.diff(p, axis=0), axis=1).sum())
+
+
+def cable_forces(points: np.ndarray, nodes: np.ndarray, weights: np.ndarray, tension: float) -> np.ndarray:
+    """Nodal forces (N, 3) of a cable of ``tension`` through the via points (see
+    :func:`cable_length`): ``-T dL/dx``, each via point's force spread by its weights."""
+    p = np.einsum("kj,kji->ki", weights, points[nodes])
+    s = np.diff(p, axis=0)
+    u = s / np.linalg.norm(s, axis=1, keepdims=True)
+    f = tension * (np.vstack([u, np.zeros(3)]) - np.vstack([np.zeros(3), u]))  # pulls each via point along the cable
+    out = np.zeros_like(points, dtype=float)
+    np.add.at(out, nodes.ravel(), (weights[:, :, None] * f[:, None, :]).reshape(-1, 3))
+    return out
 
 
 def pressure_forces(points: np.ndarray, tris: np.ndarray, pressure: float) -> np.ndarray:

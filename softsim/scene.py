@@ -13,7 +13,7 @@ from typing import Annotated, Literal, Union
 import numpy as np
 from pydantic import Field
 
-from softsim.actuation import PressureActuator
+from softsim.actuation import Actuator, CableActuator, PressureActuator, embed
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time
@@ -197,16 +197,23 @@ class Scene:
     contact: ContactSettings = ContactSettings()
     ground: GroundSettings = GroundSettings()
     metadata: dict[str, object] = field(default_factory=dict)
-    actuators: tuple[PressureActuator, ...] = ()
+    actuators: tuple[Actuator, ...] = ()
 
     def __post_init__(self) -> None:
         names = [a.name for a in self.actuators]
         if len(set(names)) != len(names):
             raise ValueError(f"actuator names must be unique, got {names}")
         for a in self.actuators:
-            self.soft(a.body).region(a.region)
+            body = self.soft(a.body)
+            if isinstance(a, PressureActuator):
+                body.region(a.region)
+            elif isinstance(a, CableActuator):
+                try:
+                    embed(body.mesh.points, body.mesh.tets, np.array(a.via))
+                except ValueError as exc:
+                    raise ValueError(f"actuator {a.name!r}: {exc}") from None
 
-    def actuator(self, name: str) -> PressureActuator:
+    def actuator(self, name: str) -> Actuator:
         for a in self.actuators:
             if a.name == name:
                 return a

@@ -20,7 +20,7 @@ Parameters (all optional):
                     (hold/stop); in loop mode only on ~/save
     viewer          open the MuJoCo passive viewer (false)
 
-Actuators (e.g. the inflation scenario's pressure): ``~/actuators/<name>/command``
+Actuators (a pressure [Pa] or a cable tension [N]): ``~/actuators/<name>/command``
 (std_msgs/Float64, SI units) holds that value from the next step on; NaN returns
 the actuator to its schedule. ``~/actuators/<name>/state`` publishes the value in
 effect. A rebuild (reset of a changed config, set_material, action) clears commands.
@@ -292,7 +292,10 @@ class SoftSimNode(Node):
         elif msg.data != msg.data:  # NaN
             backend.release_control(name)
         else:
-            backend.set_control(name, msg.data)
+            try:
+                backend.set_control(name, msg.data)
+            except ValueError as exc:  # e.g. a negative cable tension
+                self.get_logger().warning(f"{exc}; command ignored")
 
     def _guard(self, response, fn, ok_message: str):
         try:

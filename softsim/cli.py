@@ -71,10 +71,12 @@ def _cmd_check(args: argparse.Namespace) -> int:
               f"material {body.material.name} ({body.material.elastic.model})")
     print("estimates:", {k: float(f"{v:.4g}") for k, v in scenario.estimates().items()})
     try:
-        locking_free = get_backend(config.backend).locking_free
+        backend_cls = get_backend(config.backend)
+        locking_free, implicit_actuation = backend_cls.locking_free, backend_cls.implicit_actuation
     except ConfigError:  # unknown or uninstalled backend: reported under "backend support"
-        locking_free = False
-    findings = check_scene(scene, scenario.estimates(), locking_free=locking_free)
+        locking_free = implicit_actuation = False
+    findings = check_scene(scene, scenario.estimates(), locking_free=locking_free,
+                           implicit_actuation=implicit_actuation)
     for f in findings:
         print(" ", f)
     print("backend support:")

@@ -39,9 +39,10 @@ def p_wave_speed(youngs: float, poisson: float, density: float) -> float:
 
 
 def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
-                locking_free: bool = False) -> list[Finding]:
+                locking_free: bool = False, implicit_actuation: bool = False) -> list[Finding]:
     """Return all findings for ``scene``; ``locking_free``: the backend's elements don't lock (no
-    volumetric-locking findings)."""
+    volumetric-locking findings); ``implicit_actuation``: it applies actuator loads implicitly (no
+    explicit-stability findings for them)."""
     est = dict(estimates or {})
     sim, contact = scene.simulation, scene.contact
     dt = sim.timestep
@@ -137,6 +138,8 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
                                    f"{body.name}: explicit integrator with dt {dt:.1e} s > element wave transit "
                                    f"time {limit:.1e} s"))
         out += _adhesion_findings(scene, body, dt)
+        if not implicit_actuation:
+            out += _cable_findings(scene, body, dt)
         out += _prony_findings(body, dt)
         validity = body.material.validity
         strain = est.get("expected_strain")  # compressive, positive
@@ -173,6 +176,41 @@ def _prony_findings(body, dt: float) -> list[Finding]:
         out.append(Finding("info", "prony-fast-term",
                            f"{body.name}: Prony time {min(prony.tau):.1e} s is shorter than two steps; that term "
                            "relaxes within a step (it is integrated exactly, but its transient is not resolved)"))
+    return out
+
+
+def _cable_findings(scene: Scene, body, dt: float) -> list[Finding]:
+    """MuJoCo and SOFA apply cable forces explicitly: the cable's transverse (string) stiffness at a
+    via point, ``T (1/l1 + 1/l2)``, must be resolvable at ``dt`` on the vertices it acts on. Both
+    integrate the elasticity implicitly, which adds about ``dt^2 k`` to each vertex's mass in the
+    step (``k ~ E h``, a lower bound on a vertex's elastic stiffness). Measured: the 1 mm cable
+    cantilever on MuJoCo at 0.1 ms tracks the ramp up to omega dt ~ 1.3, then rings (self-excited,
+    bounded) instead of settling. Once ``dt^2 k`` dominates the mass, omega dt tends to
+    ``sqrt(k_cable / k)``: a smaller timestep helps little, a larger via-point spacing does."""
+    from softsim.actuation import CableActuator, embed
+
+    out = []
+    k_elastic = body.material.elastic.initial_youngs_modulus() * body.mesh.quality()["mean_edge"]
+    inv_mass = 1.0 / (body.mesh.lumped_masses(body.effective_density) + dt * dt * k_elastic)
+    inv_mass[list(body.pinned)] = 0.0
+    for a in scene.actuators:
+        if not isinstance(a, CableActuator) or a.body != body.name:
+            continue
+        tension = max([a.tension, *(v for _, v in a.schedule)])
+        via = np.array(a.via)
+        inv_len = 1.0 / np.linalg.norm(np.diff(via, axis=0), axis=1)
+        stiffness = tension * (np.append(inv_len, 0.0) + np.insert(inv_len, 0, 0.0))
+        elems, w = embed(body.mesh.points, body.mesh.tets, via)
+        omega_dt = dt * math.sqrt(float(np.max(stiffness * np.sum(w**2 * inv_mass[body.mesh.tets[elems]], axis=1))))
+        if omega_dt > 1.0:
+            out.append(Finding("error", "cable-unstable",
+                               f"actuator {a.name!r}: cable tension {tension:.3g} N over {1e3 / inv_len.max():.2f} mm "
+                               f"segments is too stiff for explicit forces at dt {dt:.1e} s (omega*dt = "
+                               f"{omega_dt:.2f} > 1); use a larger via-point spacing (a smaller timestep helps little)"))
+        elif omega_dt > 0.5:
+            out.append(Finding("warning", "cable-stiff",
+                               f"actuator {a.name!r}: explicit cable forces resolved with only omega*dt = "
+                               f"{omega_dt:.2f} at the peak tension; results may depend on the timestep"))
     return out
 
 

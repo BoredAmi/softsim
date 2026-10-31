@@ -8,7 +8,8 @@ from softsim.errors import ConfigError
 from softsim.scenarios.base import Scenario
 
 _BUILTIN = {"drop_test": "softsim.scenarios.drop_test:DropTestScenario",
-            "inflation": "softsim.scenarios.inflation:InflationScenario"}
+            "inflation": "softsim.scenarios.inflation:InflationScenario",
+            "actuation": "softsim.scenarios.inflation:InflationScenario"}
 
 
 def available_scenarios() -> dict[str, str]:

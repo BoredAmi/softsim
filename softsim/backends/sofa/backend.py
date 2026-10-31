@@ -24,9 +24,9 @@ Notes and limits (see docs/backends/sofa.md):
     * Prony viscoelasticity: the force field carries the long-term law; the
       Maxwell-branch overstresses (``softsim.materials.viscoelastic``) go through
       another ``ConstantForceField``, the same implementation as on MuJoCo.
-    * pressure actuators: explicit follower forces on the region's triangles
-      (``softsim.actuation.pressure_forces``) in a ``ConstantForceField``, updated
-      before every step, as on MuJoCo.
+    * pressure and cable actuators: explicit follower forces
+      (``softsim.actuation.pressure_forces``, ``cable_forces``) in a
+      ``ConstantForceField``, updated before every step, as on MuJoCo.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import pressure_forces
+from softsim.actuation import CableActuator, PressureActuator, cable_forces, embed, pressure_forces
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.contact.adhesion import RigidFrame, adhesion_fields
@@ -195,6 +195,7 @@ class SofaBackend(Backend):
         Capability.CONTACT_ADHESION,
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
+        Capability.CABLE_ACTUATION,
     })
 
     def __init__(self) -> None:
@@ -290,9 +291,18 @@ class SofaBackend(Backend):
             overstress = (PronyOverstress(body.material, body.mesh.points, body.mesh.tets),
                           node.addObject("ConstantForceField", name="prony", indices=list(range(len(pts))),
                                          forces=np.zeros((len(pts), 3)).tolist()))
-        actuators = [a for a in self._scene.actuators if a.body == body.name]
-        pressure = (node.addObject("ConstantForceField", name="pressure", indices=list(range(len(pts))),
-                                   forces=np.zeros((len(pts), 3)).tolist()) if actuators else None)
+        loads = []  # (actuator name, force function of the positions and the actuator's value)
+        for a in self._scene.actuators:
+            if a.body != body.name:
+                continue
+            if isinstance(a, PressureActuator):
+                tris = body.region(a.region)
+                loads.append((a.name, lambda x, v, tris=tris: pressure_forces(x, tris, v)))
+            elif isinstance(a, CableActuator):
+                elems, bary = embed(body.mesh.points, body.mesh.tets, np.array(a.via))
+                loads.append((a.name, lambda x, v, n=body.mesh.tets[elems], w=bary: cable_forces(x, n, w, v)))
+        actuation = (node.addObject("ConstantForceField", name="actuation", indices=list(range(len(pts))),
+                                    forces=np.zeros((len(pts), 3)).tolist()) if loads else None)
         coll = node.addChild("collision")
         coll.addObject("MeshTopology", position=pts.tolist(), triangles=body.mesh.surface_triangles().tolist())
         coll.addObject("MechanicalObject", position=pts.tolist())
@@ -304,7 +314,7 @@ class SofaBackend(Backend):
         coll.addObject("IdentityMapping")
         masses = body.mesh.lumped_masses(body.effective_density)
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
-                "prony": overstress, "pressure": (pressure, [(a.name, body.region(a.region)) for a in actuators])}
+                "prony": overstress, "actuation": (actuation, loads)}
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -367,11 +377,10 @@ class SofaBackend(Backend):
                 if d["prony"] is not None:
                     overstress, field = d["prony"]
                     field.forces.value = overstress.forces(np.asarray(d["dofs"].position.value, float), dt).tolist()
-                field, regions = d["pressure"]
+                field, loads = d["actuation"]
                 if field is not None:
                     x = np.asarray(d["dofs"].position.value, float)
-                    field.forces.value = sum(pressure_forces(x, tris, self.control(name))
-                                             for name, tris in regions).tolist()
+                    field.forces.value = sum(load(x, self.control(name)) for name, load in loads).tolist()
             self._sofa.Simulation.animate(self.root, dt)
 
     def _apply_adhesion(self) -> None:

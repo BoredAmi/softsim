@@ -117,7 +117,8 @@ class Simulation:
         scenario: Scenario = scenario_cls(config, self.base_dir)
         scene = scenario.build_scene()
         backend_cls = get_backend(config.backend)
-        findings = check_scene(scene, scenario.estimates(), locking_free=backend_cls.locking_free)
+        findings = check_scene(scene, scenario.estimates(), locking_free=backend_cls.locking_free,
+                               implicit_actuation=backend_cls.implicit_actuation)
         fatal = [f for f in findings if f.level == "error" or (self.strict and f.level == "warning")]
         if fatal:
             raise StabilityError("refusing to run:\n" + "\n".join(f"  {f}" for f in fatal))

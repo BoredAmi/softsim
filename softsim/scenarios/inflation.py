@@ -1,29 +1,32 @@
-"""Inflation: a soft body with a cavity, driven by pressure actuators.
+"""Actuation (``scenario: actuation``, or ``inflation``): one soft body driven by actuators.
 
-The first actuation scenario (M6): a hollow sphere or a closed tube (balloon
-actuator), optionally bonded to the ground through named regions (``fixed``),
-with one or more pressure actuators on its regions following a schedule or a
-controller (``Backend.set_control``).
+The actuation scenario (M6): a soft body, e.g. a hollow sphere or a closed tube
+(balloon actuator) or a beam, optionally bonded to the ground through named
+regions (``fixed``), with pressure actuators on its regions and cables routed
+through it (``type: cable``), each following a schedule or a controller
+(``Backend.set_control``). An actuator without ``type`` is a pressure actuator.
 
-Outputs per sample: each actuator's pressure ``<name>_pressure`` [Pa] and the
-volume its region encloses ``<name>_volume`` [m^3] (from the backend's surface
-vertices), and the body's extent (``max_z``, ``min_z``, ``max_radius`` about the
+Outputs per sample: each pressure actuator's pressure ``<name>_pressure`` [Pa]
+and the volume its region encloses ``<name>_volume`` [m^3] (from the backend's
+surface vertices); each cable's tension ``<name>_tension`` [N] and length
+through its via points ``<name>_length`` [m]; and the body's extent (``max_z``, ``min_z``, ``max_radius`` about the
 body's axis). Shapes with a ``top`` region also give the tip: the top face's
 area-weighted centroid (``tip_x``, ``tip_y``, ``tip_z``) and its tilt from +z
 (``bend_angle`` [rad], from the area-weighted normal), i.e. how far a bending
-actuator curls. The summary gives the final and peak values and the volume
-change of each cavity.
+actuator curls. The summary gives the final and peak values, the volume
+change of each cavity and the stroke (shortening) of each cable.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 import numpy as np
 import pandas as pd
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from softsim.actuation import PressureActuator, PressureActuatorConfig, enclosed_volume
+from softsim.actuation import (CableActuator, CableActuatorConfig, PressureActuator, PressureActuatorConfig,
+                               cable_length, embed, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
 from softsim.config.units import Length, Mass
@@ -44,9 +47,18 @@ class InflatedBodyConfig(StrictModel):
 
 
 class InflationConfig(ScenarioConfig):
-    scenario: Literal["inflation"] = "inflation"
+    scenario: Literal["inflation", "actuation"] = "inflation"
     body: InflatedBodyConfig
-    actuators: list[PressureActuatorConfig] = [PressureActuatorConfig()]
+    actuators: list[Annotated[Union[PressureActuatorConfig, CableActuatorConfig], Field(discriminator="type")]] = [
+        PressureActuatorConfig()]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _pressure_by_default(cls, data: Any) -> Any:
+        if isinstance(data, dict) and isinstance(data.get("actuators"), list):
+            data = {**data, "actuators": [{"type": "pressure", **a} if isinstance(a, dict) and "type" not in a else a
+                                          for a in data["actuators"]]}
+        return data
 
 
 class InflationScenario(Scenario):
@@ -68,14 +80,22 @@ class InflationScenario(Scenario):
         pinned = sorted({int(i) for name in cfg.fixed for i in np.unique(regions[name])})
         body = SoftBodySpec(name=cfg.name, mesh=mesh, material=self.load_material(cfg.material),
                             pose=Pose(tuple(cfg.position)), mass=cfg.mass, pinned=tuple(pinned), regions=regions)
-        actuators = tuple(PressureActuator.from_config(a, cfg.name) for a in self.config.actuators)
+        actuators = tuple(PressureActuator.from_config(a, cfg.name) if isinstance(a, PressureActuatorConfig)
+                          else CableActuator.from_config(a, cfg.name, cfg.mesh.size) for a in self.config.actuators)
+        self._cables = {}
         for a in actuators:
-            if a.region not in regions:
+            if isinstance(a, PressureActuator) and a.region not in regions:
                 raise ConfigError(f"actuator {a.name!r}: no region {a.region!r}; have {sorted(regions)}")
+            if isinstance(a, CableActuator):
+                try:
+                    elems, bary = embed(mesh.points, mesh.tets, np.array(a.via))
+                except ValueError as exc:
+                    raise ConfigError(f"actuator {a.name!r}: {exc}") from None
+                self._cables[a.name] = (mesh.tets[elems], bary)
         self._regions = regions
         self._axis = np.asarray(cfg.position[:2], float)
         return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,
-                     ground=self.config.ground, metadata={"name": self.config.name or "inflation"},
+                     ground=self.config.ground, metadata={"name": self.config.name or self.config.scenario},
                      actuators=actuators)
 
     def metrics(self, state: SimState) -> dict[str, float]:
@@ -83,6 +103,10 @@ class InflationScenario(Scenario):
         x = state.soft[cfg.body.name].vertices
         out = {"t": state.time}
         for a in cfg.actuators:
+            if isinstance(a, CableActuatorConfig):
+                out[f"{a.name}_tension"] = float(state.controls.get(a.name, np.nan))
+                out[f"{a.name}_length"] = cable_length(x, *self._cables[a.name])
+                continue
             out[f"{a.name}_pressure"] = float(state.controls.get(a.name, np.nan))
             out[f"{a.name}_volume"] = enclosed_volume(x, self._regions[a.region])
         if "top" in self._regions:
@@ -101,6 +125,11 @@ class InflationScenario(Scenario):
     def summarize(self, ts: pd.DataFrame) -> dict[str, float]:
         out: dict[str, float] = {}
         for a in self.config.actuators:
+            if isinstance(a, CableActuatorConfig):
+                length = ts[f"{a.name}_length"].to_numpy()
+                out[f"{a.name}_final_tension"] = float(ts[f"{a.name}_tension"].iloc[-1])
+                out[f"{a.name}_stroke"] = float(length[0] - length[-1])
+                continue
             v = ts[f"{a.name}_volume"].to_numpy()
             out[f"{a.name}_final_pressure"] = float(ts[f"{a.name}_pressure"].iloc[-1])
             out[f"{a.name}_final_volume"] = float(v[-1])

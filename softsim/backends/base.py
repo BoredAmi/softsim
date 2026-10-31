@@ -23,6 +23,7 @@ from typing import ClassVar
 
 import numpy as np
 
+from softsim.actuation import CableActuator
 from softsim.capabilities import Capability
 from softsim.errors import UnsupportedFeatureError
 from softsim.materials.models import Material
@@ -119,6 +120,7 @@ class Backend(ABC):
     name: ClassVar[str]
     capabilities: ClassVar[frozenset[Capability]]
     locking_free: ClassVar[bool] = False  # elements that do not lock near incompressibility (no locking warning)
+    implicit_actuation: ClassVar[bool] = False  # actuator loads in the implicit solve (no explicit-stability limit)
 
     @classmethod
     def unsupported(cls, scene: Scene) -> list[str]:
@@ -177,7 +179,8 @@ class Backend(ABC):
 
     def set_control(self, name: str, value: float) -> None:
         """Override actuator ``name`` with ``value`` (SI) from the next step on."""
-        self.scene.actuator(name)
+        if isinstance(self.scene.actuator(name), CableActuator) and value < 0:
+            raise ValueError(f"actuator {name!r}: a cable can only pull, tension must be >= 0 (got {value})")
         self.__dict__.setdefault("_control_overrides", {})[name] = float(value)
 
     def release_control(self, name: str) -> None:

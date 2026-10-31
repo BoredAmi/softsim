@@ -458,7 +458,12 @@ class Problem3D:
     Pressure loads: ``pressure_faces[k]`` carries the gauge pressure ``Solver.pressures[k]`` (set it
     before each step) as the potential ``p S(x)``, ``S = 1/3 int x . n dA`` over the faces = minus the
     volume they enclose: the exact follower load ``-p n`` for closed regions, and for regions closed
-    by symmetry planes through the origin (where ``x . n = 0``)."""
+    by symmetry planes through the origin (where ``x . n = 0``).
+
+    Cable loads: ``cables[k] = (nodes, weights)``, (K, 10) each: via point ``i`` sits at
+    ``sum_j weights[i, j] x[nodes[i, j]]`` (the quadratic shape functions of its element, see
+    :func:`p2_weights`); the cable carries the tension ``Solver.tensions[k]`` as the potential
+    ``T L(x)``, ``L`` the length of the polyline through the via points."""
 
     mesh: QuadraticTetMesh
     law: IsochoricLaw
@@ -470,6 +475,7 @@ class Problem3D:
     pinned: np.ndarray = field(default_factory=lambda: np.zeros(0, int))   # node indices fixed in place
     fixed_dofs: np.ndarray = field(default_factory=lambda: np.zeros(0, int))  # single dofs (3 * node + axis)
     pressure_faces: tuple[np.ndarray, ...] = ()  # per pressure load: outward faces (K, 6); ``Solid3DSolver.pressures``
+    cables: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per cable: via-point (nodes, weights); ``.tensions``
 
 
 class Solid3DSolver:
@@ -539,6 +545,14 @@ class Solid3DSolver:
         self.pressures = np.zeros(len(problem.pressure_faces))
         self._pdofs = [(3 * np.asarray(f, int)[:, :, None] + np.arange(3)).reshape(len(f), 18)
                        for f in problem.pressure_faces]
+        self.tensions = np.zeros(len(problem.cables))
+        self._cables = []  # per cable: segment dofs (S, 60), signed segment weights (S, 20), rest positions
+        for nodes, weights in problem.cables:
+            seg_nodes = np.concatenate([nodes[:-1], nodes[1:]], axis=1)                 # (S, 20)
+            seg_dofs = (3 * seg_nodes[:, :, None] + np.arange(3)).reshape(len(seg_nodes), 60)
+            self._cables.append((seg_dofs, np.concatenate([-weights[:-1], weights[1:]], axis=1),
+                                 m.nodes[seg_nodes]))
+            groups.append(seg_dofs)
         for i in range(nb):
             rigid = np.broadcast_to(self._rdof[i], (k, len(self._rdof[i])))
             groups.append(np.concatenate([self._sdofs, rigid], axis=1))
@@ -547,6 +561,7 @@ class Solid3DSolver:
         self._pattern = _UpperPattern(self.ndof, self.free, groups)
         self._epos = self._pattern.positions(np.repeat(self._edofs, 30, axis=1), np.tile(self._edofs, (1, 30)))
         self._ppos = [self._pattern.positions(np.repeat(d, 18, axis=1), np.tile(d, (1, 18))) for d in self._pdofs]
+        self._cpos = [self._pattern.positions(np.repeat(d, 60, axis=1), np.tile(d, (1, 60))) for d, *_ in self._cables]
         mass = self.mass_matrix.tocoo()
         msel, self._mpos = self._pattern.locate(mass.row, mass.col)
         self._mval = mass.data[msel]
@@ -801,6 +816,9 @@ class Solid3DSolver:
         for k, pressure in enumerate(self.pressures):
             if pressure:
                 e += pressure * float(self._face_s(self._face_x(y, k)))
+        for k, tension in enumerate(self.tensions):
+            if tension:
+                e += tension * self.cable_length(k, y)
         for i, k in enumerate(self._contact):
             cr, rr = ctx["refs"][i]
             e += float(k["energy"](jnp.asarray(self._contact_z(y, i)), jnp.asarray(self._bond[i]),
@@ -810,6 +828,16 @@ class Solid3DSolver:
     def _face_x(self, y: np.ndarray, k: int):
         """Current positions of pressure load ``k``'s face nodes, (K, 18)."""
         return self._face_nodes0[k] + jnp.asarray(y[self._pdofs[k]])
+
+    def _segments(self, k: int, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Cable ``k``'s segment vectors (S, 3) and lengths (S,)."""
+        dofs, w, x0 = self._cables[k]
+        s = np.einsum("sj,sji->si", w, x0 + y[dofs].reshape(x0.shape))
+        return s, np.linalg.norm(s, axis=1)
+
+    def cable_length(self, k: int, y: np.ndarray | None = None) -> float:
+        """Current length of cable ``k`` through its via points."""
+        return float(self._segments(k, self.y if y is None else y)[1].sum())
 
     def enclosed_volume(self, k: int) -> float:
         """Volume enclosed by pressure load ``k``'s faces (the cavity), current configuration."""
@@ -839,6 +867,17 @@ class Solid3DSolver:
                 hf = self._project_psd(hf)
             grad += np.bincount(self._pdofs[k].ravel(), weights=gf.ravel(), minlength=self.ndof)
             hess += pat.scatter(self._ppos[k], hf.reshape(-1))
+        for k, tension in enumerate(self.tensions):
+            if not tension:
+                continue
+            dofs, w, _ = self._cables[k]
+            s, n = self._segments(k, y)
+            u = s / n[:, None]
+            gc = tension * w[:, :, None] * u[:, None, :]                                 # (S, 20, 3)
+            proj = (np.eye(3) - u[:, :, None] * u[:, None, :]) / n[:, None, None]       # PSD
+            hc = tension * np.einsum("sa,sb,sij->saibj", w, w, proj)
+            grad += np.bincount(dofs.ravel(), weights=gc.ravel(), minlength=self.ndof)
+            hess += pat.scatter(self._cpos[k], hc.reshape(-1))
         x0 = jnp.asarray(self.p.mesh.nodes[self._snodes])
         area = jnp.asarray(self._sarea)
         for i, k in enumerate(self._contact):

@@ -203,24 +203,26 @@ Done so far ([actuation.md](actuation.md)):
 - **Bending actuator** (off-axis cavity, `scenarios/inflation/bending.yaml`) with
   tip and bend-angle outputs. MuJoCo at 2 mm bends 37% less than the reference.
   After transfer, the error is 4% at the fitted pressure and 8% at half of it.
+- **Cable actuators** on all three backends: tendons through via points embedded
+  in the elements, potential `T L` (implicit in the reference, explicit forces
+  with a stability check on MuJoCo/SOFA), YAML/Python/ROS control.
+- **Check:** the cable-bent cantilever. The reference matches Euler–Bernoulli
+  within 0.3% up to 0.27 rad, with the Neo-Hookean tangent under the cable's
+  pre-compression.
 
 Still to do:
 - **Geometry:** mesh and CAD import (STL/OBJ/STEP through gmsh, .msh/.vtk), with
   physical groups mapped to regions. Parametric bodies with internal cavities
   (PneuNet finger, cable-finger body). Multi-material bodies
   (strain-limiting layer).
-- **More actuators:** `cable`, region force and prescribed displacement, with
-  Python control callbacks.
-- **Backend mappings:**
-  - SOFA: SoftRobots `CableConstraint` (ships in the v26.06 binary; a first
-    cable probe was not yet physical, which is the first thing to fix);
-    `SurfacePressureConstraint` as an implicit alternative to the explicit
-    pressure forces.
-  - MuJoCo: cables as spatial tendons.
+- **More actuators:** cable length (displacement) control, region force and
+  prescribed displacement, with Python control callbacks.
+- **Backend mappings (optional, for speed or stability):** SoftRobots
+  `CableConstraint` and `SurfacePressureConstraint` on SOFA, spatial tendons on
+  MuJoCo, as implicit alternatives to the explicit forces.
 - **Damping debt:** Rayleigh α on SOFA. (The compliant support and
   post-contact observables are done; see above.)
-- **Analytic checks:** the pressurised thick-walled cylinder (Lamé) and a
-  cable-bent cantilever (Euler–Bernoulli), on every backend.
+- **Analytic checks:** the pressurised thick-walled cylinder (Lamé).
 
 ## M7: pneumatic finger
 

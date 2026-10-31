@@ -1,7 +1,9 @@
 # Actuation (M6, in progress)
 
-Pressure is the first actuator. Cables, region forces and prescribed
-displacements follow the same pattern (see [roadmap.md](roadmap.md), M6).
+Two actuators so far: pressure on a surface region, and cables routed through
+the body. Region forces and prescribed displacements follow the same pattern
+(see [roadmap.md](roadmap.md), M6). The scenario is `actuation` (`inflation`
+is the same scenario under its first name).
 
 ## Regions
 
@@ -180,3 +182,101 @@ fully match a thin wall that locks differently as it stretches, so the error
 at half pressure is twice the fitted one. For bending actuators on linear
 tetrahedra, plan for an error bar of about 10% after transfer. Without the
 transfer, it is about 20%.
+
+## Cable actuators
+
+```yaml
+scenario: actuation
+body:
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  fixed: [base]
+  ...
+actuators:
+  - name: cable
+    type: cable
+    path: [[3 mm, 0, 0], [3 mm, 0, 55 mm]]     # body frame: from the exit to the motor, to the anchor
+    schedule: [[0 ms, 0 N], [400 ms, 0.7 N]]    # tension; or `tension: 0.5 N`
+    # spacing: 2 mm                             # via points at most this far apart (default: mesh size)
+```
+
+A cable is a tendon of tension `T` through via points along `path`. The via
+points are embedded in the body's elements, so they act as frictionless guides
+that move with the material. The motor sits on the body at the first point,
+so the cable is internal: its net force and moment on the body are zero.
+`set_control("cable", 0.3)` and ROS `~/actuators/cable/command` set the tension
+in N. A cable can only pull, so a negative tension is refused.
+
+The load is the potential `T L(x)`, where `L` is the cable's length through the
+via points:
+- **fem (reference):** in the implicit solve. Via points use the elements'
+  quadratic shape functions. The tangent is `T w w^T (I - u u^T) / l` per
+  segment, symmetric and PSD, so Newton stays robust.
+- **MuJoCo, SOFA:** the same forces `-T dL/dx` on the linear elements'
+  vertices, recomputed before every step (`softsim.actuation.cable_forces`).
+  They are explicit, so `softsim check` compares the cable's string stiffness
+  `T (1/l1 + 1/l2)` with the vertex masses at the timestep. It warns or refuses,
+  as for adhesion: tight via-point spacing at high tension needs a smaller
+  timestep, or a larger `spacing`.
+
+The scenario reports `<name>_tension` and `<name>_length` (the current length
+through the via points), and in the summary the cable's stroke (how far it was
+pulled in).
+
+### Verification: cable-bent cantilever
+
+`scenarios/actuation/cable_cantilever.yaml`:
+- a 10 × 10 × 60 mm beam, Neo-Hookean E = 500 kPa, ν = 0.45, clamped at its
+  base, no gravity;
+- a cable 3 mm off-axis, anchored at L = 55 mm.
+
+Below the anchor the cable puts a pure moment `T d` on the beam. Euler–Bernoulli
+then gives a circular arc whose tip angle is exact at any rotation:
+
+```text
+theta = T d L / (E_t I),   E_t = E (1 + 2 T / (E A))
+```
+
+`E_t` is the Neo-Hookean tangent under the axial pre-compression `T / (E A)`
+that the cable also applies: 2.8% stiffer at 0.7 N.
+
+**The reference matches it within 0.3%** at 0.1 and 0.7 N (0.04 and 0.27 rad,
+quasi-static, 2.5 mm; `tests/test_cable.py`). Two things the check taught:
+- **Without `E_t`, the error grows with the load** (−2.4% → −5.2% over the same
+  range). It halves on a beam twice as long at the same tip angle, so it scales
+  with strain, not rotation: material nonlinearity, as the formula says.
+- **Anchor the cable inside the body, not on the face where you measure.** A
+  point anchor on the top face dents it, and the face's tilt then reads 4–6%
+  low. Anchored 5 mm below, the top face rotates rigidly with the beam.
+
+
+![Cable-bent cantilever: tip angle against tension, and the deformed beam against the
+Euler-Bernoulli arc](media/cable_cantilever.png)
+
+*Left: tip angle over the whole ramp. Right: the side faces at 0.7 N, the
+reference and MuJoCo (2 mm) against the theoretical arc (`python
+tools/plot_cable.py`).*
+
+**Backends at the same card** (`python tools/compare_cable.py`; tip angle,
+error against Euler–Bernoulli with `E_t`):
+
+| Model | 0.35 N | 0.7 N | vs reference |
+| --- | --- | --- | --- |
+| Euler–Bernoulli | 7.83° | 15.45° | |
+| **fem reference**, 2 mm, dynamic | 7.78° (−0.7%) | 15.34° (−0.7%) | – |
+| MuJoCo, 2 mm | 5.46° (−30%) | 10.79° (−30%) | −30% |
+| SOFA, 2 mm | 5.45° (−30%) | 10.79° (−30%) | −30% |
+| MuJoCo, 1 mm (via points 3 mm apart) | 6.96° (−11%) | 13.74° (−11%) | −10% |
+
+- **The reference is right in dynamics too:** a 400 ms ramp against the beam's
+  10 Hz mode is quasi-static, and the dynamic run agrees with the quasi-static
+  solve.
+- **MuJoCo and SOFA agree with each other to 0.1% and bend 30% too little at
+  2 mm.** Linear tetrahedra lock in bending: 5 elements across a 10 mm beam,
+  ν = 0.45. The error is the same at both tensions, so one effective modulus
+  fixes it (`softsim transfer`, as for pressure). At 1 mm it is 10%.
+- **On MuJoCo and SOFA, choose the via-point spacing from the check, not the
+  mesh.** On the 1 mm mesh at 1 mm spacing (ω·dt ≈ 1.4), MuJoCo tracks the ramp
+  up to 0.6 N, then rings between 14° and 18° instead of settling. Halving the
+  timestep only takes ω·dt to 1.15, because the implicit elastic stiffness
+  already dominates the step. Spacing the via points 3 mm apart (ω·dt ≈ 0.8)
+  runs clean. The cable path is straight, so it follows the beam just as well.
