@@ -42,8 +42,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path(sim.config.output.directory) / (
         f"{name}_{_dt.datetime.now():%Y%m%d_%H%M%S}")
     result.save(out, sim.config.output.format)
-    print(json.dumps({k: round(float(v), 6) if math.isfinite(v) else None for k, v in result.summary.items()},
-                     indent=2))
+    print(json.dumps({k: float(f"{float(v):.6g}") if math.isfinite(v) else None for k, v in result.summary.items()},
+                     indent=2))  # 6 significant digits: volumes [m^3] and forces alike
     print(f"realtime factor {result.metadata['realtime_factor']:.4f}; results in {out}", file=sys.stderr)
     return 0
 
@@ -372,6 +372,14 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_transfer(args: argparse.Namespace) -> int:
+    from softsim.transfer import Transfer
+
+    report = Transfer(args.transfer).run()
+    print(json.dumps(report, indent=2, default=float))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="softsim", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -486,6 +494,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--jobs", type=int, default=1, help="cases simulated in parallel")
     p.add_argument("--no-plots", action="store_true")
     p.set_defaults(func=_cmd_calibrate)
+
+    p = sub.add_parser("transfer", help="fit a fast backend's effective card to the reference (docs/actuation.md)")
+    p.add_argument("transfer", help="transfer YAML, e.g. calibrations/transfer_inflation_mujoco.yaml")
+    p.set_defaults(func=_cmd_transfer)
 
     p = sub.add_parser("view", help="interactive MuJoCo viewer (loops the scenario)")
     _add_config_args(p)

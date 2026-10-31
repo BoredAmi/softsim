@@ -181,28 +181,46 @@ drop weights. See [materials.md](materials.md).
 - **500 g:** with the material excluded, check the setup and the measurement
   (a second camera view, or the original authors' notes).
 
-## M6: foundations for robots
+## M6: foundations for robots (in progress)
 
-- **Named regions** on soft bodies (cavity surfaces, clamp faces, cable
-  channels), resolved at meshing time. Fixed boundaries become region-based.
+Done so far ([actuation.md](actuation.md)):
+- **Named surface regions** on every soft shape, resolved on the mesh; `fixed`
+  regions pin vertices.
+- **Hollow shapes:** `hollow_sphere` and `closed_tube` (balloon actuator), gmsh.
+- **Pressure actuators** on all three backends: exact `-p V` follower load in
+  the reference; explicit follower forces on MuJoCo and SOFA. Schedules in YAML,
+  `set_control` from Python, ROS 2 command and state topics.
+- **`inflation` scenario** (pressure–volume curve and extent).
+- **Check:** the reference matches the exact finite-strain thick-sphere
+  solution within 0.1% up to 62% hoop strain, and it finds the limit pressure.
+- **Backend error bar:** at the same card, MuJoCo and SOFA agree with each other
+  but inflate 27% less than the reference at 3 mm (13% at 2 mm): linear-tet
+  locking at ν = 0.45.
+- **`softsim transfer`** (M5.6): fits a fast backend's effective card against
+  the reference and checks it on unseen load cases. For MuJoCo at 3 mm, E 30 →
+  23.7 kPa takes the inflation error from 20% to 0.5%, and it holds at 1.5 and
+  4.5 kPa (1.2%, 2.2%). SOFA needs the same correction (23.6 kPa).
+- **Bending actuator** (off-axis cavity, `scenarios/inflation/bending.yaml`) with
+  tip and bend-angle outputs. MuJoCo at 2 mm bends 37% less than the reference.
+  After transfer, the error is 4% at the fitted pressure and 8% at half of it.
+
+Still to do:
 - **Geometry:** mesh and CAD import (STL/OBJ/STEP through gmsh, .msh/.vtk), with
   physical groups mapped to regions. Parametric bodies with internal cavities
   (PneuNet finger, cable-finger body). Multi-material bodies
   (strain-limiting layer).
-- **Actuation and control API:** `pressure`, `cable`, region force and
-  prescribed displacement actuators. Backend `set_controls()` and
-  `actuator_state()`. Control schedules in YAML and Python callbacks. ROS 2
-  command and state topics.
+- **More actuators:** `cable`, region force and prescribed displacement, with
+  Python control callbacks.
 - **Backend mappings:**
-  - SOFA: SoftRobots `SurfacePressureConstraint` and `CableConstraint` (both
-    ship in the v26.06 binary and instantiate; a first cable probe was not yet
-    physical, which is the first thing to fix).
-  - MuJoCo: pressure as nodal forces on vertex bodies, cables as spatial
-    tendons.
+  - SOFA: SoftRobots `CableConstraint` (ships in the v26.06 binary; a first
+    cable probe was not yet physical, which is the first thing to fix);
+    `SurfacePressureConstraint` as an implicit alternative to the explicit
+    pressure forces.
+  - MuJoCo: cables as spatial tendons.
 - **Damping debt:** Rayleigh α on SOFA. (The compliant support and
   post-contact observables are done; see above.)
-- **Analytic checks:** pressurised thick-walled cylinder and sphere (Lamé), and
-  a cable-bent cantilever (Euler–Bernoulli), on both backends.
+- **Analytic checks:** the pressurised thick-walled cylinder (Lamé) and a
+  cable-bent cantilever (Euler–Bernoulli), on every backend.
 
 ## M7: pneumatic finger
 

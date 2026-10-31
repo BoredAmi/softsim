@@ -13,6 +13,7 @@ from typing import Annotated, Literal, Union
 import numpy as np
 from pydantic import Field
 
+from softsim.actuation import PressureActuator
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time
@@ -121,6 +122,8 @@ class SoftBodySpec:
         pinned: Indices of vertices fixed to the world (bonded boundary).
         self_collision: Whether elements may collide with each other.
         rgba: Display colour.
+        regions: Named surface regions: boundary triangles (K, 3) of mesh vertex
+            indices, outward normals (see softsim.geometry.soft).
     """
 
     name: str
@@ -131,6 +134,12 @@ class SoftBodySpec:
     pinned: tuple[int, ...] = ()
     self_collision: bool = False
     rgba: tuple[float, float, float, float] = (0.85, 0.92, 0.85, 1.0)
+    regions: dict[str, np.ndarray] = field(default_factory=dict)
+
+    def region(self, name: str) -> np.ndarray:
+        if name not in self.regions:
+            raise KeyError(f"soft body {self.name!r} has no region {name!r}; have {sorted(self.regions)}")
+        return self.regions[name]
 
     @property
     def total_mass(self) -> float:
@@ -188,11 +197,25 @@ class Scene:
     contact: ContactSettings = ContactSettings()
     ground: GroundSettings = GroundSettings()
     metadata: dict[str, object] = field(default_factory=dict)
+    actuators: tuple[PressureActuator, ...] = ()
+
+    def __post_init__(self) -> None:
+        names = [a.name for a in self.actuators]
+        if len(set(names)) != len(names):
+            raise ValueError(f"actuator names must be unique, got {names}")
+        for a in self.actuators:
+            self.soft(a.body).region(a.region)
+
+    def actuator(self, name: str) -> PressureActuator:
+        for a in self.actuators:
+            if a.name == name:
+                return a
+        raise KeyError(f"no actuator named {name!r}; have {[a.name for a in self.actuators]}")
 
     @property
     def requires(self) -> frozenset[Capability]:
         req: set[Capability] = set()
-        for body in (*self.soft_bodies, *self.rigid_bodies):
+        for body in (*self.soft_bodies, *self.rigid_bodies, *self.actuators):
             req |= body.requires
         if self.ground.enabled:
             req |= self.ground.friction.requires

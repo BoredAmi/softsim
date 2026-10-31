@@ -1,0 +1,31 @@
+# Thick hollow sphere under internal pressure: the verification case for
+# pressure actuation (docs/actuation.md). Floats without gravity or ground, so
+# the only load is the cavity pressure, ramped slowly (the breathing mode is
+# ~40 Hz) and then held. Compare backends with the reference:
+#   softsim run scenarios/inflation/hollow_sphere.yaml --backend mujoco
+#   softsim run scenarios/inflation/hollow_sphere.yaml --backend fem --set simulation.timestep=2ms
+scenario: inflation
+description: Hollow silicone sphere (40/20 mm) inflated to 3 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 250 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: sphere
+  geometry: {type: hollow_sphere, outer_diameter: 40 mm, inner_diameter: 20 mm}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 30 kPa, poisson_ratio: 0.45}
+  mesh: {size: 3 mm, method: gmsh}
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0 kPa], [150 ms, 3 kPa], [250 ms, 3 kPa]]

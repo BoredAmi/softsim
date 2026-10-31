@@ -104,6 +104,27 @@ _STIFFNESS_RULES = {8: (_W, _DN), 4: (_W4, tet10_shape(_XI4)[1])}
 _XI_M, _W_M = tet_quadrature(3)      # mass: 27 points, exact to degree 5 (P2 x P2 is degree 4)
 _N_M, _DN_M = tet10_shape(_XI_M)
 
+# degree-4 rule on the reference triangle (Dunavant, 6 points; weights sum to its area 1/2): exact for
+# x . (x_xi x x_eta) on 6-node faces, so the enclosed volume and its derivatives are exact
+_TRI_A, _TRI_B = 0.445948490915965, 0.091576213509771
+_TRI_XI = np.array([[_TRI_A, _TRI_A], [_TRI_A, 1 - 2 * _TRI_A], [1 - 2 * _TRI_A, _TRI_A],
+                    [_TRI_B, _TRI_B], [_TRI_B, 1 - 2 * _TRI_B], [1 - 2 * _TRI_B, _TRI_B]])
+_TRI_W = 0.5 * np.array([0.223381589678011] * 3 + [0.109951743655322] * 3)
+
+
+def tri6_shape(xi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """6-node triangle (corners a, b, c, then mid-edges ab, bc, ca) shape functions (Q, 6) and their
+    (xi, eta) derivatives (Q, 6, 2), with xi along a -> b and eta along a -> c."""
+    x, y = xi[:, 0], xi[:, 1]
+    l1, l2, l3 = 1 - x - y, x, y
+    n = np.stack([l1 * (2 * l1 - 1), l2 * (2 * l2 - 1), l3 * (2 * l3 - 1), 4 * l1 * l2, 4 * l2 * l3, 4 * l3 * l1], 1)
+    d1 = np.stack([-(4 * l1 - 1), 4 * l2 - 1, 0 * x, 4 * (l1 - l2), 4 * l3, -4 * l3], 1)
+    d2 = np.stack([-(4 * l1 - 1), 0 * x, 4 * l3 - 1, -4 * l2, 4 * l2, 4 * (l1 - l3)], 1)
+    return n, np.stack([d1, d2], -1)
+
+
+_TRI_N, _TRI_DN = tri6_shape(_TRI_XI)
+
 
 @dataclass
 class QuadraticTetMesh:
@@ -136,12 +157,27 @@ class QuadraticTetMesh:
         t10 = np.array([[*t, *(midpoint(t[i], t[j]) for i, j in EDGES)] for t in tets])
         counts: dict[tuple[int, ...], list] = {}
         for t in tets:
-            for f in _FACES:
+            for opposite, f in enumerate(_FACES):
                 corners = tuple(int(t[k]) for k in f)
-                counts.setdefault(tuple(sorted(corners)), []).append(corners)
-        faces = [[a, b, c, mid[(min(a, b), max(a, b))], mid[(min(b, c), max(b, c))], mid[(min(a, c), max(a, c))]]
-                 for key, occ in counts.items() if len(occ) == 1 for a, b, c in [occ[0]]]
+                counts.setdefault(tuple(sorted(corners)), []).append((corners, int(t[opposite])))
+        faces = []
+        for occ in counts.values():
+            if len(occ) != 1:
+                continue
+            (a, b, c), o = occ[0]
+            if np.dot(np.cross(points[b] - points[a], points[c] - points[a]), points[a] - points[o]) < 0:
+                b, c = c, b  # outward normal (b - a) x (c - a)
+            faces.append([a, b, c, mid[(min(a, b), max(a, b))], mid[(min(b, c), max(b, c))],
+                          mid[(min(a, c), max(a, c))]])
         return cls(np.array(nodes), t10, np.array(faces, int), len(points))
+
+    def faces_of(self, tris: np.ndarray) -> np.ndarray:
+        """Rows of ``faces`` (outward) for the linear boundary triangles ``tris`` (corner indices)."""
+        index = {tuple(sorted(f[:3])): i for i, f in enumerate(self.faces.tolist())}
+        try:
+            return self.faces[[index[tuple(sorted(t))] for t in np.asarray(tris).tolist()]]
+        except KeyError as exc:
+            raise ValueError(f"triangle {exc.args[0]} is not a boundary face of the mesh") from None
 
     def surface_nodes_and_areas(self) -> tuple[np.ndarray, np.ndarray]:
         """Boundary nodes and their lumped areas: each quadratic face is split into 4 flat triangles
@@ -417,7 +453,12 @@ def _sdf_function(body: RigidBody3D):
 
 @dataclass
 class Problem3D:
-    """One soft body, rigid bodies (the ground is a rigid body without parts) and loads."""
+    """One soft body, rigid bodies (the ground is a rigid body without parts) and loads.
+
+    Pressure loads: ``pressure_faces[k]`` carries the gauge pressure ``Solver.pressures[k]`` (set it
+    before each step) as the potential ``p S(x)``, ``S = 1/3 int x . n dA`` over the faces = minus the
+    volume they enclose: the exact follower load ``-p n`` for closed regions, and for regions closed
+    by symmetry planes through the origin (where ``x . n = 0``)."""
 
     mesh: QuadraticTetMesh
     law: IsochoricLaw
@@ -428,6 +469,7 @@ class Problem3D:
     rigid: tuple[RigidBody3D, ...] = ()
     pinned: np.ndarray = field(default_factory=lambda: np.zeros(0, int))   # node indices fixed in place
     fixed_dofs: np.ndarray = field(default_factory=lambda: np.zeros(0, int))  # single dofs (3 * node + axis)
+    pressure_faces: tuple[np.ndarray, ...] = ()  # per pressure load: outward faces (K, 6); ``Solid3DSolver.pressures``
 
 
 class Solid3DSolver:
@@ -494,6 +536,9 @@ class Solid3DSolver:
         self._anchor = [np.zeros((k, 3)) for _ in range(nb)]
         self._lam = [np.zeros(k) for _ in range(nb)]
         groups = [self._edofs]
+        self.pressures = np.zeros(len(problem.pressure_faces))
+        self._pdofs = [(3 * np.asarray(f, int)[:, :, None] + np.arange(3)).reshape(len(f), 18)
+                       for f in problem.pressure_faces]
         for i in range(nb):
             rigid = np.broadcast_to(self._rdof[i], (k, len(self._rdof[i])))
             groups.append(np.concatenate([self._sdofs, rigid], axis=1))
@@ -501,6 +546,7 @@ class Solid3DSolver:
                 groups.append(self._rdof[i][None, :])
         self._pattern = _UpperPattern(self.ndof, self.free, groups)
         self._epos = self._pattern.positions(np.repeat(self._edofs, 30, axis=1), np.tile(self._edofs, (1, 30)))
+        self._ppos = [self._pattern.positions(np.repeat(d, 18, axis=1), np.tile(d, (1, 18))) for d in self._pdofs]
         mass = self.mass_matrix.tocoo()
         msel, self._mpos = self._pattern.locate(mass.row, mass.col)
         self._mval = mass.data[msel]
@@ -587,6 +633,20 @@ class Solid3DSolver:
             return 2.0 * jax.grad(law.energy)(f.T @ f)
 
         self._iso_stress = jax.jit(jax.vmap(jax.vmap(iso_stress, in_axes=(None, 0)), in_axes=(0, 0)))
+
+        n_tri, dn_tri, w_tri = jnp.asarray(_TRI_N), jnp.asarray(_TRI_DN), jnp.asarray(_TRI_W)
+
+        def face_s(xf):  # 1/3 int x . n dA over one 6-node face, xf (18,)
+            xf = xf.reshape(6, 3)
+            x = n_tri @ xf
+            xa = jnp.einsum("qn,ni->qi", dn_tri[:, :, 0], xf)
+            xb = jnp.einsum("qn,ni->qi", dn_tri[:, :, 1], xf)
+            return jnp.sum(w_tri * jnp.einsum("qi,qi->q", x, jnp.cross(xa, xb))) / 3.0
+
+        self._face_s = jax.jit(lambda xf: jnp.sum(jax.vmap(face_s)(xf)))
+        self._face_gh = jax.jit(jax.vmap(lambda xf: (jax.grad(face_s)(xf), jax.hessian(face_s)(xf))))
+        self._face_nodes0 = [jnp.asarray(p.mesh.nodes[np.asarray(f, int)].reshape(len(f), 18))
+                             for f in p.pressure_faces]
 
         x0 = jnp.asarray(p.mesh.nodes[self._snodes])
         area = jnp.asarray(self._sarea)
@@ -738,11 +798,22 @@ class Solid3DSolver:
         u = y[:3 * self.n].reshape(self.n, 3)
         e = float(self._elem_energy(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), ctx["c"], ctx["b"]))
         e += self._quadratic(y, ctx)[0]
+        for k, pressure in enumerate(self.pressures):
+            if pressure:
+                e += pressure * float(self._face_s(self._face_x(y, k)))
         for i, k in enumerate(self._contact):
             cr, rr = ctx["refs"][i]
             e += float(k["energy"](jnp.asarray(self._contact_z(y, i)), jnp.asarray(self._bond[i]),
                                    jnp.asarray(self._anchor[i]), jnp.asarray(self._lam[i]), cr, rr))
         return e
+
+    def _face_x(self, y: np.ndarray, k: int):
+        """Current positions of pressure load ``k``'s face nodes, (K, 18)."""
+        return self._face_nodes0[k] + jnp.asarray(y[self._pdofs[k]])
+
+    def enclosed_volume(self, k: int) -> float:
+        """Volume enclosed by pressure load ``k``'s faces (the cavity), current configuration."""
+        return -float(self._face_s(self._face_x(self.y, k)))
 
     @staticmethod
     def _project_psd(h: np.ndarray) -> np.ndarray:
@@ -760,6 +831,14 @@ class Solid3DSolver:
         pat = self._pattern
         grad = np.bincount(self._edofs.ravel(), weights=ge.ravel(), minlength=self.ndof)
         hess = pat.scatter(self._epos, he.reshape(-1)) + ctx["h_quad"]
+        for k, pressure in enumerate(self.pressures):
+            if not pressure:
+                continue
+            gf, hf = (np.asarray(a) * pressure for a in self._face_gh(self._face_x(y, k)))
+            if project:
+                hf = self._project_psd(hf)
+            grad += np.bincount(self._pdofs[k].ravel(), weights=gf.ravel(), minlength=self.ndof)
+            hess += pat.scatter(self._ppos[k], hf.reshape(-1))
         x0 = jnp.asarray(self.p.mesh.nodes[self._snodes])
         area = jnp.asarray(self._sarea)
         for i, k in enumerate(self._contact):

@@ -24,6 +24,9 @@ Notes and limits (see docs/backends/sofa.md):
     * Prony viscoelasticity: the force field carries the long-term law; the
       Maxwell-branch overstresses (``softsim.materials.viscoelastic``) go through
       another ``ConstantForceField``, the same implementation as on MuJoCo.
+    * pressure actuators: explicit follower forces on the region's triangles
+      (``softsim.actuation.pressure_forces``) in a ``ConstantForceField``, updated
+      before every step, as on MuJoCo.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from typing import ClassVar
 
 import numpy as np
 
+from softsim.actuation import pressure_forces
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.contact.adhesion import RigidFrame, adhesion_fields
@@ -190,6 +194,7 @@ class SofaBackend(Backend):
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
         Capability.VISCOELASTIC_PRONY,
+        Capability.PRESSURE_ACTUATION,
     })
 
     def __init__(self) -> None:
@@ -214,6 +219,7 @@ class SofaBackend(Backend):
         Sofa = import_sofa()
         self.close()
         self._scene = scene
+        self._clear_controls()
         sim, contact = scene.simulation, scene.contact
         root = Sofa.Core.Node("root")
         root.addObject("RequiredPlugin", pluginName=PLUGINS)
@@ -284,6 +290,9 @@ class SofaBackend(Backend):
             overstress = (PronyOverstress(body.material, body.mesh.points, body.mesh.tets),
                           node.addObject("ConstantForceField", name="prony", indices=list(range(len(pts))),
                                          forces=np.zeros((len(pts), 3)).tolist()))
+        actuators = [a for a in self._scene.actuators if a.body == body.name]
+        pressure = (node.addObject("ConstantForceField", name="pressure", indices=list(range(len(pts))),
+                                   forces=np.zeros((len(pts), 3)).tolist()) if actuators else None)
         coll = node.addChild("collision")
         coll.addObject("MeshTopology", position=pts.tolist(), triangles=body.mesh.surface_triangles().tolist())
         coll.addObject("MechanicalObject", position=pts.tolist())
@@ -295,7 +304,7 @@ class SofaBackend(Backend):
         coll.addObject("IdentityMapping")
         masses = body.mesh.lumped_masses(body.effective_density)
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
-                "prony": overstress}
+                "prony": overstress, "pressure": (pressure, [(a.name, body.region(a.region)) for a in actuators])}
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -358,6 +367,11 @@ class SofaBackend(Backend):
                 if d["prony"] is not None:
                     overstress, field = d["prony"]
                     field.forces.value = overstress.forces(np.asarray(d["dofs"].position.value, float), dt).tolist()
+                field, regions = d["pressure"]
+                if field is not None:
+                    x = np.asarray(d["dofs"].position.value, float)
+                    field.forces.value = sum(pressure_forces(x, tris, self.control(name))
+                                             for name, tris in regions).tolist()
             self._sofa.Simulation.animate(self.root, dt)
 
     def _apply_adhesion(self) -> None:
@@ -420,7 +434,7 @@ class SofaBackend(Backend):
         for name, d in self._soft.items():
             pos = np.array(d["dofs"].position.value, float) - [0.0, 0.0, d["offset"][2] - self.scene.soft(name).pose.position[2]]
             soft[name] = SoftState(pos, np.array(d["dofs"].velocity.value, float))
-        return SimState(self.time, rigid, soft, self._contacts())
+        return SimState(self.time, rigid, soft, self._contacts(), self.controls())
 
     def _contacts(self) -> list[ContactWrench]:
         """Net contact forces from momentum balance (implicit Euler: m dv/dt = f_ext + f_contact)."""

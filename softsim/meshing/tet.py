@@ -89,6 +89,11 @@ class TetMesh:
         self._surface.append(tris)
         return tris
 
+    def surface_where(self, predicate) -> np.ndarray:
+        """Boundary triangles (outward normals) whose three vertices all satisfy ``predicate(points)``."""
+        tris = self.surface_triangles()
+        return tris[np.all(predicate(self.points)[tris], axis=1)]
+
     def vertices_where(self, predicate) -> np.ndarray:
         """Indices of points for which ``predicate(points)`` (vectorised) is true."""
         return np.nonzero(predicate(self.points))[0]
@@ -211,6 +216,36 @@ def _gmsh_mesh(build, size: float) -> TetMesh:
     points = xyz.reshape(-1, 3)[used]
     tets = remap[tets]
     return TetMesh(points, _orient(points, tets))
+
+
+def gmsh_hollow_sphere(inner: float, outer: float, size: float, octant: bool = False) -> TetMesh:
+    """Thick spherical shell (radii ``inner`` < ``outer``) centred at the origin; ``octant`` keeps
+    x, y, z >= 0 only (symmetry planes through the centre)."""
+    if not 0 < inner < outer:
+        raise ConfigError(f"hollow sphere needs 0 < inner < outer radius, got {inner}, {outer}")
+
+    def build(occ):
+        shell = occ.cut([(3, occ.addSphere(0, 0, 0, outer))], [(3, occ.addSphere(0, 0, 0, inner))])[0]
+        if octant:
+            occ.intersect(shell, [(3, occ.addBox(0, 0, 0, outer, outer, outer))])
+
+    return _gmsh_mesh(build, size)
+
+
+def gmsh_closed_tube(inner: float, outer: float, height: float, cap: float, size: float,
+                     offset: tuple[float, float] = (0.0, 0.0)) -> TetMesh:
+    """Cylinder (radius ``outer``, base at the origin, axis +z) around a closed cylindrical cavity of
+    radius ``inner`` centred at ``offset`` (x, y), with end walls of thickness ``cap``."""
+    ox, oy = offset
+    if not (0 < inner and inner + math.hypot(ox, oy) < outer and 0 < 2 * cap < height):
+        raise ConfigError(f"closed tube needs a cavity inside the wall (inner + |offset| < outer) and "
+                          f"0 < 2 cap < height, got {inner}, {offset}, {outer}, {cap}, {height}")
+
+    def build(occ):
+        occ.cut([(3, occ.addCylinder(0, 0, 0, 0, 0, height, outer))],
+                [(3, occ.addCylinder(ox, oy, cap, 0, 0, height - 2 * cap, inner))])
+
+    return _gmsh_mesh(build, size)
 
 
 def gmsh_cylinder(radius: float, height: float, size: float) -> TetMesh:

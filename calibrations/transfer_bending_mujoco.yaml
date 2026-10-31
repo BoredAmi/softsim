@@ -1,0 +1,15 @@
+# Transfer of the Ecoflex 00-30 card to MuJoCo at 2 mm for the off-axis bending actuator: which MuJoCo
+# modulus bends it like the locking-free reference? Fitted on the 0-8 kPa bend angle and cavity volume;
+# checked on a 0-4 kPa run (half the curvature, a different point on the nonlinear curve).
+#   softsim transfer calibrations/transfer_bending_mujoco.yaml        (~20 min)
+config: ../scenarios/inflation/bending.yaml
+backend: mujoco
+overrides: [output.save_model=false]
+reference: {backend: fem, overrides: [simulation.timestep=2ms, body.material.damping=null]}
+observables: {bend_angle: 1.0, cavity_volume: 1.0}
+parameters:
+  body.material.elastic.youngs_modulus: {initial: 114 kPa, bounds: [40 kPa, 140 kPa], log: true}
+checks:
+  p_4kPa: ["actuators[0].schedule=[[0, 0], [0.3, 4000], [0.4, 4000]]"]
+max_evaluations: 12
+output: ../runs/transfer/bending_mujoco_2mm

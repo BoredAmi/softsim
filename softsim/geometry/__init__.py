@@ -10,7 +10,15 @@ from softsim.geometry.rigid import (
     load_rigid_body,
     rigid_presets,
 )
-from softsim.geometry.soft import MeshSettings, SoftBox, SoftCylinder, SoftShape, check_resolution
+from softsim.geometry.soft import (
+    MeshSettings,
+    SoftBox,
+    SoftClosedTube,
+    SoftCylinder,
+    SoftHollowSphere,
+    SoftShape,
+    check_resolution,
+)
 
 __all__ = [
     "MeshSettings",
@@ -20,7 +28,9 @@ __all__ = [
     "RigidCylinder",
     "RigidShape",
     "SoftBox",
+    "SoftClosedTube",
     "SoftCylinder",
+    "SoftHollowSphere",
     "SoftShape",
     "WeightWithKnob",
     "check_resolution",

@@ -41,3 +41,6 @@ class Capability(str, Enum):
     SELF_COLLISION = "soft-body self-collision"
     CONTACT_FORCES = "contact force readout"
     CONTACT_ADHESION = "contact adhesion (cohesive tack)"
+
+    # Actuation.
+    PRESSURE_ACTUATION = "pressure actuators on surface regions"

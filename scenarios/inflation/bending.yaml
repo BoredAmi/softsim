@@ -1,0 +1,27 @@
+# Single-material bending actuator: an Ecoflex 00-30 tube (16 mm, 40 mm tall)
+# bonded at its base, with its 8 mm cavity moved 2 mm towards +x. The thin
+# +x wall (2 mm) stretches more than the thick -x wall (6 mm), so the tube
+# curls towards -x as the pressure rises. Outputs: bend_angle, tip_x/z.
+#   softsim run scenarios/inflation/bending.yaml
+scenario: inflation
+description: Off-axis cavity bending actuator (Ecoflex 00-30), 0-8 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 400 ms
+  output_rate: 1 kHz
+  iterations: 300           # MuJoCo: the 2 mm walls make the flex stiff; 100 leave its M+K solve under-converged
+
+body:
+  name: finger
+  geometry: {type: closed_tube, outer_diameter: 16 mm, inner_diameter: 8 mm, height: 40 mm, cap: 3 mm,
+             cavity_offset: [2 mm, 0 mm]}
+  material: ecoflex_00_30
+  mesh: {size: 2 mm, method: gmsh}
+  fixed: [base]
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0 kPa], [300 ms, 8 kPa], [400 ms, 8 kPa]]

@@ -8,6 +8,7 @@ from typing import ClassVar
 import mujoco
 import numpy as np
 
+from softsim.actuation import pressure_forces
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.backends.mujoco.builder import GROUND, build_spec, scene_to_mjcf
 from softsim.capabilities import Capability
@@ -32,8 +33,9 @@ class MujocoBackend(Backend):
         * Native damping is stiffness-proportional (Rayleigh beta) only. Prony
           viscoelasticity: the flex carries the long-term law and the Maxwell-branch
           overstresses (``softsim.materials.viscoelastic``) are explicit vertex forces.
-        * Adhesion and the Prony overstress are applied as explicit external forces
-          (``xfrc_applied``) on vertices and rigid bodies, recomputed every step.
+        * Adhesion, the Prony overstress and pressure actuators are applied as explicit
+          external forces (``xfrc_applied``) on vertices and rigid bodies, recomputed
+          every step.
     """
 
     name: ClassVar[str] = "mujoco"
@@ -51,10 +53,12 @@ class MujocoBackend(Backend):
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
         Capability.VISCOELASTIC_PRONY,
+        Capability.PRESSURE_ACTUATION,
     })
 
     def __init__(self) -> None:
         self._scene: Scene | None = None
+        self._pressure: list = []
         self.spec: mujoco.MjSpec | None = None
         self.model: mujoco.MjModel | None = None
         self.data: mujoco.MjData | None = None
@@ -82,6 +86,7 @@ class MujocoBackend(Backend):
     def build(self, scene: Scene) -> None:
         self.check(scene)
         self._scene = scene
+        self._clear_controls()
         native = native_scene(scene)  # Prony cards: the long-term law; overstresses are added each step
         self.mjcf = scene_to_mjcf(native)
         self.spec = build_spec(native, self.mjcf)
@@ -130,6 +135,11 @@ class MujocoBackend(Backend):
                 adr, num, bodies, dofs = self._flex[body.name]
                 overstress = PronyOverstress(body.material, body.mesh.points, body.mesh.tets)
                 self._prony.append((overstress, adr + np.arange(num), bodies, dofs[:, 0] >= 0))
+        self._pressure = []
+        for a in self._scene.actuators:
+            adr, num, bodies, dofs = self._flex[a.body]
+            self._pressure.append((a.name, self._scene.soft(a.body).region(a.region), adr + np.arange(num), bodies,
+                                   dofs[:, 0] >= 0))
         self._adhesion = adhesion_fields(self._scene)
         self._adhesion_bodies = {}
         for f in self._adhesion:
@@ -156,7 +166,7 @@ class MujocoBackend(Backend):
         mujoco.mj_forward(m, d)
 
     def step(self, n: int = 1) -> None:
-        if not self._adhesion and not self._prony:
+        if not self._adhesion and not self._prony and not self._pressure:
             mujoco.mj_step(self.model, self.data, nstep=n)
             return
         for _ in range(n):
@@ -164,13 +174,16 @@ class MujocoBackend(Backend):
             mujoco.mj_step(self.model, self.data)
 
     def _apply_external(self) -> None:
-        """Recompute the explicit forces (adhesion, Prony overstress) from the current state into
-        ``xfrc_applied``."""
+        """Recompute the explicit forces (adhesion, Prony overstress, pressure) from the current state
+        into ``xfrc_applied``."""
         d = self.data
         d.xfrc_applied[:] = 0.0
         dt = self.model.opt.timestep
         for overstress, rows, bodies, movable in self._prony:
             f = overstress.forces(d.flexvert_xpos[rows], dt)
+            np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
+        for name, tris, rows, bodies, movable in self._pressure:
+            f = pressure_forces(d.flexvert_xpos[rows], tris, self.control(name))
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
         self._apply_adhesion()
 
@@ -246,7 +259,7 @@ class MujocoBackend(Backend):
             rot = d.xmat[bodies[free]].reshape(-1, 3, 3)
             velocities[free] = np.einsum("nij,nj->ni", rot, d.qvel[dofs[free]])
             soft[name] = SoftState(vertices.copy(), velocities)
-        return SimState(float(d.time), rigid, soft, self._contacts())
+        return SimState(float(d.time), rigid, soft, self._contacts(), self.controls())
 
     def _owner(self, geom: int, flex: int) -> str:
         # geom/flex ids are -1 when unused: never index with them

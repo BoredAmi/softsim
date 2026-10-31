@@ -20,6 +20,11 @@ Parameters (all optional):
                     (hold/stop); in loop mode only on ~/save
     viewer          open the MuJoCo passive viewer (false)
 
+Actuators (e.g. the inflation scenario's pressure): ``~/actuators/<name>/command``
+(std_msgs/Float64, SI units) holds that value from the next step on; NaN returns
+the actuator to its schedule. ``~/actuators/<name>/state`` publishes the value in
+effect. A rebuild (reset of a changed config, set_material, action) clears commands.
+
 The node publishes simulated time on /clock; it does not itself use sim time
 (its stepping timer runs on the steady clock). Published stamps stay monotonic
 across resets/loops (an offset accumulates), so TF and RViz never see time jump
@@ -111,6 +116,7 @@ class SoftSimNode(Node):
         self.rigid_markers_pub = self.create_publisher(MarkerArray, "~/rigid_markers", LATCHED)
         self.soft_markers_pub = self.create_publisher(MarkerArray, "~/soft_markers", 10)
         self.pose_pubs, self.twist_pubs, self.cloud_pubs, self.soft_state_pubs, self.metric_pubs = {}, {}, {}, {}, {}
+        self.actuator_pubs, self.actuator_subs = {}, {}
 
         self.create_service(Trigger, "~/reset", self._srv_reset)
         self.create_service(SetBool, "~/set_paused", self._srv_paused)
@@ -157,6 +163,12 @@ class SoftSimNode(Node):
                 if self.publish_soft_state:
                     self.soft_state_pubs[body.name] = self.create_publisher(
                         SoftBodyState, f"~/soft/{body.name}/state", 10)
+        for actuator in scene.actuators:
+            name = actuator.name
+            if name not in self.actuator_pubs:
+                self.actuator_pubs[name] = self.create_publisher(Float64, f"~/actuators/{name}/state", 10)
+                self.actuator_subs[name] = self.create_subscription(
+                    Float64, f"~/actuators/{name}/command", lambda msg, name=name: self._on_command(name, msg), 10)
         self.surface = conv.surface(scene)
         if self.last_stamp >= 0:
             self.time_offset = self.last_stamp + self.sim.config.simulation.timestep - self.sim.time
@@ -244,6 +256,9 @@ class SoftSimNode(Node):
             if name in self.soft_state_pubs:
                 self.soft_state_pubs[name].publish(conv.soft_body_state(name, s.vertices, s.velocities, f, t))
         self.soft_markers_pub.publish(soft_markers)
+        for name, value in state.controls.items():
+            if name in self.actuator_pubs:
+                self.actuator_pubs[name].publish(Float64(data=float(value)))
         self.contacts_pub.publish(conv.contact_array(state.contacts, f, t))
         self.ground_pub.publish(conv.ground_reaction(state.contacts, f, t))
         metrics = metrics if metrics is not None else self.sim.scenario.metrics(state)
@@ -269,6 +284,15 @@ class SoftSimNode(Node):
         self.status_pub.publish(msg)
 
     # -- services ----------------------------------------------------------------
+
+    def _on_command(self, name: str, msg: Float64) -> None:
+        backend = self.sim.backend
+        if not any(a.name == name for a in backend.scene.actuators):
+            self.get_logger().warning(f"actuator {name!r} is not in the current scene; command ignored")
+        elif msg.data != msg.data:  # NaN
+            backend.release_control(name)
+        else:
+            backend.set_control(name, msg.data)
 
     def _guard(self, response, fn, ok_message: str):
         try:

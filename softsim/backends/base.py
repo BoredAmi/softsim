@@ -8,6 +8,11 @@ A backend owns one compiled model at a time. Lifecycle::
     backend.step(n)           # advance n physics steps
     state = backend.state()   # SimState snapshot (copies, safe to keep)
     backend.reset()           # back to the initial condition
+
+Actuators follow their schedules unless a controller sets them:
+``backend.set_control("pressure", 20e3)`` holds that value from the next step on
+(until ``release_control`` or a new ``build``); ``backend.control(name)`` is the
+value in effect.
 """
 
 from __future__ import annotations
@@ -77,6 +82,7 @@ class SimState:
     rigid: dict[str, RigidState] = field(default_factory=dict)
     soft: dict[str, SoftState] = field(default_factory=dict)
     contacts: list[ContactWrench] = field(default_factory=list)
+    controls: dict[str, float] = field(default_factory=dict)  # actuator values in effect
 
     def contact_between(self, a: str, b: str) -> ContactWrench | None:
         """Aggregated contact between ``a`` and ``b``, oriented as force by ``a`` on ``b``."""
@@ -168,6 +174,29 @@ class Backend(ABC):
         s = self.state()
         arrays = [r.position for r in s.rigid.values()] + [v.vertices for v in s.soft.values()]
         return all(np.isfinite(a).all() for a in arrays)
+
+    def set_control(self, name: str, value: float) -> None:
+        """Override actuator ``name`` with ``value`` (SI) from the next step on."""
+        self.scene.actuator(name)
+        self.__dict__.setdefault("_control_overrides", {})[name] = float(value)
+
+    def release_control(self, name: str) -> None:
+        """Return actuator ``name`` to its schedule."""
+        self.__dict__.get("_control_overrides", {}).pop(name, None)
+
+    def control(self, name: str, t: float | None = None) -> float:
+        """Value of actuator ``name`` at time ``t`` (default: now): the override, else its schedule."""
+        overrides = self.__dict__.get("_control_overrides", {})
+        if name in overrides:
+            return overrides[name]
+        return self.scene.actuator(name).value(self.time if t is None else t)
+
+    def controls(self) -> dict[str, float]:
+        """Every actuator's current value."""
+        return {a.name: self.control(a.name) for a in self.scene.actuators}
+
+    def _clear_controls(self) -> None:
+        self.__dict__.pop("_control_overrides", None)
 
     def set_material(self, body_name: str, material: Material) -> None:
         """Replace a soft body's material; the model is rebuilt and reset."""

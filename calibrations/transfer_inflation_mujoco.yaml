@@ -1,0 +1,17 @@
+# Transfer of a physical Neo-Hookean card (E 30 kPa, nu 0.45) to MuJoCo at 3 mm for pressure
+# actuation: which MuJoCo modulus inflates the hollow sphere like the locking-free reference?
+# Fitted on the 3 kPa cavity volume history; checked on 1.5 kPa (small strain) and 4.5 kPa
+# (larger strain), which the fit never saw.
+#   softsim transfer calibrations/transfer_inflation_mujoco.yaml       (~30 min)
+config: ../scenarios/inflation/hollow_sphere.yaml
+backend: mujoco
+overrides: [body.mesh.size=3mm, output.save_model=false]
+reference: {backend: fem, overrides: [simulation.timestep=2ms]}
+observables: {cavity_volume: 1.0}
+parameters:
+  body.material.elastic.youngs_modulus: {initial: 30 kPa, bounds: [10 kPa, 40 kPa], log: true}
+checks:
+  p_1.5kPa: ["actuators[0].schedule=[[0, 0], [0.15, 1500], [0.25, 1500]]"]
+  p_4.5kPa: ["actuators[0].schedule=[[0, 0], [0.15, 4500], [0.25, 4500]]"]
+max_evaluations: 12
+output: ../runs/transfer/inflation_mujoco_3mm

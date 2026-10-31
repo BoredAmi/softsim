@@ -190,6 +190,7 @@ tests/
 - [ROS 2 integration](docs/ros2.md)
 - [Experiments: video tracking and calibration](docs/experiments.md)
 - [Validation: predictions on data the model never saw](docs/validation.md)
+- [Actuation: regions, pressure actuators, verification against the exact thick sphere](docs/actuation.md)
 - [Moving to a faster machine: setup, data to copy, long jobs](docs/new_machine.md)
 
 ## Data and citation

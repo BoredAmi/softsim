@@ -18,8 +18,11 @@ Mapping:
       reference's static punch is identical at mu = 1 and sticking, docs/reference_fem.md,
       and sticking keeps Newton fast), otherwise Coulomb regularised over 1 um of slip per
       step; adhesion from the material (soft-rigid) and ``ground.adhesion``.
+    * pressure actuators: the potential ``-p V`` of the volume the region encloses, on the
+      quadratic faces (exact follower load, softsim.actuation), at the end-of-step value of the
+      control; the region must be closed (or bounded only by pinned vertices).
 Refused: several soft bodies, linear, StVK, Rayleigh/Kelvin-Voigt damping (use
-Prony), self-collision, torsional/rolling friction.
+Prony), self-collision, torsional/rolling friction, open pressure regions.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from typing import ClassVar
 
 import numpy as np
 
+from softsim.actuation import open_edges
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.errors import StabilityError
@@ -75,6 +79,7 @@ class FemBackend(Backend):
         Capability.CONTACT_FRICTION,
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
+        Capability.PRESSURE_ACTUATION,
     })
 
     def __init__(self) -> None:
@@ -88,6 +93,12 @@ class FemBackend(Backend):
             out.append(f"exactly one soft body (got {len(scene.soft_bodies)})")
         if any(b.self_collision for b in scene.soft_bodies):
             out.append("soft-body self-collision")
+        for a in scene.actuators:
+            body = scene.soft(a.body)
+            loose = set(open_edges(body.region(a.region)).ravel().tolist()) - set(body.pinned)
+            if loose:
+                out.append(f"actuator {a.name!r}: region {a.region!r} is open ({len(loose)} unpinned boundary "
+                           "vertices); the reference applies pressure exactly only to closed regions")
         return out
 
     # -- build ---------------------------------------------------------------------------------
@@ -99,6 +110,7 @@ class FemBackend(Backend):
 
         self.check(scene)
         self._scene = scene
+        self._clear_controls()
         body = scene.soft_bodies[0]
         rot = quat_to_matrix(body.pose.quaternion)
         points = body.mesh.points @ rot.T + np.asarray(body.pose.position, float)
@@ -132,7 +144,8 @@ class FemBackend(Backend):
             ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))) if int(t[i]) in pins and int(t[j]) in pins})
         self._problem = Problem3D(mesh, law, kappa, body.effective_density, prony=prony,
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
-                                  pinned=np.array(pinned, int))
+                                  pinned=np.array(pinned, int),
+                                  pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in scene.actuators))
         self._names = [GROUND_NAME] * scene.ground.enabled + [rb.name for rb in scene.rigid_bodies]
         self._solver_cls = Solid3DSolver
         self.solver = Solid3DSolver(self._problem)
@@ -146,6 +159,8 @@ class FemBackend(Backend):
     def step(self, n: int = 1) -> None:
         dt = self._scene.simulation.timestep
         for _ in range(n):
+            for k, a in enumerate(self._scene.actuators):
+                self.solver.pressures[k] = self.control(a.name, self.solver.t + dt)
             if not self.solver.advance(dt):
                 raise StabilityError(f"fem: Newton did not converge at t = {self.solver.t:.6f} s even with "
                                      f"{dt / 16:.2e} s substeps")
@@ -180,7 +195,7 @@ class FemBackend(Backend):
             com_world = r @ np.asarray(rb.com, float)
             rigid[name] = RigidState(position=c - com_world, quaternion=_matrix_to_quat(r),
                                      linear_velocity=lin - np.cross(ang, com_world), angular_velocity=ang, com=c)
-        return SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts)
+        return SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls())
 
     def is_finite(self) -> bool:
         return self.solver is not None and bool(np.all(np.isfinite(self.solver.y)))

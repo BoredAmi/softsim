@@ -1,0 +1,24 @@
+# Default inflation scenario (ROS: -p scenario:=inflation).
+# Balloon actuator: an Ecoflex 00-30 closed tube bonded to the table at its base,
+# inflated in steps. The cavity's pressure-volume curve and the elongation are
+# the outputs.
+scenario: inflation
+description: Ecoflex 00-30 balloon actuator (20/12 mm tube, 50 mm tall) inflated to 6 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 400 ms
+  output_rate: 1 kHz
+
+body:
+  name: balloon
+  geometry: {type: closed_tube, outer_diameter: 20 mm, inner_diameter: 12 mm, height: 50 mm, cap: 4 mm}
+  material: ecoflex_00_30
+  mesh: {size: 3 mm, method: gmsh}
+  fixed: [base]
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0 kPa], [100 ms, 3 kPa], [200 ms, 3 kPa], [300 ms, 6 kPa], [400 ms, 6 kPa]]

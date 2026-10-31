@@ -80,14 +80,22 @@ def _split_index(key: str) -> tuple[str, int | None]:
     return key, None
 
 
+def _mapping(child: Any) -> dict[str, Any]:
+    if isinstance(child, str):
+        return {"preset": child}  # expand a preset reference instead of discarding it
+    return child if isinstance(child, dict) else {}
+
+
 def _set_path(node: dict[str, Any], keys: list[str], value: Any) -> None:
     for k in keys[:-1]:
-        child = node.get(k)
-        if isinstance(child, str):
-            child = {"preset": child}  # expand a preset reference instead of discarding it
-        elif not isinstance(child, dict):
-            child = {}
-        node[k] = child
+        name, idx = _split_index(k)  # "actuators[0]" steps into a list item
+        if idx is None:
+            node[name] = child = _mapping(node.get(name))
+        else:
+            items = list(node.get(name) or [])
+            items.extend([None] * (idx + 1 - len(items)))
+            items[idx] = child = _mapping(items[idx])
+            node[name] = items
         node = child
     name, idx = _split_index(keys[-1])
     if idx is None:
