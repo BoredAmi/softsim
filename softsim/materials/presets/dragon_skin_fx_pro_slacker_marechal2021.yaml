@@ -1,0 +1,89 @@
+name: dragon_skin_fx_pro_slacker_marechal2021
+description: Smooth-On Dragon Skin FX-Pro with Slacker, fitted to uniaxial test data
+  (Soft Robotics Materials Database (uniaxial tension, ASTM D412)).
+source: 'Fitted by softsim fit-material to marechal2021_srmd (doi:10.5281/zenodo.3931808),
+  uniaxial 0-200% strain. Strain measurement: crosshead displacement over the 33 mm
+  gauge length (global; overstates gauge strain). Density: not in the dataset: typical
+  platinum silicone (1.07 g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 110446.96590152069
+  model: gent
+  mu: 2223.7644141245796
+  jm: 27.53489941511822
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - 0.0
+  - 2.0
+  strain_rate:
+  - 0.2272708204897643
+  - 0.2272708204897643
+uncertainty:
+  elastic.mu:
+    rel: 0.010634916375483527
+    dist: normal
+  elastic.jm:
+    rel: 0.05824806289314197
+    dist: normal
+references:
+- doi: 10.1089/soro.2019.0115
+  note: test method and material list
+- doi: 10.5281/zenodo.3931808
+  note: 'data: Soft Robotics Materials Database (uniaxial tension, ASTM D412) (ODbL-1.0
+    (database), DbCL-1.0 (contents))'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: marechal2021_srmd
+  dataset_doi: 10.5281/zenodo.3931808
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  caveat: 'crosshead (global) strain: moduli are likely ~3x too low; tension only,
+    compression and rate dependence are not measured'
+  law: gent
+  strain_range:
+  - 0.0
+  - 2.0
+  nrmse: 0.024281137077766905
+  max_error: 0.08213117061327196
+  laws_compared:
+    ogden1:
+      nrmse: 0.02134
+      max_error: 0.06889
+      bic: -645.1
+      stable: true
+    ogden2:
+      nrmse: 0.02134
+      max_error: 0.06889
+      bic: -636.3
+      stable: true
+    gent:
+      nrmse: 0.02428
+      max_error: 0.08213
+      bic: -623.2
+      stable: true
+    arruda_boyce:
+      nrmse: 0.02468
+      max_error: 0.08325
+      bic: -620.4
+      stable: true
+    neo_hookean:
+      nrmse: 0.04797
+      max_error: 0.1133
+      bic: -511.9
+      stable: true
+    mooney_rivlin:
+      nrmse: 0.02186
+      max_error: 0.06847
+      bic: -641.0
+      stable: false
+    yeoh:
+      nrmse: 0.0215
+      max_error: 0.06857
+      bic: -639.5
+      stable: false

@@ -4,37 +4,118 @@ A :class:`Material` combines density, an elastic constitutive model, optional
 damping, surface friction and optional surface adhesion (tack). Each model declares the capabilities it needs
 (``requires``) so backends can reject what they cannot simulate.
 
+A material is also a *card*: ``kind`` says whether its numbers describe the
+physical material (``physical``, backend independent) or are effective values
+of one backend, mesh and contact model (``effective``, e.g. the output of a
+drop-test calibration); ``validity``, ``uncertainty`` and ``references`` say
+where the numbers hold, how well they are known and where they come from.
+
 All elastic models expose small-strain equivalents (``initial_youngs_modulus``,
-``initial_poisson_ratio``). These are used by stability checks and analytic
-tests, never as a silent substitute for the requested model.
+``initial_poisson_ratio``, ``initial_shear_modulus``, ``initial_bulk_modulus``).
+These are used by stability checks and analytic tests, never as a silent
+substitute for the requested model. Isotropic E/nu models accept any two of
+``youngs_modulus``, ``poisson_ratio``, ``shear_modulus``, ``bulk_modulus``, and
+the hyperelastic families ``poisson_ratio`` instead of ``bulk_modulus``; the
+card stores the canonical pair.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Annotated, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, Iterable, Literal, Union
 
 from pydantic import Field, model_validator
 
 from softsim.capabilities import Capability
-from softsim.config.schema import StrictModel
-from softsim.config.units import Density, Length, Pressure, Time
+from softsim.config.schema import StrictModel, validate
+from softsim.config.units import (
+    Density,
+    Length,
+    Pressure,
+    Rate,
+    StrainRate,
+    Temperature,
+    Time,
+    Viscosity,
+    parse_quantity,
+)
 
 PoissonRatio = Annotated[float, Field(gt=-1.0, lt=0.5)]
 NonNegative = Annotated[float, Field(ge=0.0)]
 
 
-class _IsotropicEnu(StrictModel):
-    """Models parametrised by Young's modulus and Poisson's ratio."""
+_ISOTROPIC_CONSTANTS = ("youngs_modulus", "poisson_ratio", "shear_modulus", "bulk_modulus")
+
+
+def isotropic_e_nu(given: dict[str, float]) -> tuple[float, float]:
+    """(E, nu) from any two of youngs_modulus, poisson_ratio, shear_modulus, bulk_modulus (SI)."""
+    e, nu, mu, k = (given.get(n) for n in _ISOTROPIC_CONSTANTS)
+    if e is not None and nu is not None:
+        return e, nu
+    if mu is not None and nu is not None:
+        return 2.0 * mu * (1.0 + nu), nu
+    if k is not None and nu is not None:
+        return 3.0 * k * (1.0 - 2.0 * nu), nu
+    if e is not None and mu is not None:
+        return e, e / (2.0 * mu) - 1.0
+    if e is not None and k is not None:
+        return e, (3.0 * k - e) / (6.0 * k)
+    if mu is not None and k is not None:
+        return 9.0 * k * mu / (3.0 * k + mu), (3.0 * k - 2.0 * mu) / (2.0 * (3.0 * k + mu))
+    raise ValueError(f"give exactly two of {', '.join(_ISOTROPIC_CONSTANTS)}")
+
+
+def _elastic_constant(name: str, raw: Any) -> float:
+    return float(raw) if name == "poisson_ratio" else parse_quantity(raw, "pressure")
+
+
+class _Elastic(StrictModel):
+    """Small-strain equivalents shared by all elastic models."""
+
+    def initial_shear_modulus(self) -> float:
+        raise NotImplementedError
+
+    def initial_bulk_modulus(self) -> float:
+        raise NotImplementedError
+
+    def initial_youngs_modulus(self) -> float:
+        mu, k = self.initial_shear_modulus(), self.initial_bulk_modulus()
+        return 9.0 * k * mu / (3.0 * k + mu)
+
+    def initial_poisson_ratio(self) -> float:
+        mu, k = self.initial_shear_modulus(), self.initial_bulk_modulus()
+        return (3.0 * k - 2.0 * mu) / (2.0 * (3.0 * k + mu))
+
+
+class _IsotropicEnu(_Elastic):
+    """Models parametrised by Young's modulus and Poisson's ratio (or any two isotropic constants)."""
 
     youngs_modulus: Annotated[Pressure, Field(gt=0)]
     poisson_ratio: PoissonRatio
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_any_two(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or not {"shear_modulus", "bulk_modulus"} & data.keys():
+            return data
+        data = dict(data)
+        given = {n: _elastic_constant(n, data.pop(n)) for n in _ISOTROPIC_CONSTANTS if n in data}
+        if len(given) != 2:
+            raise ValueError(f"give exactly two of {', '.join(_ISOTROPIC_CONSTANTS)}, got {', '.join(given)}")
+        data["youngs_modulus"], data["poisson_ratio"] = isotropic_e_nu(given)
+        return data
 
     def initial_youngs_modulus(self) -> float:
         return self.youngs_modulus
 
     def initial_poisson_ratio(self) -> float:
         return self.poisson_ratio
+
+    def initial_shear_modulus(self) -> float:
+        return self.youngs_modulus / (2.0 * (1.0 + self.poisson_ratio))
+
+    def initial_bulk_modulus(self) -> float:
+        return self.youngs_modulus / (3.0 * (1.0 - 2.0 * self.poisson_ratio))
 
 
 class LinearElastic(_IsotropicEnu):
@@ -86,21 +167,40 @@ class StableNeoHookean(_IsotropicEnu):
         return self.youngs_modulus / (2.0 * (1.0 + self.poisson_ratio))
 
 
-class _BulkHyperelastic(StrictModel):
-    """Hyperelastic models with an explicit bulk modulus for the volumetric part."""
+class _BulkHyperelastic(_Elastic):
+    """Hyperelastic models with an explicit bulk modulus for the volumetric part.
+
+    ``poisson_ratio`` may be given instead of ``bulk_modulus``; it is converted
+    with the law's initial shear modulus (K = 2 mu0 (1 + nu) / (3 (1 - 2 nu))).
+    """
 
     bulk_modulus: Annotated[Pressure, Field(gt=0)]
 
-    def _shear_modulus(self) -> float:
+    @model_validator(mode="before")
+    @classmethod
+    def _bulk_from_poisson(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or "poisson_ratio" not in data:
+            return data
+        data = dict(data)
+        nu = float(data.pop("poisson_ratio"))
+        if "bulk_modulus" in data:
+            raise ValueError("give bulk_modulus or poisson_ratio, not both")
+        if not -1.0 < nu < 0.5:
+            raise ValueError(f"poisson_ratio must be in (-1, 0.5), got {nu}")
+        try:
+            mu = cls._raw_shear_modulus(data)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"poisson_ratio needs the law's shear parameters to give bulk_modulus ({exc})") from None
+        data["bulk_modulus"] = 2.0 * mu * (1.0 + nu) / (3.0 * (1.0 - 2.0 * nu))
+        return data
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        """Initial shear modulus from unvalidated parameters (for the poisson_ratio input)."""
         raise NotImplementedError
 
-    def initial_youngs_modulus(self) -> float:
-        mu, k = self._shear_modulus(), self.bulk_modulus
-        return 9.0 * k * mu / (3.0 * k + mu)
-
-    def initial_poisson_ratio(self) -> float:
-        mu, k = self._shear_modulus(), self.bulk_modulus
-        return (3.0 * k - 2.0 * mu) / (2.0 * (3.0 * k + mu))
+    def initial_bulk_modulus(self) -> float:
+        return self.bulk_modulus
 
 
 class MooneyRivlin(_BulkHyperelastic):
@@ -111,8 +211,12 @@ class MooneyRivlin(_BulkHyperelastic):
     c01: Pressure
     requires: ClassVar[frozenset[Capability]] = frozenset({Capability.MOONEY_RIVLIN})
 
-    def _shear_modulus(self) -> float:
+    def initial_shear_modulus(self) -> float:
         return 2.0 * (self.c10 + self.c01)
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        return 2.0 * (_p(data["c10"]) + _p(data["c01"]))
 
     @model_validator(mode="after")
     def _positive_shear(self) -> "MooneyRivlin":
@@ -133,8 +237,12 @@ class Yeoh(_BulkHyperelastic):
     c30: Pressure = 0.0
     requires: ClassVar[frozenset[Capability]] = frozenset({Capability.YEOH})
 
-    def _shear_modulus(self) -> float:
+    def initial_shear_modulus(self) -> float:
         return 2.0 * self.c10
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        return 2.0 * _p(data["c10"])
 
 
 class Ogden(_BulkHyperelastic):
@@ -145,20 +253,82 @@ class Ogden(_BulkHyperelastic):
     alpha: list[float] = Field(min_length=1)
     requires: ClassVar[frozenset[Capability]] = frozenset({Capability.OGDEN})
 
-    def _shear_modulus(self) -> float:
+    def initial_shear_modulus(self) -> float:
         return 0.5 * sum(m * a for m, a in zip(self.mu, self.alpha))
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        return 0.5 * sum(_p(m) * float(a) for m, a in zip(data["mu"], data["alpha"]))
 
     @model_validator(mode="after")
     def _matching_terms(self) -> "Ogden":
         if len(self.mu) != len(self.alpha):
             raise ValueError("mu and alpha must have the same length")
-        if self._shear_modulus() <= 0:
+        if self.initial_shear_modulus() <= 0:
             raise ValueError("initial shear modulus 0.5*sum(mu*alpha) must be positive")
         return self
 
 
+class Gent(_BulkHyperelastic):
+    """Gent: W = -(mu J_m / 2) ln(1 - (I1 - 3) / J_m) + volumetric.
+
+    Neo-Hookean with shear modulus ``mu`` at small strain, stiffening without
+    bound as I1 - 3 approaches the limiting extensibility ``jm`` (finite chain
+    length). A two-parameter alternative to Yeoh for silicones that stiffen at
+    large stretch.
+    """
+
+    model: Literal["gent"] = "gent"
+    mu: Annotated[Pressure, Field(gt=0)]
+    jm: Annotated[float, Field(gt=0)]
+    requires: ClassVar[frozenset[Capability]] = frozenset({Capability.GENT})
+
+    def initial_shear_modulus(self) -> float:
+        return self.mu
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        return _p(data["mu"])
+
+
+ARRUDA_BOYCE_C = (1 / 2, 1 / 20, 11 / 1050, 19 / 7000, 519 / 673750)
+
+
+def arruda_boyce_shear_factor(lambda_m: float) -> float:
+    """Initial shear modulus over ``mu`` for the five-term Arruda-Boyce series."""
+    return sum(2.0 * i * c * 3.0 ** (i - 1) / lambda_m ** (2 * i - 2) for i, c in enumerate(ARRUDA_BOYCE_C, 1))
+
+
+class ArrudaBoyce(_BulkHyperelastic):
+    """Arruda-Boyce eight-chain model, five-term series (the Abaqus form)::
+
+        W = mu * sum_i C_i / lambda_m^(2i-2) * (I1^i - 3^i) + volumetric,
+        C = 1/2, 1/20, 11/1050, 19/7000, 519/673750
+
+    ``lambda_m`` is the locking (chain) stretch. The initial shear modulus is
+    ``mu`` times 1 + 3/(5 lambda_m^2) + ... (``initial_shear_modulus``), close
+    to ``mu`` for large ``lambda_m``.
+    """
+
+    model: Literal["arruda_boyce"] = "arruda_boyce"
+    mu: Annotated[Pressure, Field(gt=0)]
+    lambda_m: Annotated[float, Field(gt=1)]
+    requires: ClassVar[frozenset[Capability]] = frozenset({Capability.ARRUDA_BOYCE})
+
+    def initial_shear_modulus(self) -> float:
+        return self.mu * arruda_boyce_shear_factor(self.lambda_m)
+
+    @classmethod
+    def _raw_shear_modulus(cls, data: dict[str, Any]) -> float:
+        return _p(data["mu"]) * arruda_boyce_shear_factor(float(data["lambda_m"]))
+
+
+def _p(raw: Any) -> float:
+    return parse_quantity(raw, "pressure")
+
+
 HyperelasticMatrix = Annotated[
-    Union[NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden], Field(discriminator="model")
+    Union[NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden, Gent, ArrudaBoyce], Field(discriminator="model")
 ]
 
 
@@ -182,10 +352,16 @@ class MagnetoActive(StrictModel):
     def initial_poisson_ratio(self) -> float:
         return self.matrix.initial_poisson_ratio()
 
+    def initial_shear_modulus(self) -> float:
+        return self.matrix.initial_shear_modulus()
+
+    def initial_bulk_modulus(self) -> float:
+        return self.matrix.initial_bulk_modulus()
+
 
 ElasticModel = Annotated[
-    Union[LinearElastic, StVenantKirchhoff, NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden,
-          MagnetoActive],
+    Union[LinearElastic, StVenantKirchhoff, NeoHookean, StableNeoHookean, MooneyRivlin, Yeoh, Ogden, Gent,
+          ArrudaBoyce, MagnetoActive],
     Field(discriminator="model"),
 ]
 
@@ -199,7 +375,7 @@ class RayleighDamping(StrictModel):
     """
 
     model: Literal["rayleigh"] = "rayleigh"
-    alpha: Annotated[float, Field(ge=0)] = 0.0
+    alpha: Annotated[Rate, Field(ge=0)] = 0.0
     beta: Annotated[Time, Field(ge=0)] = 0.0
 
     @property
@@ -220,7 +396,7 @@ class KelvinVoigt(StrictModel):
     """
 
     model: Literal["kelvin_voigt"] = "kelvin_voigt"
-    viscosity: Annotated[float, Field(ge=0)]  # Pa*s
+    viscosity: Annotated[Viscosity, Field(ge=0)]
     requires: ClassVar[frozenset[Capability]] = frozenset(
         {Capability.DAMPING_STIFFNESS_PROPORTIONAL}
     )
@@ -302,30 +478,114 @@ class Adhesion(StrictModel):
         return frozenset({Capability.CONTACT_ADHESION})
 
 
+class Validity(StrictModel):
+    """Where a card's numbers were measured or fitted; runs outside are warned about.
+
+    ``strain`` is the nominal uniaxial strain range of the data (negative =
+    compression), ``strain_rate`` its range of strain rates, ``temperature``
+    the test temperature.
+    """
+
+    strain: tuple[float, float] | None = None
+    strain_rate: tuple[Annotated[StrainRate, Field(ge=0)], Annotated[StrainRate, Field(ge=0)]] | None = None
+    temperature: Annotated[Temperature, Field(gt=0)] | None = None
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "Validity":
+        for name in ("strain", "strain_rate"):
+            lo_hi = getattr(self, name)
+            if lo_hi is not None and lo_hi[0] > lo_hi[1]:
+                raise ValueError(f"{name} range must be [low, high], got {list(lo_hi)}")
+        return self
+
+
+class ParameterUncertainty(StrictModel):
+    """How well one parameter is known: ``rel`` (fraction) or ``abs`` (in the parameter's unit).
+
+    For ``normal`` and ``lognormal`` it is one standard deviation, for
+    ``uniform`` the half-width of the interval.
+    """
+
+    rel: Annotated[float, Field(gt=0)] | None = None
+    abs: Annotated[float, Field(gt=0)] | str | None = None
+    dist: Literal["normal", "lognormal", "uniform"] = "normal"
+
+    @model_validator(mode="after")
+    def _one_of(self) -> "ParameterUncertainty":
+        if (self.rel is None) == (self.abs is None):
+            raise ValueError("give exactly one of rel, abs")
+        return self
+
+
+class Reference(StrictModel):
+    """A source for a card's numbers."""
+
+    doi: str | None = None
+    url: str | None = None
+    note: str = ""
+
+
 class Material(StrictModel):
-    """A complete soft material description.
+    """A complete soft material description (a material card).
 
     Attributes:
         name: Identifier (preset name for presets).
         description: Free text.
         source: Where the numbers come from (datasheet, fit, paper); be honest.
+        kind: ``physical`` (meant to describe the material, independent of any
+            solver) or ``effective`` (values that reproduce data with one backend,
+            mesh and contact model only; ``provenance`` must name backend and mesh).
         density: Mass density [kg/m^3].
         elastic: Constitutive model.
         damping: Optional dissipation model.
         friction: Surface friction against other bodies.
         adhesion: Optional tack against rigid bodies (the ground has its own setting).
+        validity: Strain, strain-rate and temperature range of the underlying data.
+        uncertainty: Parameter (dotted key, as in overrides) -> uncertainty, used by
+            ``softsim.materials.sample`` and sweeps.
+        references: DOIs/URLs of the data.
         provenance: Optional metadata, e.g. the mesh/backend a fit is tied to.
     """
 
     name: str = "custom"
     description: str = ""
     source: str = "unspecified"
+    kind: Literal["physical", "effective"] = "physical"
     density: Annotated[Density, Field(gt=0)]
     elastic: ElasticModel
     damping: DampingModel | None = None
     friction: Friction = Friction()
     adhesion: Adhesion | None = None
+    validity: Validity | None = None
+    uncertainty: dict[str, ParameterUncertainty] = Field(default_factory=dict)
+    references: list[Reference] = Field(default_factory=list)
     provenance: dict[str, object] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _card(self) -> "Material":
+        if isinstance(self.damping, PronySeries) and isinstance(self.elastic, (LinearElastic, StVenantKirchhoff)):
+            raise ValueError(f"Prony viscoelasticity relaxes the isochoric (shear) part of a hyperelastic law; "
+                             f"{self.elastic.model!r} has no such split (use e.g. neo_hookean)")
+        if self.kind == "effective":
+            missing = [k for k in ("backend", "mesh_size") if not self.provenance.get(k)]
+            if missing:
+                raise ValueError(f"an effective material must name {' and '.join(missing)} in provenance "
+                                 "(its values only hold there)")
+        if self.uncertainty:
+            from softsim.config.params import find_param
+
+            for key, u in self.uncertainty.items():
+                try:
+                    param = find_param(self, key)
+                except KeyError:
+                    raise ValueError(f"uncertainty key {key!r} is not a parameter of this material") from None
+                if not isinstance(param.value, (int, float)) or isinstance(param.value, bool):
+                    raise ValueError(f"uncertainty key {key!r} is not numeric ({param.value!r})")
+                if isinstance(u.abs, str):
+                    if param.unit is None:
+                        raise ValueError(f"uncertainty of {key!r}: {u.abs!r} has a unit but the parameter has none")
+                    object.__setattr__(u, "abs", parse_quantity(u.abs, param.unit.dimension))
+        return self
 
     @property
     def requires(self) -> frozenset[Capability]:
@@ -335,3 +595,12 @@ class Material(StrictModel):
         if self.adhesion is not None:
             req |= self.adhesion.requires
         return frozenset(req)
+
+    def with_overrides(self, overrides: Iterable[str]) -> "Material":
+        """A copy with dotted ``key=value`` overrides applied, e.g. ``["elastic.c10=12 kPa",
+        "damping.tau[1]=20 ms", "elastic.model=yeoh"]`` (switching a model keeps only the
+        fields the new model understands, as for presets)."""
+        from softsim.materials.library import apply_material_overrides
+
+        data = self.model_dump(mode="json", exclude_none=True)
+        return validate(Material, apply_material_overrides(data, overrides), where=f"material {self.name!r}")

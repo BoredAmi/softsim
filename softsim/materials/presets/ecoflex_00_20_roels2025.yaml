@@ -1,0 +1,120 @@
+name: ecoflex_00_20_roels2025
+description: Smooth-On Ecoflex 00-20, fitted to uniaxial test data (A standardized
+  elastomer characterization framework for soft robotics (accompanying dataset)).
+source: 'Fitted by softsim fit-material to roels2025_elastomers (doi:10.5281/zenodo.14983287),
+  uniaxial -25-200% strain. Strain measurement: see the paper (tension to rupture,
+  compression to 25%). Density: not in the dataset: typical platinum silicone (1.07
+  g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 2249290.8112706896
+  model: yeoh
+  c10: 22643.867227557297
+  c20: -365.54412790736654
+  c30: 124.18716190332142
+damping:
+  model: prony
+  g:
+  - 0.0007301818884113059
+  - 0.00914277322986088
+  - 0.011836522642892571
+  - 0.010013145251412663
+  - 0.00820039572989836
+  - 0.004796304209338566
+  - 0.003584014666029596
+  - 0.009592687051704588
+  tau:
+  - 0.3
+  - 0.9486832980505137
+  - 2.9999999999999996
+  - 9.486832980505136
+  - 29.999999999999996
+  - 94.86832980505137
+  - 300.0000000000001
+  - 3000.0
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - -0.25
+  - 2.0
+  strain_rate:
+  - 0.0
+  - 0.5
+uncertainty:
+  elastic.c10:
+    rel: 0.004411714052863121
+    dist: normal
+  elastic.c20:
+    abs: 72.35983807272439
+    dist: normal
+  elastic.c30:
+    rel: 0.07205193663709436
+    dist: normal
+references:
+- doi: 10.1002/aisy.202500699
+  note: test method and material list
+- doi: 10.5281/zenodo.14983287
+  note: 'data: A standardized elastomer characterization framework for soft robotics
+    (accompanying dataset) (CC-BY-4.0)'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: roels2025_elastomers
+  dataset_doi: 10.5281/zenodo.14983287
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  specimens:
+    tension: 10
+    compression: 3
+  caveat: elastic law = response at the test rates (~0.4/s); the Prony series covers
+    1 s to 3 h (compression relaxation); faster relaxation (impacts, ms) is not measured
+  law: yeoh
+  strain_range:
+  - -0.25
+  - 2.0
+  nrmse: 0.0857670748796052
+  max_error: 0.2385507076944997
+  laws_compared:
+    ogden2:
+      nrmse: 0.08468
+      max_error: 0.22246
+      bic: -9598.4
+      stable: true
+    yeoh:
+      nrmse: 0.08577
+      max_error: 0.23855
+      bic: -9556.1
+      stable: true
+    arruda_boyce:
+      nrmse: 0.08789
+      max_error: 0.25269
+      bic: -9468.2
+      stable: true
+    gent:
+      nrmse: 0.0882
+      max_error: 0.25678
+      bic: -9454.6
+      stable: true
+    ogden1:
+      nrmse: 0.09452
+      max_error: 0.30995
+      bic: -9184.6
+      stable: true
+    neo_hookean:
+      nrmse: 0.11027
+      max_error: 0.40779
+      bic: -8591.1
+      stable: true
+    mooney_rivlin:
+      nrmse: 0.10101
+      max_error: 0.34764
+      bic: -8925.7
+      stable: false
+  relaxation:
+    window: 1 s to 3 h after the stress peak
+    rms: 0.0001064915417616344
+    total_relaxation: 0.05789602466954853

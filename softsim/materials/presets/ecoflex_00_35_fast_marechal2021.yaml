@@ -1,0 +1,93 @@
+name: ecoflex_00_35_fast_marechal2021
+description: Smooth-On Ecoflex 00-35 FAST, fitted to uniaxial test data (Soft Robotics
+  Materials Database (uniaxial tension, ASTM D412)).
+source: 'Fitted by softsim fit-material to marechal2021_srmd (doi:10.5281/zenodo.3931808),
+  uniaxial 0-200% strain. Strain measurement: crosshead displacement over the 33 mm
+  gauge length (global; overstates gauge strain). Density: not in the dataset: typical
+  platinum silicone (1.07 g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 1430042.876641065
+  model: yeoh
+  c10: 14396.404798399999
+  c20: 553.0585062086766
+  c30: 4.108315972550046
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - 0.0
+  - 2.0
+  strain_rate:
+  - 0.2277041455830556
+  - 0.2277041455830556
+uncertainty:
+  elastic.c10:
+    rel: 0.0035356905407916387
+    dist: normal
+  elastic.c20:
+    rel: 0.030719249862569884
+    dist: normal
+  elastic.c30:
+    rel: 0.39061696961962133
+    dist: normal
+references:
+- doi: 10.1089/soro.2019.0115
+  note: test method and material list
+- doi: 10.5281/zenodo.3931808
+  note: 'data: Soft Robotics Materials Database (uniaxial tension, ASTM D412) (ODbL-1.0
+    (database), DbCL-1.0 (contents))'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: marechal2021_srmd
+  dataset_doi: 10.5281/zenodo.3931808
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  caveat: 'crosshead (global) strain: moduli are likely ~3x too low; tension only,
+    compression and rate dependence are not measured'
+  law: yeoh
+  strain_range:
+  - 0.0
+  - 2.0
+  nrmse: 0.00337801713585551
+  max_error: 0.01116191899059988
+  laws_compared:
+    ogden2:
+      nrmse: 0.00312
+      max_error: 0.01237
+      bic: -963.1
+      stable: true
+    yeoh:
+      nrmse: 0.00338
+      max_error: 0.01116
+      bic: -954.1
+      stable: true
+    gent:
+      nrmse: 0.00606
+      max_error: 0.01745
+      bic: -859.0
+      stable: true
+    arruda_boyce:
+      nrmse: 0.00682
+      max_error: 0.01954
+      bic: -839.1
+      stable: true
+    ogden1:
+      nrmse: 0.00882
+      max_error: 0.01865
+      bic: -795.4
+      stable: true
+    neo_hookean:
+      nrmse: 0.0576
+      max_error: 0.12715
+      bic: -480.8
+      stable: true
+    mooney_rivlin:
+      nrmse: 0.0248
+      max_error: 0.05701
+      bic: -619.6
+      stable: false

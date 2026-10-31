@@ -14,6 +14,7 @@ Pydantic field types are provided for each dimension, e.g.::
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Annotated
 
 from pydantic import BeforeValidator
@@ -31,8 +32,22 @@ _UNITS: dict[str, tuple[float, str]] = {
     "N": (1.0, "force"), "mN": (1e-3, "force"),
     "Hz": (1.0, "frequency"), "kHz": (1e3, "frequency"),
     "rad": (1.0, "angle"), "deg": (0.017453292519943295, "angle"),
+    "rad/s": (1.0, "angular_velocity"), "deg/s": (0.017453292519943295, "angular_velocity"),
     "N/m": (1.0, "stiffness"), "N/mm": (1e3, "stiffness"),
     "N*s/m": (1.0, "viscous_damping"), "Ns/m": (1.0, "viscous_damping"),
+    "1/s": (1.0, "rate"),
+    "J/m^2": (1.0, "energy_per_area"), "J/m2": (1.0, "energy_per_area"), "mJ/m^2": (1e-3, "energy_per_area"),
+    "Pa*s": (1.0, "viscosity"), "Pas": (1.0, "viscosity"), "kPa*s": (1e3, "viscosity"),
+    "K": (1.0, "temperature"), "degC": (1.0, "temperature"),
+}
+# affine units: SI value = number * factor + offset
+_OFFSETS: dict[str, float] = {"degC": 273.15}
+
+# SI unit symbol per dimension (what values are stored and printed in)
+SI_UNITS: dict[str, str] = {
+    "length": "m", "mass": "kg", "time": "s", "pressure": "Pa", "density": "kg/m^3", "velocity": "m/s",
+    "force": "N", "frequency": "Hz", "angle": "rad", "angular_velocity": "rad/s", "stiffness": "N/m", "viscous_damping": "N*s/m",
+    "rate": "1/s", "energy_per_area": "J/m^2", "viscosity": "Pa*s", "temperature": "K",
 }
 
 _QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([A-Za-z/^*0-9]+)?\s*$")
@@ -65,21 +80,39 @@ def parse_quantity(value: object, dimension: str) -> float:
     factor, dim = _UNITS[unit]
     if dim != dimension:
         raise ValueError(f"{value!r} is a {dim}, expected a {dimension}")
-    return number * factor
+    return number * factor + _OFFSETS.get(unit, 0.0)
 
 
-def _field(dimension: str):
-    return BeforeValidator(lambda v: parse_quantity(v, dimension))
+@dataclass(frozen=True)
+class Unit:
+    """Marker in a field's ``Annotated`` metadata: the field is a quantity of ``dimension``
+    (stored in SI). Lets tools such as ``softsim params`` print units."""
+
+    dimension: str
+
+    @property
+    def symbol(self) -> str:
+        return SI_UNITS[self.dimension]
 
 
-Length = Annotated[float, _field("length")]
-Mass = Annotated[float, _field("mass")]
-Time = Annotated[float, _field("time")]
-Pressure = Annotated[float, _field("pressure")]
-Density = Annotated[float, _field("density")]
-Velocity = Annotated[float, _field("velocity")]
-Force = Annotated[float, _field("force")]
-Frequency = Annotated[float, _field("frequency")]
-Angle = Annotated[float, _field("angle")]
-Stiffness = Annotated[float, _field("stiffness")]
-ViscousDamping = Annotated[float, _field("viscous_damping")]
+def _quantity(dimension: str):
+    return Annotated[float, BeforeValidator(lambda v: parse_quantity(v, dimension)), Unit(dimension)]
+
+
+Length = _quantity("length")
+Mass = _quantity("mass")
+Time = _quantity("time")
+Pressure = _quantity("pressure")
+Density = _quantity("density")
+Velocity = _quantity("velocity")
+Force = _quantity("force")
+Frequency = _quantity("frequency")
+Angle = _quantity("angle")
+AngularVelocity = _quantity("angular_velocity")
+Stiffness = _quantity("stiffness")
+ViscousDamping = _quantity("viscous_damping")
+Rate = _quantity("rate")  # 1/s: strain rates, Rayleigh alpha
+StrainRate = Rate
+EnergyPerArea = _quantity("energy_per_area")
+Viscosity = _quantity("viscosity")
+Temperature = _quantity("temperature")

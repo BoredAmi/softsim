@@ -10,6 +10,10 @@ A material reference in a config can be:
     * an inline mapping (full material), or
     * a mapping with ``preset: <name>`` plus fields to override, e.g.
       ``{preset: ecoflex_00_10, elastic: {youngs_modulus: 40 kPa}}``.
+
+Dotted overrides (``elastic.c10=12 kPa``, ``damping.tau[1]=20 ms``,
+``elastic.model=yeoh``) work on any of these through ``load_material(...,
+overrides=[...])`` or :meth:`Material.with_overrides`.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from typing import Any, Iterable, Mapping, get_args
 
 import yaml
 
-from softsim.config.loader import deep_merge, load_yaml
+from softsim.config.loader import apply_overrides, deep_merge, load_yaml, parse_override
 from softsim.config.schema import validate
 from softsim.errors import ConfigError
 from softsim.materials.models import DampingModel, ElasticModel, Material
@@ -66,17 +70,42 @@ def material_data(ref: str | Mapping[str, Any], extra: Iterable[str | Path] = ()
         preset = data.pop("preset", None)
         if preset is None:
             return data
-        base = material_data(preset, extra, base_dir)
-        # Switching a model type keeps only the inherited parameters the new model
-        # understands: stvk keeps E and nu from stable_neo_hookean, mooney_rivlin keeps none.
-        for section in ("elastic", "damping"):
-            new, old = data.get(section), base.get(section)
-            if isinstance(new, Mapping) and isinstance(old, Mapping) and "model" in new \
-                    and new["model"] != old.get("model"):
-                allowed = _model_fields(section, new["model"])
-                base[section] = {k: v for k, v in old.items() if k in allowed and k != "model"}
-        return deep_merge(base, data)
+        return merge_material(material_data(preset, extra, base_dir), data)
     raise ConfigError(f"material must be a preset name, file path or mapping, got {type(ref).__name__}")
+
+
+def merge_material(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str, Any]:
+    """``base`` (raw material mapping) updated with ``update``.
+
+    Switching a section's model keeps only the inherited parameters the new
+    model understands: stvk keeps E and nu from stable_neo_hookean,
+    mooney_rivlin keeps none, except that going from an E/nu law to a law with
+    a bulk modulus keeps nu (as its ``poisson_ratio`` input) unless the update
+    sets the bulk behaviour itself.
+    """
+    base = dict(base)
+    for section in ("elastic", "damping"):
+        new, old = update.get(section), base.get(section)
+        if isinstance(new, Mapping) and isinstance(old, Mapping) and "model" in new \
+                and new["model"] != old.get("model"):
+            allowed = _model_fields(section, new["model"])
+            kept = {k: v for k, v in old.items() if k in allowed and k != "model"}
+            if "bulk_modulus" in allowed and "poisson_ratio" in old and not {"bulk_modulus", "poisson_ratio"} & set(new):
+                kept["poisson_ratio"] = old["poisson_ratio"]
+            base[section] = kept
+    return deep_merge(base, update)
+
+
+def apply_material_overrides(data: Mapping[str, Any], overrides: Iterable[str]) -> dict[str, Any]:
+    """Apply dotted ``key=value`` overrides to a raw material mapping (model switches as in presets)."""
+    out = dict(data)
+    for text in overrides:
+        keys, value = parse_override(text)
+        if len(keys) == 2 and keys[0] in ("elastic", "damping") and keys[1] == "model":
+            out = merge_material(out, {keys[0]: {"model": value}})
+        else:
+            out = apply_overrides(out, [text])
+    return out
 
 
 def _model_fields(section: str, model: str) -> set[str]:
@@ -89,9 +118,11 @@ def _model_fields(section: str, model: str) -> set[str]:
 
 
 def load_material(ref: str | Mapping[str, Any], extra: Iterable[str | Path] = (),
-                  base_dir: Path | None = None) -> Material:
-    """Resolve and validate a material reference."""
-    return validate(Material, material_data(ref, extra, base_dir), where=f"material {ref!r:.60}")
+                  base_dir: Path | None = None, overrides: Iterable[str] = ()) -> Material:
+    """Resolve and validate a material reference, optionally with dotted overrides
+    (``["elastic.youngs_modulus=40 kPa", "damping.tau[0]=2 ms"]``)."""
+    data = apply_material_overrides(material_data(ref, extra, base_dir), overrides)
+    return validate(Material, data, where=f"material {ref!r:.60}")
 
 
 def save_material(material: Material, path: str | Path) -> Path:

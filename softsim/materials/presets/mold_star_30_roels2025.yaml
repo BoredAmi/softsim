@@ -1,0 +1,118 @@
+name: mold_star_30_roels2025
+description: Smooth-On Mold Star 30, fitted to uniaxial test data (A standardized
+  elastomer characterization framework for soft robotics (accompanying dataset)).
+source: 'Fitted by softsim fit-material to roels2025_elastomers (doi:10.5281/zenodo.14983287),
+  uniaxial -25-183% strain. Strain measurement: see the paper (tension to rupture,
+  compression to 25%). Density: not in the dataset: typical platinum silicone (1.07
+  g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 14090740.668502377
+  model: ogden
+  mu:
+  - 155778.79770843106
+  alpha:
+  - 3.642423643395076
+damping:
+  model: prony
+  g:
+  - 0.0002072760270937967
+  - 0.0011485499922335816
+  - 0.0025858896246461335
+  - 0.0037079234569496436
+  - 0.002882007919308345
+  - 0.0018080297322908172
+  - 0.001296694930992901
+  - 0.009671637952096194
+  tau:
+  - 0.3
+  - 0.9486832980505137
+  - 2.9999999999999996
+  - 9.486832980505136
+  - 29.999999999999996
+  - 94.86832980505137
+  - 300.0000000000001
+  - 3000.0
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - -0.25
+  - 1.83
+  strain_rate:
+  - 0.0
+  - 0.5
+uncertainty:
+  elastic.mu[0]:
+    rel: 0.005227626766524806
+    dist: normal
+  elastic.alpha[0]:
+    rel: 0.0022806257422250866
+    dist: normal
+references:
+- doi: 10.1002/aisy.202500699
+  note: test method and material list
+- doi: 10.5281/zenodo.14983287
+  note: 'data: A standardized elastomer characterization framework for soft robotics
+    (accompanying dataset) (CC-BY-4.0)'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: roels2025_elastomers
+  dataset_doi: 10.5281/zenodo.14983287
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  specimens:
+    tension: 5
+    compression: 4
+  caveat: elastic law = response at the test rates (~0.4/s); the Prony series covers
+    1 s to 3 h (compression relaxation); faster relaxation (impacts, ms) is not measured
+  law: ogden1
+  strain_range:
+  - -0.25
+  - 1.83
+  nrmse: 0.04569833246662661
+  max_error: 0.14065810256677053
+  laws_compared:
+    ogden1:
+      nrmse: 0.0457
+      max_error: 0.14066
+      bic: -8317.0
+      stable: true
+    ogden2:
+      nrmse: 0.0457
+      max_error: 0.14066
+      bic: -8302.5
+      stable: true
+    arruda_boyce:
+      nrmse: 0.08226
+      max_error: 0.22043
+      bic: -6729.7
+      stable: true
+    neo_hookean:
+      nrmse: 0.22615
+      max_error: 0.56785
+      bic: -4006.4
+      stable: true
+    yeoh:
+      nrmse: 0.03494
+      max_error: 0.1124
+      bic: -9034.2
+      stable: false
+    mooney_rivlin:
+      nrmse: 0.08208
+      max_error: 0.20817
+      bic: -6735.9
+      stable: false
+    gent:
+      nrmse: 0.09768
+      max_error: 0.25333
+      bic: -6265.8
+      stable: false
+  relaxation:
+    window: 1 s to 3 h after the stress peak
+    rms: 0.00011391964784635111
+    total_relaxation: 0.023308009635611412

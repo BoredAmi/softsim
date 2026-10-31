@@ -2,6 +2,7 @@ name: ecoflex_00_10_drop_fit_tacky
 description: 'Ecoflex 00-10 drop fit (MuJoCo, 5 mm mesh) plus fitted tack: reproduces the whole first 100 ms of
   the 20 g and 50 g drops together with the drop test''s compliant support (see provenance).'
 source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808) by softsim calibrate.
+kind: effective
 density: 1040.0
 elastic:
   youngs_modulus: 54837.08105915519

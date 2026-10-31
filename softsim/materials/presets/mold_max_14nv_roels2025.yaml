@@ -1,0 +1,120 @@
+name: mold_max_14nv_roels2025
+description: Smooth-On Mold Max 14NV, fitted to uniaxial test data (A standardized
+  elastomer characterization framework for soft robotics (accompanying dataset)).
+source: 'Fitted by softsim fit-material to roels2025_elastomers (doi:10.5281/zenodo.14983287),
+  uniaxial -25-175% strain. Strain measurement: see the paper (tension to rupture,
+  compression to 25%). Density: not in the dataset: typical platinum silicone (1.07
+  g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 6560953.420450787
+  model: yeoh
+  c10: 66049.86664883349
+  c20: 18367.110614710255
+  c30: -0.7917382823454032
+damping:
+  model: prony
+  g:
+  - 0.0002080211475942407
+  - 0.0022700594231241265
+  - 0.003703966236839809
+  - 0.0056051941728536775
+  - 0.0026663699792751094
+  - 0.0047163513312110435
+  - 0.0029202094235863825
+  - 0.012118985514617896
+  tau:
+  - 0.3
+  - 0.9486832980505137
+  - 2.9999999999999996
+  - 9.486832980505136
+  - 29.999999999999996
+  - 94.86832980505137
+  - 300.0000000000001
+  - 3000.0
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - -0.25
+  - 1.75
+  strain_rate:
+  - 0.0
+  - 0.5
+uncertainty:
+  elastic.c10:
+    rel: 0.0027013200392182204
+    dist: normal
+  elastic.c20:
+    rel: 0.01745413016899716
+    dist: normal
+  elastic.c30:
+    abs: 54.125295214715194
+    dist: normal
+references:
+- doi: 10.1002/aisy.202500699
+  note: test method and material list
+- doi: 10.5281/zenodo.14983287
+  note: 'data: A standardized elastomer characterization framework for soft robotics
+    (accompanying dataset) (CC-BY-4.0)'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: roels2025_elastomers
+  dataset_doi: 10.5281/zenodo.14983287
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  specimens:
+    tension: 4
+    compression: 5
+  caveat: elastic law = response at the test rates (~0.4/s); the Prony series covers
+    1 s to 3 h (compression relaxation); faster relaxation (impacts, ms) is not measured
+  law: yeoh
+  strain_range:
+  - -0.25
+  - 1.75
+  nrmse: 0.028337974982166784
+  max_error: 0.08243606783640431
+  laws_compared:
+    yeoh:
+      nrmse: 0.02834
+      max_error: 0.08244
+      bic: -9600.0
+      stable: true
+    ogden2:
+      nrmse: 0.02849
+      max_error: 0.08915
+      bic: -9578.6
+      stable: true
+    ogden1:
+      nrmse: 0.0367
+      max_error: 0.09105
+      bic: -8909.2
+      stable: true
+    arruda_boyce:
+      nrmse: 0.04155
+      max_error: 0.16785
+      bic: -8573.6
+      stable: true
+    neo_hookean:
+      nrmse: 0.19287
+      max_error: 0.63131
+      bic: -4436.3
+      stable: true
+    gent:
+      nrmse: 0.05857
+      max_error: 0.24098
+      bic: -7647.0
+      stable: false
+    mooney_rivlin:
+      nrmse: 0.09087
+      max_error: 0.25328
+      bic: -6460.9
+      stable: false
+  relaxation:
+    window: 1 s to 3 h after the stress peak
+    rms: 0.00010931070857730386
+    total_relaxation: 0.03420915722910228

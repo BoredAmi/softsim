@@ -297,8 +297,9 @@ class SoftSimNode(Node):
 
     def _srv_material(self, request, response):
         def run():
-            ref = yaml.safe_load(request.material) if request.material.strip().startswith("{") else request.material
-            self.sim.set_material(request.body, ref)
+            text = request.material.strip()
+            ref = (yaml.safe_load(text) if text.startswith("{") else text) or None
+            self.sim.set_material(request.body, ref, list(request.overrides))
             self._on_rebuild()
         return self._guard(response, run, f"material of {request.body!r} set; simulation reset")
 

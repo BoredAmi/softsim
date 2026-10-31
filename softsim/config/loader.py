@@ -113,3 +113,18 @@ def set_dotted(config: Mapping[str, Any], key: str, value: Any) -> dict[str, Any
     out = copy.deepcopy(dict(config))
     _set_path(out, key.split("."), value)
     return out
+
+
+def get_dotted(config: Mapping[str, Any], key: str) -> Any:
+    """Value at dotted ``key`` (list indices allowed, ``"damping.tau[1]"``); KeyError if absent."""
+    node: Any = config
+    for part in key.split("."):
+        name, idx = _split_index(part)
+        if not isinstance(node, Mapping) or name not in node:
+            raise KeyError(key)
+        node = node[name]
+        if idx is not None:
+            if not isinstance(node, (list, tuple)) or idx >= len(node):
+                raise KeyError(key)
+            node = node[idx]
+    return node

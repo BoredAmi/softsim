@@ -3,7 +3,9 @@
 from softsim.materials.library import list_presets, load_material, save_material
 from softsim.materials.models import (
     Adhesion,
+    ArrudaBoyce,
     Friction,
+    Gent,
     KelvinVoigt,
     LinearElastic,
     MagnetoActive,
@@ -17,10 +19,13 @@ from softsim.materials.models import (
     StVenantKirchhoff,
     Yeoh,
 )
+from softsim.materials.sampling import sample
 
 __all__ = [
     "Adhesion",
+    "ArrudaBoyce",
     "Friction",
+    "Gent",
     "KelvinVoigt",
     "LinearElastic",
     "MagnetoActive",
@@ -35,5 +40,6 @@ __all__ = [
     "Yeoh",
     "list_presets",
     "load_material",
+    "sample",
     "save_material",
 ]

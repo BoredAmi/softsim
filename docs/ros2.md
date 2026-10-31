@@ -77,7 +77,7 @@ All of these are under the node namespace (`/softsim/...`), except `/clock` and 
 | `reset` | std_srvs/Trigger | |
 | `set_paused` | std_srvs/SetBool | `{data: true}` |
 | `save` | std_srvs/Trigger | write the run so far to `output_dir` (or `runs/`) |
-| `set_material` | softsim_interfaces/SetMaterial | `{body: specimen, material: '{preset: ecoflex_00_10, elastic: {youngs_modulus: 40 kPa}}'}` |
+| `set_material` | softsim_interfaces/SetMaterial | `{body: specimen, material: '{preset: ecoflex_00_10, elastic: {youngs_modulus: 40 kPa}}'}`, or change single values of the current material: `{body: specimen, material: '', overrides: ['elastic.youngs_modulus=40 kPa']}` |
 | `action` | softsim_interfaces/RunAction | `{action: drop, arguments: '{preset: czopek2026_w050, height: 0.2}'}` |
 
 `set_material` and `action` rebuild the model and reset the scenario. Invalid

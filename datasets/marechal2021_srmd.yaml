@@ -1,0 +1,56 @@
+# Marechal, Balland, Lindenroth, Petrou, Kontovounisios, Bello: "Toward a Common Framework and
+# Database of Materials for Soft Robotics", Soft Robotics 8(3):284-297 (2021), doi:10.1089/soro.2019.0115.
+# Data: the Soft Robotics Materials Database V2.0.beta (Zenodo archive of the GitHub repository).
+# Licence: Open Database License (ODbL 1.0) for the database, Database Contents License (DbCL 1.0)
+# for its contents. The data is NOT redistributed with softsim: `softsim fetch datasets/marechal2021_srmd.yaml`
+# downloads the archive into local_dir (gitignored). Material cards fitted to it are produced works
+# and cite it.
+#
+# Test: ASTM D412 die C dumbbells (3 x 6 mm cross-section, 33 mm gauge length), pulled to failure at
+# 450 mm/min on an Instron 5569 (1 kN cell), room temperature. One curve per material.
+# Strain is "global": computed from the crosshead displacement over the 33 mm gauge length, which
+# includes the deformation of the dumbbell's shoulders and any grip slip, so it overstates the strain
+# in the gauge section and the moduli fitted to it are likely LOW (for Ecoflex 00-10 the curve gives
+# 15 kPa at 100% strain against the datasheet's 55 kPa).
+kind: material_tests
+name: marechal2021_srmd
+title: Soft Robotics Materials Database (uniaxial tension, ASTM D412)
+authors: [Luc Marechal, Pascale Balland, Lukas Lindenroth, Fotis Petrou, Christos Kontovounisios, Fernando Bello]
+doi: 10.5281/zenodo.3931808
+paper_doi: 10.1089/soro.2019.0115
+license: ODbL-1.0 (database), DbCL-1.0 (contents)
+url: https://github.com/LucMarechal/Soft-Robotics-Materials-Database/tree/V2.0.beta
+local_dir: data/raw/marechal2021_srmd
+format: srmd_csv
+source:
+  url: https://zenodo.org/api/records/3931808/files/LucMarechal/Soft-Robotics-Materials-Database-V2.0.beta.zip/content
+  file: srmd_v2.0.beta.zip
+  md5: 90cae886ad04dca5e59e2b904a4d4560
+  member_prefix: LucMarechal-Soft-Robotics-Materials-Database-5968e9e/Tensile-Tests-Data/
+conditions:
+  mode: uniaxial
+  strain_rate: 0.227 1/s      # 450 mm/min over 33 mm (nominal)
+  temperature: room temperature
+  strain_measurement: crosshead displacement over the 33 mm gauge length (global; overstates gauge strain)
+materials:
+  bodydouble_silk: {member: BodyDouble SILK.csv, product: Smooth-On Body Double SILK}
+  dragon_skin_10_medium: {member: Dragon Skin 10 MEDIUM.csv, product: Smooth-On Dragon Skin 10 MEDIUM,
+                          density: 1070 kg/m^3, density_source: Smooth-On datasheet (specific gravity 1.07)}
+  dragon_skin_20: {member: Dragon Skin 20.csv, product: Smooth-On Dragon Skin 20}
+  dragon_skin_30: {member: Dragon Skin 30.csv, product: Smooth-On Dragon Skin 30}
+  dragon_skin_fx_pro: {member: Dragon Skin FX Pro.csv, product: Smooth-On Dragon Skin FX-Pro}
+  dragon_skin_fx_pro_slacker: {member: Dragon Skin FX Pro Slacker.csv, product: Smooth-On Dragon Skin FX-Pro with Slacker}
+  ecoflex_00_10: {member: Ecoflex 00-10.csv, product: Smooth-On Ecoflex 00-10,
+                  density: 1040 kg/m^3, density_source: Smooth-On datasheet (specific gravity 1.04)}
+  ecoflex_00_30: {member: Ecoflex 00-30.csv, product: Smooth-On Ecoflex 00-30,
+                  density: 1070 kg/m^3, density_source: Smooth-On datasheet (specific gravity 1.07)}
+  ecoflex_00_35_fast: {member: Ecoflex 00-35 FAST.csv, product: Smooth-On Ecoflex 00-35 FAST}
+  ecoflex_00_50: {member: Ecoflex 00-50.csv, product: Smooth-On Ecoflex 00-50}
+  mold_star_16_fast: {member: Mold Star 16 FAST.csv, product: Smooth-On Mold Star 16 FAST}
+  mold_star_20t: {member: Mold Star 20T.csv, product: Smooth-On Mold Star 20T}
+  platsil_gel_10: {member: PlatSil Gel 10.csv, product: Polytek PlatSil Gel-10}
+  psycho_paint: {member: Psycho Paint.csv, product: Smooth-On Psycho Paint}
+  rtv615: {member: RTV615.csv, product: Momentive RTV615}
+  rebound_25: {member: Rebound 25.csv, product: Smooth-On Rebound 25}
+  soloplast_150318: {member: SOLOPLAST 150318.csv, product: Soloplast silicone 150318}
+  sortaclear_40: {member: SortaClear 40.csv, product: Smooth-On Sorta-Clear 40}

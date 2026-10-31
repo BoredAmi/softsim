@@ -2,6 +2,7 @@ name: ecoflex_00_10_drop_fit
 description: Ecoflex 00-10 fitted to drop tests (MuJoCo, 5 mm mesh).
 source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808)
   by softsim calibrate.
+kind: effective
 density: 1040.0
 elastic:
   youngs_modulus: 54837.08105915519

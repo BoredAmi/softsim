@@ -1,0 +1,89 @@
+name: bodydouble_silk_marechal2021
+description: Smooth-On Body Double SILK, fitted to uniaxial test data (Soft Robotics
+  Materials Database (uniaxial tension, ASTM D412)).
+source: 'Fitted by softsim fit-material to marechal2021_srmd (doi:10.5281/zenodo.3931808),
+  uniaxial 0-200% strain. Strain measurement: crosshead displacement over the 33 mm
+  gauge length (global; overstates gauge strain). Density: not in the dataset: typical
+  platinum silicone (1.07 g/cm^3).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 6797024.0878897
+  model: gent
+  mu: 136852.8339843565
+  jm: 85.81579601281338
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - 0.0
+  - 2.0
+  strain_rate:
+  - 0.22727375010001025
+  - 0.22727375010001025
+uncertainty:
+  elastic.mu:
+    rel: 0.006513376535155948
+    dist: normal
+  elastic.jm:
+    rel: 0.13004244671469523
+    dist: normal
+references:
+- doi: 10.1089/soro.2019.0115
+  note: test method and material list
+- doi: 10.5281/zenodo.3931808
+  note: 'data: Soft Robotics Materials Database (uniaxial tension, ASTM D412) (ODbL-1.0
+    (database), DbCL-1.0 (contents))'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: marechal2021_srmd
+  dataset_doi: 10.5281/zenodo.3931808
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  caveat: 'crosshead (global) strain: moduli are likely ~3x too low; tension only,
+    compression and rate dependence are not measured'
+  law: gent
+  strain_range:
+  - 0.0
+  - 2.0
+  nrmse: 0.015785959849217195
+  max_error: 0.037915062870248616
+  laws_compared:
+    ogden1:
+      nrmse: 0.01385
+      max_error: 0.03243
+      bic: -735.7
+      stable: true
+    ogden2:
+      nrmse: 0.01385
+      max_error: 0.03243
+      bic: -726.8
+      stable: true
+    gent:
+      nrmse: 0.01579
+      max_error: 0.03792
+      bic: -712.9
+      stable: true
+    arruda_boyce:
+      nrmse: 0.01586
+      max_error: 0.03819
+      bic: -712.1
+      stable: true
+    neo_hookean:
+      nrmse: 0.02038
+      max_error: 0.04781
+      bic: -673.0
+      stable: true
+    mooney_rivlin:
+      nrmse: 0.01046
+      max_error: 0.02294
+      bic: -784.5
+      stable: false
+    yeoh:
+      nrmse: 0.0124
+      max_error: 0.02703
+      bic: -750.4
+      stable: false

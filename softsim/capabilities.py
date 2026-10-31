@@ -22,6 +22,8 @@ class Capability(str, Enum):
     MOONEY_RIVLIN = "Mooney-Rivlin hyperelasticity"
     YEOH = "Yeoh hyperelasticity"
     OGDEN = "Ogden hyperelasticity"
+    GENT = "Gent hyperelasticity"
+    ARRUDA_BOYCE = "Arruda-Boyce hyperelasticity"
     MAGNETO_ACTIVE = "magneto-active (MRE) coupling"
 
     # Dissipation.

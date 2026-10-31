@@ -1,6 +1,7 @@
 name: ecoflex_00_10_drop_fit_sofa_ogden
 description: Ecoflex 00-10 fitted to drop tests (SOFA, one-term Ogden, 5 mm mesh, dt 0.05 ms).
 source: Fitted to Records of falling mass on Ecoflex 00-10 cylinder (doi:10.5281/zenodo.23185808) by softsim calibrate.
+kind: effective
 density: 1040.0
 elastic:
   model: ogden

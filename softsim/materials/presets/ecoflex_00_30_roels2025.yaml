@@ -1,0 +1,144 @@
+name: ecoflex_00_30_roels2025
+description: Smooth-On Ecoflex 00-30, fitted to uniaxial test data (A standardized
+  elastomer characterization framework for soft robotics (accompanying dataset)).
+source: 'Fitted by softsim fit-material to roels2025_elastomers (doi:10.5281/zenodo.14983287),
+  uniaxial -25-200% strain. Strain measurement: see the paper (tension to rupture,
+  compression to 25%). Density: Smooth-On datasheet (specific gravity 1.07).'
+kind: physical
+density: 1070.0
+elastic:
+  bulk_modulus: 2748820.517459814
+  model: yeoh
+  c10: 80254.49993079307
+  c20: -2875.498877218123
+  c30: 436.84087751882726
+damping:
+  model: prony
+  g:
+  - 0.31744995130322146
+  - 0.16034518278483748
+  - 0.09389994094435504
+  - 0.08349323469540498
+  - 9.232232683879302e-05
+  - 0.0006920911902013544
+  - 0.0016980309432644697
+  - 0.00204224511708742
+  - 0.0006952119237602338
+  - 0.0020808645499696544
+  - 0.0010904023207513381
+  tau:
+  - 7.957747154594768e-05
+  - 0.0010026133149814976
+  - 0.012632136204500672
+  - 0.15915494309189535
+  - 0.3
+  - 0.9486832980505137
+  - 2.9999999999999996
+  - 9.486832980505136
+  - 29.999999999999996
+  - 94.86832980505137
+  - 300.0000000000001
+friction:
+  sliding: 0.8
+  torsional: 0.0
+  rolling: 0.0
+validity:
+  strain:
+  - -0.25
+  - 2.0
+  strain_rate:
+  - 0.0
+  - 300.0
+uncertainty:
+  elastic.c10:
+    rel: 0.0019936435753259937
+    dist: normal
+  elastic.c20:
+    abs: 33.47809716647657
+    dist: normal
+  elastic.c30:
+    rel: 0.026645999730419208
+    dist: normal
+references:
+- doi: 10.1002/aisy.202500699
+  note: test method and material list
+- doi: 10.5281/zenodo.14983287
+  note: 'data: A standardized elastomer characterization framework for soft robotics
+    (accompanying dataset) (CC-BY-4.0)'
+- doi: 10.48550/arXiv.2604.27722
+  note: 'fast rate dependence: fractional Kelvin-Voigt n and tau from guided elastic
+    waves (Table 1)'
+provenance:
+  fitted_by: tools/make_material_library.py (softsim.materials.fit)
+  dataset: roels2025_elastomers
+  dataset_doi: 10.5281/zenodo.14983287
+  poisson_ratio_fixed: 0.49
+  uncertainty_note: from the fit residuals (specimen scatter where there are several
+    specimens)
+  specimens:
+    tension: 3
+    compression: 5
+  caveat: elastic law = response at the test rates (~0.4/s); the Prony series covers
+    1 s to 3 h (compression relaxation); faster relaxation (impacts, ms) is not measured
+  law: yeoh
+  strain_range:
+  - -0.25
+  - 2.0
+  nrmse: 0.023337136514948346
+  max_error: 0.07789210308615394
+  laws_compared:
+    ogden2:
+      nrmse: 0.01709
+      max_error: 0.06775
+      bic: -9738.5
+      stable: true
+    yeoh:
+      nrmse: 0.02334
+      max_error: 0.07789
+      bic: -8997.2
+      stable: true
+    arruda_boyce:
+      nrmse: 0.03345
+      max_error: 0.10403
+      bic: -8140.3
+      stable: true
+    gent:
+      nrmse: 0.03355
+      max_error: 0.10707
+      bic: -8133.2
+      stable: true
+    ogden1:
+      nrmse: 0.03574
+      max_error: 0.14163
+      bic: -7981.6
+      stable: true
+    neo_hookean:
+      nrmse: 0.03654
+      max_error: 0.16808
+      bic: -7935.5
+      stable: true
+    mooney_rivlin:
+      nrmse: 0.03653
+      max_error: 0.16308
+      bic: -7928.6
+      stable: true
+  relaxation:
+    window: 1 s to 3 h after the stress peak
+    rms: 0.00014834961124234102
+    total_relaxation: 0.02433551010190402
+  fast_relaxation:
+    source: Croquette et al. 2026, arXiv:2604.27722, Table 1 (guided waves, small
+      strain)
+    fractional_kelvin_voigt:
+      n: 0.2
+      n_sd: 0.04
+      tau: 0.0029
+      tau_sd: 0.0013
+    band_hz:
+    - 1.0
+    - 2000.0
+    reference_hz: 0.06
+    fit_rms: 0.010135693786486544
+    instantaneous_over_test_rate: 2.9001336909738717
+    assumption: the small-strain frequency dependence applies to the isochoric part
+      at large strain
