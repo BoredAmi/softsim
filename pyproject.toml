@@ -23,6 +23,7 @@ mesh = ["gmsh>=4.11"]
 calib = ["scipy>=1.11", "matplotlib>=3.7"]
 video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
+fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # axisymmetric reference solver (softsim.fem); float64 on CPU
 dev = ["pytest>=7", "softsim[mujoco,mesh,calib]"]
 
 [project.scripts]
