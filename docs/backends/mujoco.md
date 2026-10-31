@@ -11,6 +11,7 @@ The flex API changes every release, so read the changelog before bumping.
 | `stvk` | default flex elasticity: Saint Venant–Kirchhoff, linear tetrahedra |
 | `stable_neo_hookean` | Stable Neo-Hookean (Smith et al. 2018), `MjsFlex.elastic3d = 1` (experimental since 3.15, **spec-only**, not in MJCF). Classic `neo_hookean` (ln J energy) is not available and is refused. |
 | `rayleigh.beta`, `kelvin_voigt` | flex `damping` (stiffness-proportional; Kelvin–Voigt maps to beta = eta / E) |
+| `prony` (on `stable_neo_hookean`) | the flex carries the long-term law (shear modulus × (1 − Σg), bulk unchanged); the Maxwell-branch overstress of every tetrahedron (`softsim/materials/viscoelastic.py`, needs the `fem` extra) is applied as explicit vertex forces (`xfrc_applied`) before every step |
 | `base: bonded` | `<pin>` on the bottom-face vertices |
 | Contact | soft constraints `solref = (timeconst, dampratio)`, `solimp`; friction combines by max |
 | `adhesion` (material, ground) | external forces (`xfrc_applied`) on surface vertices and rigid bodies, recomputed before every step from analytic signed distances (`softsim/contact/adhesion.py`) |
@@ -18,7 +19,7 @@ The flex API changes every release, so read the changelog before bumping.
 | Integrator | `discrete` (new in 3.13, Sept 2026, experimental): implicit in position, so flex stiffness has no explicit stability limit |
 
 **Not supported, and refused:** small-strain linear elasticity, Mooney-Rivlin,
-Yeoh, Ogden, Prony viscoelasticity, mass-proportional damping, magneto-active
+Yeoh, Ogden, Gent, Arruda–Boyce, mass-proportional damping, magneto-active
 coupling, negative Poisson's ratio, any integrator other than `discrete`, and
 the PGS solver.
 
@@ -50,20 +51,23 @@ the PGS solver.
   doesn't reproduce 500 g either, and actually prefers *less* large-strain
   stiffening than Neo-Hookean. Compressibility (ν = 0.45) and missing rate
   dependence matter more; see [experiments.md](../experiments.md#backends-and-material-models-m4).
-- **Damping is a single Rayleigh beta**, a crude proxy for viscoelasticity: the
-  loss factor grows linearly with frequency. Beta and E trade off strongly over
-  a millisecond impact. Fit both across several impact energies at once, and
-  read the leftover misfit as a model limitation.
+- **Native damping is a single Rayleigh beta**, a crude proxy for
+  viscoelasticity: the loss factor grows linearly with frequency. Beta and E
+  trade off strongly over a millisecond impact. Prony cards avoid this.
+- **Prony viscoelasticity is explicit.** Its overstress lags one step, so its
+  stiffness Σg·μ0 must be resolved by the time step (`softsim check` reports
+  ω·dt). This is no issue at drop-test steps: the limit is about 0.25 ms on a
+  3 mm mesh. The forces match the homogeneous reference exactly under uniform
+  deformation (`tests/test_viscoelastic.py`). A 50 g drop with g = 0.6 at
+  τ = 2 ms peaks between the instantaneous and the long-term material, at
+  5.38 mm on MuJoCo and 5.39 mm on SOFA.
 - **Friction changes the impact a lot.** 50 g drop, no material damping, 5 mm
   mesh: peak 4.89, 5.72 and 6.80 mm at sliding friction 1, 0.3 and 0. The
   bulging specimen slides against the weight and the table, and that matters
   as much as the modulus.
-- **An undamped impact still loses much of the weight's energy.** With no
-  material damping the 50 g weight rebounds at 1.75–1.95 m/s from 2.47 m/s,
-  independent of the timestep (0.1–0.01 ms) and of the contact damping
-  ratio. How much of it stays in the specimen (vibration, hop) is not known,
-  since MuJoCo doesn't report flex strain energy. Fitted damping (β) is
-  therefore an effective value on top of this.
+- **An undamped impact loses energy that a converged solver keeps.** See
+  [Energy and contact fidelity](#energy-and-contact-fidelity) below. Fitted
+  damping (β) is therefore an effective value on top of MuJoCo's own losses.
 - **Mesh stiffness against a converged reference:** for a static flat punch
   (small strain) the 5 mm mesh is 20–60% stiffer than the locking-free
   reference ([reference_fem.md](../reference_fem.md)).
@@ -84,6 +88,53 @@ the PGS solver.
   `backend-warnings` finding; raise `simulation.iterations` or lower dt.
 - **Divergence.** MuJoCo resets the state itself on NaN; softsim detects this
   through the bad-qacc/qpos/qvel warning counters and raises `StabilityError`.
+
+## Energy and contact fidelity
+
+How much of an impact's energy MuJoCo loses that it shouldn't, measured with
+purely elastic cards (no damping of any kind) against the locking-free 3D
+reference (`tools/contact_restitution.py`, 2026-10-31).
+
+**1. Flex elasticity is numerically damped like backward Euler.** A free axial
+vibration of the bonded specimen (no contact, no damping, 6.25 ms period)
+loses energy per cycle as predicted by a damping ratio **ζ ≈ ω·dt/2**:
+
+| Timestep | 100 µs | 50 µs | 25 µs | 12.5 µs |
+| --- | --- | --- | --- | --- |
+| Energy lost per cycle | 52% | 30% | 15% | 6.5% |
+| 1 − exp(−4πζ), ζ = ω·dt/2 | 47% | 27% | 15% | 7.6% |
+
+For the mode you care about (angular frequency ω), pick dt so that ω·dt/2 is
+well below the material damping you want to model.
+
+**2. Impacts: friction slip costs most.** A centred 50 g weight hits the drop
+specimen at 2.7 m/s. Restitution e = rebound speed / impact speed:
+
+| Contact | Reference (fem) | MuJoCo, 5 mm mesh | MuJoCo, 3.5 / 2.5 mm |
+| --- | --- | --- | --- |
+| Frictionless | 0.869 | 0.791 | 0.839 / 0.838 |
+| Sticking, μ = 1 | 0.905 | 0.71–0.75 | – |
+
+- **Contact settings don't matter.** e stays at 0.71–0.75 over damping ratio
+  1 to 0.05, time constant 0.1–0.2 ms and timestep 50 to 6 µs.
+- **Without friction MuJoCo is within 3.5%** at meshes of 3.5 mm or finer.
+  At 5 mm, each surface vertex's impact on the weight is plastic, and that
+  costs about 6% more.
+- **With friction it loses about twice as much.** The reference sticks,
+  which does no work. MuJoCo's soft friction constraint slips while the
+  specimen bulges under the weight, and the slip dissipates.
+- **The best available mitigation:** `contact.cone: elliptic` with
+  `contact.impratio: 10` (10–100 are equivalent). This raises e from 0.748 to
+  0.78 at 5 mm. MuJoCo's no-slip solver would remove the slip, but it is not
+  supported with flex under the discrete integrator. The defaults stay
+  pyramidal and 1, which is what every fit in this repository used.
+
+**3. Locking:** at ν = 0.45 the 5 mm mesh's peak compression is 24% below the
+reference's (4.9 against 6.5 mm with sticking).
+
+These losses are why MuJoCo's fitted cards are `effective`. Transfer a
+physical card ([materials.md](../materials.md#from-a-physical-card-to-a-backend-transfer))
+rather than using its values directly.
 
 ## Adhesion (tack)
 

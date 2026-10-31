@@ -26,12 +26,14 @@ skip and `softsim check` still reports what SOFA would support.
 | `mooney_rivlin` | same force field, [C10, C01, bulk] |
 | `ogden` (one term) | same force field, [μ·α, α, bulk] (SOFA writes the term as μ₁/α²) |
 | Rayleigh α, β; Kelvin-Voigt | `EulerImplicitSolver rayleighMass/rayleighStiffness` (Kelvin-Voigt: β = η/E) |
+| `prony` | the force field carries the long-term law; the Maxwell-branch overstress (`softsim/materials/viscoelastic.py`, the same code as on MuJoCo) goes through a `ConstantForceField` updated before every step. SOFA's own `MJEDTetrahedralForceField` (SofaMJEDFEM) is not used: it relaxes the whole stress including the volumetric part, and its laws use non-isochoric invariants (its Mooney-Rivlin has a stress at rest) |
 | `base: bonded` | `FixedProjectiveConstraint` |
 | Rigid body | `Rigid3d` DOF at the centre of mass, `UniformMass` with inertia, triangulated parts (`RigidMapping`) |
 | Contact | `FreeMotionAnimationLoop`, `BlockGaussSeidelConstraintSolver`, `MinProximityIntersection`, frictional Lagrange contact |
 
-**Refused:** Yeoh, Prony viscoelasticity, multi-term Ogden, torsional and
-rolling friction, self-collision, magneto-active coupling.
+**Refused:** Yeoh, Gent, Arruda–Boyce, multi-term Ogden, torsional and
+rolling friction, self-collision, magneto-active coupling. A card with one of
+these laws can be projected onto one SOFA has (`softsim material project`).
 
 ## Verified
 
@@ -62,6 +64,20 @@ rolling friction, self-collision, magneto-active coupling.
   through contact comes out 7% stiffer than analytic, with too much lateral
   spreading, while the same FEM without contact matches. This looks like a
   contact artifact in that configuration and is not resolved.
+- **Frictionless impacts lose too much energy.** With purely elastic cards,
+  the centred 50 g drop at 2.7 m/s against the locking-free 3D reference
+  (`tools/contact_restitution.py`; restitution e = rebound speed / impact
+  speed):
+
+  | Contact | Reference | SOFA, 5 mm | MuJoCo, 5 mm |
+  | --- | --- | --- | --- |
+  | Sticking, μ = 1 | 0.905 | 0.794 | 0.73–0.75 |
+  | Frictionless | 0.869 | **0.650** (peak 5.1 mm vs 7.5, contact 11.9 vs 10.5 ms) | 0.791 |
+
+  With sticking friction SOFA loses less than MuJoCo. That is why its
+  transfer of the physical card needs less extra relaxation (g 0.77 against
+  0.94, [experiments.md](../experiments.md)). Frictionless, it loses 58% of the
+  energy and is much too stiff, like the frictionless plate test below.
 - **Contact fails at extreme rim flaring.** In the 500 g drop with the fitted
   Ogden material, the specimen's rim spreads to 45 mm radius (from 20 mm) and
   rim vertices then pass up to 8.5 mm through the ground, without any

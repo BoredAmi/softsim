@@ -21,10 +21,14 @@ Notes and limits (see docs/backends/sofa.md):
       force only; no centre of pressure, no torque); they include adhesion.
     * adhesion (``softsim.contact.adhesion``) is applied through
       ``ConstantForceField``s updated before every step, like on MuJoCo.
+    * Prony viscoelasticity: the force field carries the long-term law; the
+      Maxwell-branch overstresses (``softsim.materials.viscoelastic``) go through
+      another ``ConstantForceField``, the same implementation as on MuJoCo.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 from pathlib import Path
@@ -36,7 +40,7 @@ from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, 
 from softsim.capabilities import Capability
 from softsim.contact.adhesion import RigidFrame, adhesion_fields
 from softsim.errors import SoftSimError
-from softsim.geometry.rigid import Part
+from softsim.geometry.rigid import Part, rigid_mass_properties
 from softsim.materials.models import (
     KelvinVoigt,
     LinearElastic,
@@ -47,6 +51,7 @@ from softsim.materials.models import (
     StableNeoHookean,
     StVenantKirchhoff,
 )
+from softsim.materials.viscoelastic import PronyOverstress, long_term_material, prony_of
 from softsim.scene import RigidBodySpec, Scene, SoftBodySpec
 
 GROUND = "ground"
@@ -165,25 +170,6 @@ def part_mesh(part: Part, segments: int = 32) -> tuple[np.ndarray, np.ndarray]:
     return pts, tris
 
 
-def rigid_mass_properties(body: RigidBodySpec) -> tuple[np.ndarray, np.ndarray]:
-    """Centre of mass (body frame) and inertia tensor about it [kg m^2]; mass split by volume."""
-    vols = np.array([p.volume() for p in body.parts])
-    masses = body.mass * vols / vols.sum()
-    centers = np.array([p.center for p in body.parts], float)
-    com = (masses[:, None] * centers).sum(axis=0) / body.mass
-    inertia = np.zeros((3, 3))
-    for part, m, c in zip(body.parts, masses, centers):
-        if part.kind == "cylinder":
-            r, h = part.size[0], 2 * part.size[1]
-            local = np.diag([m * (3 * r**2 + h**2) / 12] * 2 + [m * r**2 / 2])
-        else:
-            a, b, cc = (2 * s for s in part.size)
-            local = np.diag([m * (b**2 + cc**2) / 12, m * (a**2 + cc**2) / 12, m * (a**2 + b**2) / 12])
-        d = c - com
-        inertia += local + m * (np.dot(d, d) * np.eye(3) - np.outer(d, d))
-    return com, inertia
-
-
 class SofaBackend(Backend):
     """SOFA FEM backend (hyperelastic tetrahedra, Lagrange-multiplier frictional contact)."""
 
@@ -203,6 +189,7 @@ class SofaBackend(Backend):
         Capability.CONTACT_FRICTION,
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
+        Capability.VISCOELASTIC_PRONY,
     })
 
     def __init__(self) -> None:
@@ -274,13 +261,15 @@ class SofaBackend(Backend):
         offset = np.asarray(body.pose.position) + [0.0, 0.0, lift]
         pts = body.mesh.points @ rot.T + offset
         node = root.addChild(body.name)
-        alpha, beta = rayleigh(body)
+        prony = prony_of(body.material)
+        native = dataclasses.replace(body, material=long_term_material(body.material)) if prony else body
+        alpha, beta = rayleigh(native)
         node.addObject("EulerImplicitSolver", rayleighStiffness=beta, rayleighMass=alpha)
         node.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
         node.addObject("TetrahedronSetTopologyContainer", position=pts.tolist(), tetrahedra=body.mesh.tets.tolist())
         dofs = node.addObject("MechanicalObject", template="Vec3d", position=pts.tolist())
         node.addObject("MeshMatrixMass", massDensity=body.effective_density, lumping=True)
-        ff, args = force_field_args(body)
+        ff, args = force_field_args(native)
         node.addObject(ff, **args)
         if body.pinned:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
@@ -290,6 +279,11 @@ class SofaBackend(Backend):
             vertices = self._adhesion[body.name].vertices
             adhesion = node.addObject("ConstantForceField", name="adhesion", indices=vertices.tolist(),
                                       forces=np.zeros((len(vertices), 3)).tolist())
+        overstress = None
+        if prony:
+            overstress = (PronyOverstress(body.material, body.mesh.points, body.mesh.tets),
+                          node.addObject("ConstantForceField", name="prony", indices=list(range(len(pts))),
+                                         forces=np.zeros((len(pts), 3)).tolist()))
         coll = node.addChild("collision")
         coll.addObject("MeshTopology", position=pts.tolist(), triangles=body.mesh.surface_triangles().tolist())
         coll.addObject("MechanicalObject", position=pts.tolist())
@@ -300,7 +294,8 @@ class SofaBackend(Backend):
         coll.addObject("PointCollisionModel", **groups)  # line-line tests omitted: ~3x faster, same result here
         coll.addObject("IdentityMapping")
         masses = body.mesh.lumped_masses(body.effective_density)
-        return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion}
+        return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
+                "prony": overstress}
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -359,6 +354,10 @@ class SofaBackend(Backend):
                 return
             if self._adhesion:
                 self._apply_adhesion()
+            for d in self._soft.values():
+                if d["prony"] is not None:
+                    overstress, field = d["prony"]
+                    field.forces.value = overstress.forces(np.asarray(d["dofs"].position.value, float), dt).tolist()
             self._sofa.Simulation.animate(self.root, dt)
 
     def _apply_adhesion(self) -> None:
@@ -384,6 +383,9 @@ class SofaBackend(Backend):
     def reset(self) -> None:
         for field in self._adhesion.values():
             field.reset()
+        for d in self._soft.values():
+            if d["prony"] is not None:
+                d["prony"][0].reset()
         self._sofa.Simulation.reset(self.root)
         self._prev = None
         self._diverged = False

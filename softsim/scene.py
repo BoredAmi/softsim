@@ -54,6 +54,10 @@ class ContactSettings(StrictModel):
     backends map them to their own penalty/compliance parameters). ``"auto"``
     uses twice the timestep, the stiffest contact that stays accurate.
     ``soft_radius`` is the collision skin thickness around soft-body elements.
+    ``cone`` and ``impratio`` are MuJoCo's friction cone and frictional-to-normal
+    impedance ratio (other backends ignore them): an elliptic cone with
+    ``impratio`` 10-100 lets soft bodies slip less under sticking friction, which
+    otherwise costs impact energy (docs/backends/mujoco.md).
     """
 
     timeconst: Union[Annotated[Time, Field(gt=0)], Literal["auto"]] = "auto"
@@ -61,6 +65,8 @@ class ContactSettings(StrictModel):
     solimp: tuple[float, float, float] = (0.95, 0.99, 0.0002)
     soft_radius: Annotated[Length, Field(gt=0)] = 1e-4
     active_layers: Annotated[int, Field(ge=1)] = 1
+    cone: Literal["pyramidal", "elliptic"] = "pyramidal"
+    impratio: Annotated[float, Field(ge=1)] = 1.0
 
     def resolved_timeconst(self, timestep: float) -> float:
         return 2.0 * timestep if self.timeconst == "auto" else float(self.timeconst)

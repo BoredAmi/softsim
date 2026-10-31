@@ -132,6 +132,8 @@ def scene_to_mjcf(scene: Scene) -> str:
         "iterations": str(sim.iterations),
         "tolerance": f"{sim.tolerance:.9g}",
         "gravity": _fmt(sim.gravity),
+        "cone": contact.cone,
+        "impratio": f"{contact.impratio:.9g}",
     })
     default = ET.SubElement(root, "default")
     ET.SubElement(default, "geom", {
