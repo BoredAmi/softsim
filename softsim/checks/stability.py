@@ -38,8 +38,10 @@ def p_wave_speed(youngs: float, poisson: float, density: float) -> float:
     return math.sqrt(youngs * (1 - poisson) / ((1 + poisson) * (1 - 2 * poisson) * density))
 
 
-def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None) -> list[Finding]:
-    """Return all findings for ``scene``."""
+def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
+                locking_free: bool = False) -> list[Finding]:
+    """Return all findings for ``scene``; ``locking_free``: the backend's elements don't lock (no
+    volumetric-locking findings)."""
     est = dict(estimates or {})
     sim, contact = scene.simulation, scene.contact
     dt = sim.timestep
@@ -98,7 +100,9 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None) -> l
         if quality["min_quality"] < 0.1:
             out.append(Finding("warning", "poor-elements",
                                f"{body.name}: worst tetrahedron quality {quality['min_quality']:.2f} (< 0.1)"))
-        if nu >= 0.48:
+        if locking_free:
+            pass
+        elif nu >= 0.48:
             out.append(Finding("warning", "volumetric-locking",
                                f"{body.name}: Poisson's ratio {nu:.3f} with linear tetrahedra locks; the body "
                                "will be too stiff and mesh-dependent. 0.45 is a common compromise"))
@@ -133,6 +137,42 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None) -> l
                                    f"{body.name}: explicit integrator with dt {dt:.1e} s > element wave transit "
                                    f"time {limit:.1e} s"))
         out += _adhesion_findings(scene, body, dt)
+        out += _prony_findings(body, dt)
+        validity = body.material.validity
+        strain = est.get("expected_strain")  # compressive, positive
+        if validity is not None and validity.strain is not None and strain is not None and -strain < validity.strain[0]:
+            out.append(Finding("warning", "outside-validity",
+                               f"{body.name}: expected compression ~{100 * strain:.0f}% but material "
+                               f"{body.material.name!r} was measured over strain {validity.strain[0]:g} to "
+                               f"{validity.strain[1]:g}; its law is extrapolated here"))
+        if body.material.damping is None and est.get("impact_speed", 0.0) > 0:
+            out.append(Finding("info", "no-rate-data",
+                               f"{body.name}: material {body.material.name!r} has no damping (no rate data), so "
+                               "impacts are undamped and rebound too high; give it a Prony series if one is known"))
+    return out
+
+
+def _prony_findings(body, dt: float) -> list[Finding]:
+    """The Maxwell-branch overstress is explicit: its shear stiffness must be resolvable at ``dt``."""
+    from softsim.materials.viscoelastic import max_stable_timestep, prony_of
+
+    prony = prony_of(body.material)
+    if prony is None:
+        return []
+    out = []
+    dt_max = max_stable_timestep(body.material, body.effective_density, body.mesh.quality()["min_edge"])
+    if dt > dt_max:
+        out.append(Finding("error", "prony-unstable",
+                           f"{body.name}: explicit Prony overstress (sum g * mu0) needs dt <= {dt_max:.2e} s on the "
+                           f"smallest element, got {dt:.2e} s; lower the timestep or coarsen the mesh"))
+    elif dt > 0.3 * dt_max:
+        out.append(Finding("warning", "prony-stiff",
+                           f"{body.name}: Prony overstress resolved with omega*dt = {dt / dt_max:.2f}; results may "
+                           "depend on the timestep"))
+    if min(prony.tau) < 2 * dt:
+        out.append(Finding("info", "prony-fast-term",
+                           f"{body.name}: Prony time {min(prony.tau):.1e} s is shorter than two steps; that term "
+                           "relaxes within a step (it is integrated exactly, but its transient is not resolved)"))
     return out
 
 

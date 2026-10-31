@@ -1,11 +1,17 @@
-# Reference FEM (axisymmetric, locking-free)
+# Reference FEM (locking-free, axisymmetric and 3D)
 
-`softsim.fem` is a small finite-element solver for axisymmetric problems
-(cylinders, centred punches, uniaxial tests). It is not a third general
-backend. Its job is to give **mesh-converged** answers that the general
-backends (MuJoCo flex, SOFA) can be checked against: both of those use linear
-tetrahedra, which lock for nearly incompressible materials, so their fitted
-moduli are "effective" values tied to a mesh.
+`softsim.fem` holds two small finite-element solvers that give
+**mesh-converged** answers for the general backends (MuJoCo flex, SOFA) to be
+checked against. Both of those use linear tetrahedra, which lock for nearly
+incompressible materials, so their fitted moduli are "effective" values tied
+to a mesh.
+
+- `softsim.fem.axisym`: axisymmetric (cylinders, centred punches, uniaxial
+  tests). Fast.
+- `softsim.fem.solid3d`: 3D, any geometry, rigid bodies with 6 DOF. It is
+  also available as the backend **`fem`** (`softsim run ... --backend fem`).
+  It is slow, about 1 s per step on a 5 mm mesh on a laptop (see
+  [Performance](#performance)), but exact where the others are not.
 
 ```bash
 pip install -e ".[fem]"     # JAX (CPU, float64) for exact tangents
@@ -48,6 +54,100 @@ ts, info = run_drop("scenarios/drop_test/cases/w050.yaml", ["simulation.duration
   with quadratic edges in axisymmetry, the node on the axis gets exactly zero
   load from a uniform pressure, and quadrature-point contact let the punch
   pierce it.
+
+## 3D solver and the `fem` backend
+
+The formulation is the axisymmetric one, in 3D:
+
+- **Elements:** 10-node quadratic tetrahedra, built from any linear tetrahedral
+  mesh by adding edge midpoints. There is one dilatation per element (P2/P0),
+  so no locking.
+- **Integration:** an 8-point rule for stiffness and 27 points for mass.
+- **Tangents:** assembled from the 3×3 material tangents at the quadrature
+  points. For invariant laws (Neo-Hookean, Mooney–Rivlin, Yeoh, Gent,
+  Arruda–Boyce) they are in closed form and JAX only differentiates the scalar
+  ψ(Ī₁, Ī₂). Ogden uses JAX derivatives of the full 3×3 energy.
+- **Rigid bodies:**
+  - `free` mounts have 6 DOF: the centre-of-mass displacement and one
+    incremental rotation vector per step. The gyroscopic term is neglected,
+    which is exact for bodies spinning about their axis of symmetry.
+  - `slider_z` mounts are springs with dampers. Bodies can also be `fixed` or
+    `prescribed`.
+  - Shapes are unions of cylinders and boxes with rounded edges, as exact
+    signed distances.
+- **Contact:** node-based penalty with lumped areas. It is frictionless,
+  sticking or Coulomb, with cohesive adhesion.
+- **Viscoelasticity:** Prony runs inside the implicit solve. Besides dynamics
+  there is a quasi-static viscoelastic mode for relaxation tests.
+- **Linear solves:** MKL PARDISO when `pip install -e ".[fast]"` is
+  installed, about 35× faster than SuperLU.
+
+**The `fem` backend** maps a scene onto this solver:
+
+- one soft body;
+- every hyperelastic law and Prony. Ogden runs through matrix functions
+  (tr C̄^(α/2) = tr exp((α/2) log C̄)), which are smooth where principal
+  stretches coincide. Its tangents cost about 2 ms per quadrature point,
+  roughly 100× the invariant laws, so project Ogden cards to Yeoh or Gent for
+  long dynamic runs;
+- free and spring-mounted rigid bodies, and the ground;
+- friction: coefficients combine by maximum. 0 is frictionless, ≥ 1 is
+  sticking (identical to μ = 1 statically, see below, and much faster for
+  Newton), and anything in between is Coulomb;
+- adhesion from the material and the ground.
+
+Rayleigh and Kelvin–Voigt damping are refused: they are numerical damping,
+so give the card a Prony series or no damping.
+
+| Check (`tests/test_fem_3d.py`) | Result |
+| --- | --- |
+| Quadrature, shape functions, mesh volume and surface | exact |
+| Closed-form tangents vs JAX `hessian`, every invariant law, with Prony history | within 1e-9 |
+| 30% frictionless compression, Yeoh, between ground and a prescribed plate | force within 0.1%, lateral stretch within 1e-4 of the homogeneous solution |
+| Quasi-static Prony ramp-and-hold | plate force within 0.2% of the homogeneous history |
+| Rigid free flight and spin | exact |
+| Centred 50 g drop (E = 100 kPa, ν = 0.4995, sticking) vs the axisymmetric solver | 5 mm mesh: 5.53 mm at 4.04 ms; axisymmetric (converged): 5.75 mm at 4.14 ms |
+
+## Performance
+
+`python tools/bench_fem.py` times one Newton iteration of the drop-test
+specimen part by part (element tangents, energy, assembly, linear solve) and a
+short 50 g drop. Run it on each machine to compare.
+
+- **Tangents:** closed form for invariant laws, about 2× faster than
+  differentiating the 3×3 energy twice. `jnp.linalg.det` was replaced by
+  cofactor formulas, because JAX differentiates it through an LU
+  factorisation.
+- **Assembly:** the Hessian's sparsity pattern (free DOFs, upper triangle) is
+  fixed when the solver is built, from every element, contact candidate and
+  rigid block. Each iteration only scatters values into it.
+- **Linear solve:** PARDISO's symbolic analysis (reordering) runs once per
+  solver; each iteration only refactorises.
+- **Compilation:** compiled kernels are kept in `~/.cache/softsim/jax`, so
+  repeated runs on one mesh compile faster (9 → 6 s). Set
+  `SOFTSIM_JAX_CACHE` to another directory, or to `0` to turn it off.
+
+Together these took a short 8 mm drop from 75 s to 43 s on the laptop, with
+results matching the earlier code to the Newton tolerance.
+
+Profile of a 5 mm, 50 g drop on the laptop (8 cores, shared with two other
+runs). A step takes about 4 Newton iterations and about 1.1 s.
+
+| Part of a Newton iteration | Time |
+| --- | --- |
+| Element tangents and their contraction into 30×30 matrices (JAX, mostly one core) | ~110 ms (~45%) |
+| PARDISO refactorisation (MKL, multi-threaded) | ~75 ms (~30%) |
+| Scatter into the fixed pattern, line-search energies, contact, Python | the rest |
+| Once per run: JIT compilation of the kernels | ~10 s |
+
+`Solid3DSolver(..., quadrature=4)` uses a 4-point stiffness rule, the one in
+Abaqus C3D10, instead of 8 points. In the drop it moved the peak by 0.5%. The
+default stays 8.
+
+**On a GPU:** `pip install -U "jax[cuda12]"` and run the benchmark again.
+The element kernels run on the GPU unchanged. The linear solve stays on the
+CPU (PARDISO). Expect the kernel share to shrink a lot and the solve to
+dominate. `JAX_PLATFORMS=cpu` forces the CPU for comparison.
 
 ## Verified (`tests/test_fem_axisym.py`)
 

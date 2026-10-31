@@ -116,11 +116,11 @@ class Simulation:
         config = validate(scenario_cls.config_model, raw, where=f"{raw['scenario']} config")
         scenario: Scenario = scenario_cls(config, self.base_dir)
         scene = scenario.build_scene()
-        findings = check_scene(scene, scenario.estimates())
+        backend_cls = get_backend(config.backend)
+        findings = check_scene(scene, scenario.estimates(), locking_free=backend_cls.locking_free)
         fatal = [f for f in findings if f.level == "error" or (self.strict and f.level == "warning")]
         if fatal:
             raise StabilityError("refusing to run:\n" + "\n".join(f"  {f}" for f in fatal))
-        backend_cls = get_backend(config.backend)
         backend_cls.check(scene)
         if self.backend is None or not isinstance(self.backend, backend_cls):
             if self.backend is not None:
@@ -143,9 +143,13 @@ class Simulation:
 
     def step(self, n: int | None = None) -> None:
         """Advance ``n`` physics steps (default: one output interval); raise if diverged."""
-        self.backend.step(n or self.config.simulation.output_every)
-        if not self.backend.is_finite():
-            raise StabilityError(f"simulation diverged at t = {self.backend.time:.6f} s")
+        t0 = self.backend.time
+        n = n or self.config.simulation.output_every
+        self.backend.step(n)
+        if not self.backend.is_finite() or self.backend.time < t0:  # MuJoCo resets its state (and clock) on NaN
+            raise StabilityError(f"simulation diverged between t = {t0:.6f} s and "
+                                 f"{t0 + n * self.config.simulation.timestep:.6f} s (often inverted elements: "
+                                 f"too soft for the load, or too large a timestep)")
 
     def reset(self) -> None:
         self.backend.reset()
@@ -202,13 +206,25 @@ class Simulation:
 
     # -- runtime changes -----------------------------------------------------
 
-    def set_material(self, body: str, material: str | Mapping[str, Any]) -> None:
+    def set_material(self, body: str, material: str | Mapping[str, Any] | None,
+                     overrides: Iterable[str] = ()) -> None:
         """Replace a soft body's material (preset name, file or mapping) and rebuild.
 
+        ``overrides`` (dotted card keys, e.g. ``["elastic.youngs_modulus=40 kPa"]``)
+        are applied on top; with ``material=None`` they change the current material.
         The scenario config is updated too, so saved configs stay reproducible.
         """
-        new_material = self.scenario.load_material(material)
         key = self.scenario.material_key(body)
+        if material is None:
+            current = {b.name: b.material for b in self.scene.soft_bodies}
+            if body not in current:
+                raise ConfigError(f"no soft body {body!r}; soft bodies: {list(current)}")
+            new_material = current[body]
+        else:
+            new_material = self.scenario.load_material(material)
+        overrides = list(overrides)
+        if overrides:
+            new_material = new_material.with_overrides(overrides)
         self.backend.set_material(body, new_material)
         self.scene = self.backend.scene
         self.raw_config = set_dotted(self.raw_config, key, new_material.model_dump(mode="json"))

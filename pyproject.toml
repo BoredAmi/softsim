@@ -23,7 +23,8 @@ mesh = ["gmsh>=4.11"]
 calib = ["scipy>=1.11", "matplotlib>=3.7"]
 video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
-fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # axisymmetric reference solver (softsim.fem); float64 on CPU
+fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # reference solvers (softsim.fem, backend "fem"); float64 on CPU
+fast = ["pypardiso>=0.4"]   # MKL PARDISO for the 3D reference's linear solves (x86-64; ~35x faster than SuperLU)
 dev = ["pytest>=7", "softsim[mujoco,mesh,calib]"]
 
 [project.scripts]
@@ -36,6 +37,7 @@ drop_test = "softsim.scenarios.drop_test:DropTestScenario"
 [project.entry-points."softsim.backends"]
 mujoco = "softsim.backends.mujoco:MujocoBackend"
 sofa = "softsim.backends.sofa:SofaBackend"
+fem = "softsim.backends.fem:FemBackend"
 
 [tool.setuptools.packages.find]
 include = ["softsim*"]

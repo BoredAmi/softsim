@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from softsim.errors import SoftSimError
+from softsim.errors import ConfigError, SoftSimError
 
 
 def _add_config_args(p: argparse.ArgumentParser) -> None:
@@ -70,7 +70,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
               f"{q['mean_edge'] * 1e3:.2f} mm, min quality {q['min_quality']:.2f}, mass {body.total_mass * 1e3:.2f} g, "
               f"material {body.material.name} ({body.material.elastic.model})")
     print("estimates:", {k: float(f"{v:.4g}") for k, v in scenario.estimates().items()})
-    findings = check_scene(scene, scenario.estimates())
+    try:
+        locking_free = get_backend(config.backend).locking_free
+    except ConfigError:  # unknown or uninstalled backend: reported under "backend support"
+        locking_free = False
+    findings = check_scene(scene, scenario.estimates(), locking_free=locking_free)
     for f in findings:
         print(" ", f)
     print("backend support:")
@@ -91,7 +95,8 @@ def _cmd_sweep(args: argparse.Namespace) -> int:
     from softsim.sweep import run_sweep
 
     out = Path(args.out) if args.out else Path("runs") / f"sweep_{Path(args.sweep).stem}_{_dt.datetime.now():%Y%m%d_%H%M%S}"
-    df = run_sweep(args.sweep, out, jobs=args.jobs, extra_overrides=args.overrides)
+    df = run_sweep(args.sweep, out, jobs=args.jobs, extra_overrides=args.overrides, sample_n=args.sample,
+                   sample_seed=args.seed)
     failed = (df["error"] != "").sum()
     print(df.drop(columns=[c for c in ("traceback",) if c in df]).to_string(max_cols=12))
     print(f"{len(df)} runs, {failed} failed; results in {out}", file=sys.stderr)
@@ -120,9 +125,164 @@ def _cmd_materials(args: argparse.Namespace) -> int:
     for name in list_presets(args.path):
         m = load_material(name, extra=args.path)
         e = m.elastic.initial_youngs_modulus()
-        print(f"{name:20s} {m.elastic.model:14s} E0={e / 1e3:7.1f} kPa  nu={m.elastic.initial_poisson_ratio():.3f}"
-              f"  rho={m.density:6.0f}  {m.description}")
+        print(f"{name:36s} {m.kind:9s} {m.elastic.model:18s} E0={e / 1e3:7.1f} kPa  "
+              f"nu={m.elastic.initial_poisson_ratio():.3f}  rho={m.density:6.0f}  "
+              f"{m.damping.model if m.damping else 'no damping':10s}  {m.description[:60]}")
     return 0
+
+
+def _cmd_params(args: argparse.Namespace) -> int:
+    import re
+
+    from softsim.config.params import config_params
+
+    rx = re.compile(args.grep) if args.grep else None
+    rows = []
+    for p in config_params(args.config, args.overrides, args.backend):
+        if rx and not rx.search(p.key):
+            continue
+        value = p.describe()
+        if len(value) > 40:
+            value = value[:37] + "..."
+        allowed = p.bounds or ("one of " + ", ".join(map(str, p.choices)) if len(p.choices) > 1 else "")
+        rows.append((p.key, value, allowed))
+    if not rows:
+        print("no matching parameters", file=sys.stderr)
+        return 1
+    w0, w1 = max(len(r[0]) for r in rows), max(len(r[1]) for r in rows)
+    for key, value, allowed in rows:
+        print(f"{key:{w0}s}  {value:{w1}s}  {allowed}".rstrip())
+    print("set any of these with --set KEY=VALUE (units allowed, e.g. --set "
+          "specimen.material.elastic.youngs_modulus='40 kPa')", file=sys.stderr)
+    return 0
+
+
+def _fmt_si(value: object) -> str:
+    if isinstance(value, float):
+        return f"{value:.4g}"
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{k}: {_fmt_si(v)}" for k, v in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_fmt_si(v) for v in value) + "]"
+    return str(value)
+
+
+def _cmd_material_show(args: argparse.Namespace) -> int:
+    import yaml
+
+    from softsim.materials import load_material
+    from softsim.materials.summary import material_summary
+
+    ref = yaml.safe_load(args.material) if args.material.lstrip().startswith("{") else args.material
+    m = load_material(ref, extra=args.path, base_dir=Path.cwd(), overrides=args.overrides)
+    print(f"{m.name} ({m.kind}): {m.description}")
+    print(f"  source: {' '.join(m.source.split())}")
+    for r in m.references:
+        print(f"  reference: {r.doi or r.url or ''} {r.note}".rstrip())
+    s = material_summary(m)
+    units = {"youngs_modulus_0": ("kPa", 1e-3), "shear_modulus_0": ("kPa", 1e-3), "bulk_modulus_0": ("kPa", 1e-3),
+             "density": ("kg/m^3", 1.0), "shear_wave_speed": ("m/s", 1.0), "p_wave_speed": ("m/s", 1.0)}
+    for key, value in s.items():
+        if key in units:
+            unit, f = units[key]
+            print(f"  {key:18s} {value * f:.4g} {unit}")
+        elif key == "dt_explicit":
+            print("  dt_explicit        " + ", ".join(f"{dt * 1e6:.3g} us at h={h * 1e3:g} mm" for h, dt in value.items()))
+        elif key not in ("kind",):
+            print(f"  {key:18s} {_fmt_si(value)}")
+    try:
+        from softsim.materials.homogeneous import curve
+    except ImportError:
+        return 0
+    try:
+        stretches = (0.7, 1.5, 2.0, 3.0)
+        d = curve(m, "uniaxial", stretches)
+    except SoftSimError as exc:  # law without a reference energy (linear, stvk)
+        print(f"  (no stress curve: {exc})")
+        return 0
+    print("  uniaxial nominal stress (relaxed): " + ", ".join(
+        f"{x:g}: {sv / 1e3:.3g} kPa" for x, sv in zip(stretches, d.stress)))
+    return 0
+
+
+def _material_refs(args: argparse.Namespace):
+    import yaml
+
+    from softsim.materials import load_material
+
+    out = []
+    for text in args.materials:
+        ref = yaml.safe_load(text) if text.lstrip().startswith("{") else text
+        out.append(load_material(ref, extra=args.path, base_dir=Path.cwd(), overrides=args.overrides))
+    return out
+
+
+def _cmd_material_plot(args: argparse.Namespace) -> int:
+    from softsim.materials.plots import plot_cards
+
+    path = plot_cards(_material_refs(args), args.tests.split(","), args.out)
+    print(path)
+    return 0
+
+
+def _cmd_material_project(args: argparse.Namespace) -> int:
+    import yaml
+
+    from softsim.materials import save_material
+    from softsim.materials.fit import project
+
+    args.materials = [args.material]
+    card = _material_refs(args)[0]
+    lo, hi = (float(v) for v in args.strain_range.split(","))
+    r = project(card, args.to, (lo, hi))
+    print(f"{card.name} -> {args.to}: nrmse {100 * r.nrmse:.2f}%, max error {100 * r.max_error:.2f}% of peak stress "
+          f"(uniaxial, equibiaxial, planar over strain [{lo:g}, {hi:g}])"
+          + ("" if r.stable else f"; UNSTABLE: {r.stability}"), file=sys.stderr)
+    if args.out:
+        print(save_material(r.material, args.out))
+    else:
+        print(yaml.safe_dump(r.material.model_dump(mode="json", exclude_none=True), sort_keys=False))
+    return 0
+
+
+def _cmd_fetch(args: argparse.Namespace) -> int:
+    from softsim.experiments.material_tests import load_material_tests
+
+    print(load_material_tests(args.dataset).fetch())
+    return 0
+
+
+def _cmd_fit_material(args: argparse.Namespace) -> int:
+    from softsim.materials.fit_cli import fit_material
+
+    report = fit_material(args.dataset, args.material, args.laws.split(","), (args.strain_min, args.strain_max),
+                          args.poisson_ratio, args.density, args.out)
+    print(f"{'law':14s} {'nrmse':>7s} {'max err':>8s} {'AIC':>9s}  stable  parameters")
+    for r in report["fits"]:
+        params = ", ".join(f"{k.split('.', 1)[1]}={v:.4g}" for k, v in r["values"].items())
+        print(f"{r['law']:14s} {100 * r['nrmse']:6.2f}% {100 * r['max_error']:7.2f}% {r['aic']:9.1f}  "
+              f"{'yes' if r['stable'] else 'NO ':6s}  {params}")
+    print(f"cards, report.yaml and fit.png in {report['output']}", file=sys.stderr)
+    return 0
+
+
+def _cmd_sensitivity(args: argparse.Namespace) -> int:
+    from softsim.sensitivity import parse_range, run_sensitivity
+
+    ranges = [parse_range(t, args.config, args.overrides) for t in args.param]
+    df = run_sensitivity(args.config, ranges, args.metric, args.trajectories, args.levels, args.seed, args.jobs,
+                         args.overrides)
+    failed = int((df.attrs["runs"]["error"] != "").sum())
+    for metric, g in df.groupby("metric", sort=False):
+        print(f"{metric}: influence of each parameter over its full range (mu*, sigma: fraction of the mean)")
+        for _, r in g.iterrows():
+            print(f"  {r.parameter:50s} mu* {r.mu_star:7.3f}  sigma {r.sigma:7.3f}  [{r.low:.4g}, {r.high:.4g}]"
+                  + (" log" if r.log else ""))
+    if args.out:
+        df.to_csv(args.out, index=False)
+        df.attrs["runs"].to_csv(Path(args.out).with_suffix(".runs.csv"), index=False)
+    print(f"{len(df.attrs['runs'])} runs, {failed} failed", file=sys.stderr)
+    return 1 if failed else 0
 
 
 def _cmd_scenarios(args: argparse.Namespace) -> int:
@@ -234,7 +394,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out")
     p.add_argument("--jobs", type=int, default=1, help="parallel processes")
     p.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE")
+    p.add_argument("--sample", type=int, help="cross the grid with N material variants drawn from the card's "
+                                              "uncertainty (specimen.material unless the file's sample: says)")
+    p.add_argument("--seed", type=int, help="random seed for --sample")
     p.set_defaults(func=_cmd_sweep)
+
+    p = sub.add_parser("sensitivity", help="which parameters matter: Morris screening over value ranges")
+    p.add_argument("config", help="scenario YAML")
+    p.add_argument("--param", action="append", required=True, metavar="KEY=LOW:HIGH",
+                   help="parameter range, units allowed, e.g. 'specimen.material.elastic.youngs_modulus=30 kPa:150 kPa'")
+    p.add_argument("--metric", action="append", required=True, help="summary metric, e.g. peak_indentation")
+    p.add_argument("--trajectories", type=int, default=8)
+    p.add_argument("--levels", type=int, default=4)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--jobs", type=int, default=1)
+    p.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE")
+    p.add_argument("--out", help="write the indices (and .runs.csv) here")
+    p.set_defaults(func=_cmd_sensitivity)
 
     p = sub.add_parser("export", help="print/write the backend-native model (e.g. MJCF)")
     _add_config_args(p)
@@ -244,6 +420,56 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("materials", help="list material presets")
     p.add_argument("--path", action="append", default=[], help="extra preset directory")
     p.set_defaults(func=_cmd_materials)
+
+    p = sub.add_parser("params", help="list every changeable value of a config (key, value, unit, allowed range)")
+    _add_config_args(p)
+    p.add_argument("--grep", help="only keys matching this regular expression")
+    p.set_defaults(func=_cmd_params)
+
+    p = sub.add_parser("material", help="inspect material cards")
+    msub = p.add_subparsers(dest="material_command", required=True)
+    q = msub.add_parser("show", help="card summary with derived quantities (moduli, wave speeds, time steps)")
+    q.add_argument("material", help="preset name, YAML file or inline mapping")
+    q.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
+                   help="override a card value, e.g. elastic.youngs_modulus='40 kPa'")
+    q.add_argument("--path", action="append", default=[], help="extra preset directory")
+    q.set_defaults(func=_cmd_material_show)
+    q = msub.add_parser("plot", help="homogeneous test curves of one or more cards (needs the fem extra)")
+    q.add_argument("materials", nargs="+", help="preset names, YAML files or inline mappings")
+    q.add_argument("--tests", default="uniaxial,simple_shear,relaxation,dma",
+                   help="comma list of uniaxial, equibiaxial, planar, simple_shear, volumetric, confined, "
+                        "relaxation, dma")
+    q.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
+                   help="override applied to every card")
+    q.add_argument("--path", action="append", default=[], help="extra preset directory")
+    q.add_argument("--out", default="material_tests.png")
+    q.set_defaults(func=_cmd_material_plot)
+    q = msub.add_parser("project", help="fit another law to a card's homogeneous curves (e.g. for a backend "
+                                        "that lacks the card's law); prints or writes the new card")
+    q.add_argument("material", help="preset name, YAML file or inline mapping")
+    q.add_argument("--to", required=True, help="target law: neo_hookean, mooney_rivlin, yeoh, ogden1, ogden2, "
+                                               "gent, arruda_boyce")
+    q.add_argument("--strain-range", default="-0.4,1.0", help="engineering strain range, e.g. -0.4,1.0")
+    q.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE")
+    q.add_argument("--path", action="append", default=[], help="extra preset directory")
+    q.add_argument("--out", help="write the card here (default: print it)")
+    q.set_defaults(func=_cmd_material_project)
+
+    p = sub.add_parser("fetch", help="download a dataset's archive into its local_dir and verify it")
+    p.add_argument("dataset", help="dataset YAML, e.g. datasets/marechal2021_srmd.yaml")
+    p.set_defaults(func=_cmd_fetch)
+
+    p = sub.add_parser("fit-material", help="fit constitutive laws to a material-test dataset; writes cards")
+    p.add_argument("dataset", help="material-test dataset YAML, e.g. datasets/marechal2021_srmd.yaml")
+    p.add_argument("material", help="material key in the dataset, e.g. ecoflex_00_30")
+    p.add_argument("--laws", default="neo_hookean,mooney_rivlin,yeoh,ogden1,ogden2,gent,arruda_boyce")
+    p.add_argument("--strain-min", type=float, default=0.0,
+                   help="engineering strain; negative includes compression tests (e.g. -0.25)")
+    p.add_argument("--strain-max", type=float, default=2.0, help="engineering strain")
+    p.add_argument("--poisson-ratio", type=float, default=0.49, help="fixed during the fit")
+    p.add_argument("--density", help="override the dataset's density, e.g. '1.07 g/cm^3'")
+    p.add_argument("--out", help="output directory (default runs/material_fits/<dataset>/<material>)")
+    p.set_defaults(func=_cmd_fit_material)
 
     p = sub.add_parser("scenarios", help="list registered scenarios and their actions")
     p.set_defaults(func=_cmd_scenarios)

@@ -96,16 +96,34 @@ class SimState:
         return total
 
 
+ELASTIC_LAWS = frozenset({Capability.LINEAR_ELASTIC, Capability.STVK, Capability.NEO_HOOKEAN,
+                          Capability.STABLE_NEO_HOOKEAN, Capability.MOONEY_RIVLIN, Capability.YEOH,
+                          Capability.OGDEN, Capability.GENT, Capability.ARRUDA_BOYCE})
+
+
+# ``softsim material project --to`` target for each law capability
+PROJECTABLE = {Capability.STABLE_NEO_HOOKEAN: "neo_hookean", Capability.NEO_HOOKEAN: "neo_hookean",
+               Capability.MOONEY_RIVLIN: "mooney_rivlin", Capability.YEOH: "yeoh", Capability.OGDEN: "ogden1",
+               Capability.GENT: "gent", Capability.ARRUDA_BOYCE: "arruda_boyce"}
+
+
 class Backend(ABC):
     """Physics backend interface."""
 
     name: ClassVar[str]
     capabilities: ClassVar[frozenset[Capability]]
+    locking_free: ClassVar[bool] = False  # elements that do not lock near incompressibility (no locking warning)
 
     @classmethod
     def unsupported(cls, scene: Scene) -> list[str]:
         """Descriptions of everything in ``scene`` this backend cannot simulate."""
-        return sorted(c.value for c in scene.requires - cls.capabilities) + cls.extra_checks(scene)
+        missing = scene.requires - cls.capabilities
+        out = sorted(c.value for c in missing)
+        if missing & ELASTIC_LAWS:
+            laws = sorted({PROJECTABLE[c] for c in cls.capabilities if c in PROJECTABLE})
+            out.append("(fit a law this backend has to the card: `softsim material project <card> --to "
+                       f"{'|'.join(laws)}`)")
+        return out + cls.extra_checks(scene)
 
     @classmethod
     def extra_checks(cls, scene: Scene) -> list[str]:

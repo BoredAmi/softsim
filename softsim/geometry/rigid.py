@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, Mapping, Union
 
+import numpy as np
 import yaml
 from pydantic import Field
 
@@ -39,6 +40,26 @@ class Part:
         if self.kind == "cylinder":
             return math.pi * self.size[0] ** 2 * 2 * self.size[1]
         return 8 * self.size[0] * self.size[1] * self.size[2]
+
+
+def rigid_mass_properties(body) -> tuple[np.ndarray, np.ndarray]:
+    """Centre of mass (body frame) and inertia tensor about it [kg m^2] of a ``RigidBodySpec``; mass split
+    by part volume."""
+    vols = np.array([p.volume() for p in body.parts])
+    masses = body.mass * vols / vols.sum()
+    centers = np.array([p.center for p in body.parts], float)
+    com = (masses[:, None] * centers).sum(axis=0) / body.mass
+    inertia = np.zeros((3, 3))
+    for part, m, c in zip(body.parts, masses, centers):
+        if part.kind == "cylinder":
+            r, h = part.size[0], 2 * part.size[1]
+            local = np.diag([m * (3 * r**2 + h**2) / 12] * 2 + [m * r**2 / 2])
+        else:
+            a, b, cc = (2 * s for s in part.size)
+            local = np.diag([m * (b**2 + cc**2) / 12, m * (a**2 + cc**2) / 12, m * (a**2 + b**2) / 12])
+        d = c - com
+        inertia += local + m * (np.dot(d, d) * np.eye(3) - np.outer(d, d))
+    return com, inertia
 
 
 class RigidCylinder(StrictModel):

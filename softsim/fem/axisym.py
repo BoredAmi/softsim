@@ -43,7 +43,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 from softsim.fem import jax_setup
-from softsim.fem.materials import IsochoricLaw, Prony
+from softsim.fem.materials import IsochoricLaw, Prony, volumetric_energy
 
 jax, jnp = jax_setup()
 
@@ -203,11 +203,6 @@ class Problem:
 
 # -- the solver ---------------------------------------------------------------------------------
 
-def _u_volumetric(j, kappa):
-    """Simo-Taylor volumetric energy kappa/4 (J^2 - 1 - 2 ln J): convex, U''(1) = kappa."""
-    return 0.25 * kappa * (j * j - 1.0 - 2.0 * jnp.log(j))
-
-
 def _right_cauchy_green(f2, hoop):
     c2 = f2.T @ f2
     return jnp.array([[c2[0, 0], c2[0, 1], 0.0], [c2[1, 0], c2[1, 1], 0.0], [0.0, 0.0, hoop * hoop]])
@@ -345,7 +340,7 @@ class AxisymSolver:
             # neither notices a fold at a single quadrature point: infinite energy makes the line
             # search reject any step that inverts one
             folded = jnp.where(jnp.all(ok), 0.0, jnp.inf)
-            return jnp.sum(e_iso) + ve * _u_volumetric(jnp.sum(wj) / ve, kappa) + folded
+            return jnp.sum(e_iso) + ve * volumetric_energy(jnp.sum(wj) / ve, kappa) + folded
 
         self._elem_grad_hess = jax.jit(jax.vmap(
             lambda ue, dn, w, r, c, b: (jax.grad(element_energy)(ue, dn, w, r, c, b),
