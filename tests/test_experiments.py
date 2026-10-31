@@ -167,9 +167,10 @@ def _bare_calibration(tmp_path, cases, jobs):
 
     cal = object.__new__(Calibration)
     cal.cases = {c: 1.0 for c in cases}
+    cal.observables = {c: {"indentation_rel": None} for c in cases}
     cal._raw = {c: ({}, str(tmp_path)) for c in cases}
     cal.history, cal.output, cal._workers, cal.tracks = [], tmp_path, jobs, str(tmp_path)
-    cal._spec_hash, cal._log, cal._done = "test", tmp_path / "evaluations.jsonl", {}
+    cal._spec_hash, cal._legacy_hash, cal._log, cal._done = "test", "legacy", tmp_path / "evaluations.jsonl", {}
     cal._pool = None
     return cal
 

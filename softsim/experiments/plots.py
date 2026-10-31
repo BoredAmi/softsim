@@ -80,6 +80,50 @@ def overlay(tracks: str | Path, sims: Mapping[str, Mapping[str, pd.DataFrame]], 
     return path
 
 
+_LABELS = {"indentation_rel": "weight indentation rel. to base [mm]", "specimen_lift": "specimen lift [mm]"}
+
+
+def trajectories(tracks: str | Path, sims: Mapping[str, Mapping[str, pd.DataFrame]], path: str | Path,
+                 columns: tuple[str, ...] = ("indentation_rel", "specimen_lift"), t_max: float = 0.1,
+                 title: str = "", notes: Mapping[str, str] | None = None) -> Path:
+    """Whole trajectories after contact: one row per observable, one column per case.
+
+    ``notes`` (case -> text) are printed in the panels, e.g. where the tracking is unreliable.
+    """
+    plt = _plt()
+    cases = sorted({c for curves in sims.values() for c in curves})
+    fig, axes = plt.subplots(len(columns), len(cases), figsize=(3.6 * len(cases), 2.7 * len(columns)),
+                             sharex=True, squeeze=False)
+    styles = ["-", "--", ":", "-."]
+    for j, case in enumerate(cases):
+        exp = ExperimentCase.load(tracks, case)
+        for i, column in enumerate(columns):
+            ax = axes[i, j]
+            t, y = exp.curve(column)
+            sel = (t > -0.003) & (t < t_max)
+            ax.plot(t[sel] * 1e3, y[sel] * 1e3, "k.", ms=2, label="experiment")
+            for k, ((label, curves), style) in enumerate(zip(sims.items(), styles)):
+                if case in curves and column in curves[case]:
+                    c = curves[case]
+                    s = (c.t > -0.003) & (c.t < t_max)
+                    ax.plot(c.t[s] * 1e3, c[column][s] * 1e3, style, color=f"C{k}", lw=1.4, label=label)
+            ax.grid(alpha=0.3)
+            if i == 0:
+                ax.set_title(case + (f"\n{notes[case]}" if notes and case in notes else ""), fontsize=9)
+            if j == 0:
+                ax.set_ylabel(_LABELS.get(column, column), fontsize=8)
+            if i == len(columns) - 1:
+                ax.set_xlabel("time since contact [ms]")
+    axes[0, 0].legend(fontsize=7, loc="best")
+    if title:
+        fig.suptitle(title, fontsize=10)
+    fig.tight_layout()
+    path = Path(path)
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+
+
 def peak_summary(tracks: str | Path, sims: Mapping[str, Mapping[str, pd.DataFrame]], masses: Mapping[str, float],
                  path: str | Path) -> tuple[Path, pd.DataFrame]:
     """Peak indentation and time to peak vs weight mass, experiment vs simulations."""

@@ -15,14 +15,25 @@ A calibration file::
 
 Each case is simulated with its measured impact (speed, offset, rotation rate;
 see ``ExperimentCase.sim_overrides``) and compared on the first contact phase
-(``compare.py``). Cost = weighted mean of RMSE / experimental peak. The fitted
+(``compare.py``). A case may instead list observables and windows::
+
+    cases:
+      w020: {weight: 1.0, observables: {indentation_rel: [0, 100 ms], specimen_lift: [0, 100 ms]}}
+      w050: {observables: {indentation_rel: first_contact}}
+
+Per-case cost = mean over its observables of RMSE / largest experimental value
+in the window; total cost = weighted mean over cases. The fitted
 values are only meaningful for the mesh size, backend and model they were fitted
 with; the saved preset records that in ``provenance``.
 
 Every evaluation is appended to ``<output>/evaluations.jsonl``. Re-running the
-same calibration file replays them from there instead of simulating again
-(the optimizer is deterministic), so an interrupted run resumes where it
-stopped; changing the file starts over. A simulation that crashes its worker
+calibration replays them from there instead of simulating again (the optimizer
+is deterministic), so an interrupted run resumes where it stopped. Entries are
+keyed by what determines a simulation's result (dataset, tracks, cases,
+overrides, parameter names, and the values), so changing ``max_evaluations``,
+``grid``, bounds or initial values keeps them; changing the rest starts over.
+The key does not cover softsim's own code: after changing simulation code,
+delete the log, or old results are replayed as if they were current. A simulation that crashes its worker
 process (e.g. a native segfault) costs the same as an unstable one.
 """
 
@@ -46,12 +57,15 @@ import yaml
 from softsim.config.loader import apply_overrides, load_yaml, set_dotted
 from softsim.config.units import parse_quantity
 from softsim.errors import ConfigError
-from softsim.experiments.compare import ExperimentCase, compare_case, simulated_indentation
+from softsim.experiments.compare import OBSERVABLES, ExperimentCase, compare_observable, simulated_indentation
 from softsim.experiments.datasets import load_dataset
 from softsim.io import save_table
 
 _DIMENSIONS = {"youngs_modulus": "pressure", "beta": "time", "timeconst": "time", "c10": "pressure",
-               "c01": "pressure", "bulk_modulus": "pressure", "density": "density", "mu": "pressure"}
+               "c01": "pressure", "bulk_modulus": "pressure", "density": "density", "mu": "pressure",
+               "strength": "pressure", "range": "length", "stiffness": "stiffness", "damping": "viscous_damping",
+               "mass": "mass"}
+FIRST_CONTACT = "first_contact"
 
 
 @dataclass(frozen=True)
@@ -82,11 +96,45 @@ def _parse_parameters(spec: dict[str, Any]) -> list[Parameter]:
     return params
 
 
-def _evaluate_case(task: tuple[dict[str, Any], str, str, str]) -> dict[str, float]:
-    """Run one case (worker process) and return its comparison metrics."""
+Window = tuple[float, float] | None  # None: first contact phase
+
+
+def _parse_cases(spec: dict[str, Any]) -> tuple[dict[str, float], dict[str, dict[str, Window]]]:
+    """Case weights and, per case, the observables to compare with their windows."""
+    weights, observables = {}, {}
+    for case, value in spec.items():
+        if not isinstance(value, dict):
+            weights[case], observables[case] = float(value), {"indentation_rel": None}
+            continue
+        weights[case] = float(value.get("weight", 1.0))
+        obs = {}
+        for name, window in (value.get("observables") or {"indentation_rel": FIRST_CONTACT}).items():
+            if name not in OBSERVABLES:
+                raise ConfigError(f"case {case}: unknown observable {name!r}; known: {', '.join(OBSERVABLES)}")
+            if window == FIRST_CONTACT:
+                if name != "indentation_rel":
+                    raise ConfigError(f"case {case}: '{FIRST_CONTACT}' is only defined for indentation_rel")
+                obs[name] = None
+            else:
+                t0, t1 = (parse_quantity(w, "time") for w in window)
+                if not t0 < t1:
+                    raise ConfigError(f"case {case}: empty window {window} for {name}")
+                obs[name] = (t0, t1)
+        observables[case] = obs
+    return weights, observables
+
+
+def _evaluate_case(task: tuple) -> dict[str, float]:
+    """Run one case (worker process) and return its comparison metrics.
+
+    ``nrmse`` is the mean over the case's observables; per-observable metrics are
+    prefixed with the observable name (the first-contact indentation metrics are
+    also reported unprefixed).
+    """
     from softsim.runner import Simulation
 
-    raw, base_dir, tracks, case = task
+    raw, base_dir, tracks, case = task[:4]
+    observables = task[4] if len(task) > 4 else {"indentation_rel": None}
     exp = ExperimentCase.load(tracks, case)
     raw = apply_overrides(raw, exp.sim_overrides())
     try:
@@ -95,7 +143,18 @@ def _evaluate_case(task: tuple[dict[str, Any], str, str, str]) -> dict[str, floa
             ts = sim.run().timeseries
         finally:
             sim.close()
-        metrics = compare_case(simulated_indentation(ts), exp)
+        curves = simulated_indentation(ts)
+        metrics: dict[str, Any] = {}
+        parts = []
+        for name, window in observables.items():
+            m = compare_observable(curves, exp, name, window)
+            parts.append(m["nrmse"])
+            metrics.update({f"{name}.{k}": v for k, v in m.items()})
+            if name == "indentation_rel" and window is None:
+                metrics.update(m)
+        if "indentation_rel" not in observables or observables["indentation_rel"] is not None:
+            metrics.update(compare_observable(curves, exp, "indentation_rel", None))  # for reports and plots
+        metrics["nrmse"] = float(np.mean(parts))
         if "specimen_min_z" in ts:  # contact artefacts (soft body through the ground) show up here
             metrics["ground_penetration"] = float(max(0.0, -ts["specimen_min_z"].min()))
     except Exception as exc:  # unstable / invalid parameter sets cost the maximum
@@ -112,7 +171,7 @@ class Calibration:
         base = self.path.parent
         self.dataset = load_dataset(base / spec["dataset"])
         self.tracks = str((base / spec["tracks"]).resolve())
-        self.cases: dict[str, float] = {k: float(v) for k, v in spec["cases"].items()}
+        self.cases, self.observables = _parse_cases(spec["cases"])
         self.params = _parse_parameters(spec["parameters"])
         self.overrides = list(spec.get("overrides", []))
         self.grid = int(spec.get("grid", 0))
@@ -122,7 +181,9 @@ class Calibration:
         self._workers = min(jobs, len(self.cases))
         self.history: list[dict[str, Any]] = []
         self._pool: ProcessPoolExecutor | None = None
-        self._spec_hash = hashlib.sha256(json.dumps(spec, sort_keys=True, default=str).encode()).hexdigest()[:16]
+        self._spec_hash = _hash({k: spec.get(k) for k in ("dataset", "tracks", "cases", "overrides")}
+                                | {"parameters": sorted(spec["parameters"])})
+        self._legacy_hash = _hash(spec)  # logs written before the key was narrowed
         self._log = self.output / "evaluations.jsonl"
         self._done = self._load_log()
         self._raw = {}
@@ -130,13 +191,13 @@ class Calibration:
             cfg_path = self.dataset.config_path(case)
             self._raw[case] = (apply_overrides(load_yaml(cfg_path), self.overrides), str(cfg_path.parent))
 
-    def _configs(self, values: dict[str, float]) -> list[tuple[dict[str, Any], str, str, str]]:
+    def _configs(self, values: dict[str, float]) -> list[tuple]:
         tasks = []
         for case, (raw, base_dir) in self._raw.items():
             r = raw
             for key, value in values.items():
                 r = set_dotted(r, key, value)
-            tasks.append((r, base_dir, self.tracks, case))
+            tasks.append((r, base_dir, self.tracks, case, self.observables[case]))
         return tasks
 
     @staticmethod
@@ -144,12 +205,12 @@ class Calibration:
         return json.dumps({k: float(f"{v:.12g}") for k, v in values.items()}, sort_keys=True)
 
     def _load_log(self) -> dict[str, list[dict[str, float]]]:
-        """Results of earlier runs of this exact calibration file, keyed by parameter values."""
+        """Results of earlier runs with the same simulations, keyed by parameter values."""
         done = {}
         if self._log.is_file():
             for line in self._log.read_text().splitlines():
                 entry = json.loads(line)
-                if entry.get("spec") == self._spec_hash:
+                if entry.get("spec") in (self._spec_hash, self._legacy_hash):
                     done[self._key(entry["values"])] = entry["results"]
         return done
 
@@ -261,6 +322,10 @@ class Calibration:
         (self.output / "report.yaml").write_text(yaml.safe_dump(json.loads(json.dumps(report, default=float)),
                                                                 sort_keys=False))
         return report
+
+
+def _hash(obj: Any) -> str:
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
 def _relative(path: Path) -> str:

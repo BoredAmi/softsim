@@ -5,8 +5,12 @@ Both sides are reduced to the same observable with the same rules:
       by more than ``contact_threshold`` (0.1 mm ~ 0.5 px in the recordings);
     * ``indentation_rel`` = downward displacement of the centre of mass since
       contact, relative to the specimen base (removes support motion);
-    * the comparison window is the first contact phase: from contact until the
-      experimental curve returns below zero after its peak (capped).
+    * ``specimen_lift`` = height of the specimen's lowest point above its
+      position at contact (the specimen hops off its support after impact);
+    * the default comparison window is the first contact phase: from contact
+      until the experimental indentation returns below zero after its peak
+      (capped). Other windows and observables can be compared explicitly
+      (:func:`compare_observable`).
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import pandas as pd
 import yaml
 
 G = 9.81
+OBSERVABLES = ("indentation_rel", "specimen_lift")
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,8 @@ class ExperimentCase:
 def simulated_indentation(ts: pd.DataFrame, gravity: float = G, contact_threshold: float = 1e-4) -> pd.DataFrame:
     """Apply the experiment's contact rule to a drop-test simulation time series.
 
-    Returns columns ``t`` (since contact) and ``indentation_rel`` [m].
+    Returns columns ``t`` (since contact), ``indentation_rel`` and
+    ``specimen_lift`` [m].
     """
     t = ts["t"].to_numpy()
     z = ts["weight_com_z"].to_numpy()
@@ -87,30 +93,43 @@ def simulated_indentation(ts: pd.DataFrame, gravity: float = G, contact_threshol
     free = c0 + v0 * t - 0.5 * gravity * t**2
     departed = np.nonzero(z - free > contact_threshold)[0]
     if len(departed) == 0:
-        return pd.DataFrame({"t": t - t[-1], "indentation_rel": np.full_like(t, np.nan)})
+        nan = np.full_like(t, np.nan)
+        return pd.DataFrame({"t": t - t[-1], "indentation_rel": nan, "specimen_lift": nan})
     c = max(departed[0] - 1, 0)
-    return pd.DataFrame({"t": t - t[c], "indentation_rel": (z[c] - z) + (base - base[c])})
+    return pd.DataFrame({"t": t - t[c], "indentation_rel": (z[c] - z) + (base - base[c]),
+                         "specimen_lift": base - base[c]})
 
 
-def compare_case(sim: pd.DataFrame, exp: ExperimentCase, window: tuple[float, float] | None = None) -> dict[str, float]:
-    """Error metrics between a simulated and an experimental indentation curve."""
+def compare_observable(sim: pd.DataFrame, exp: ExperimentCase, column: str = "indentation_rel",
+                       window: tuple[float, float] | None = None) -> dict[str, float]:
+    """Error metrics between simulated and experimental ``column`` over ``window`` [s].
+
+    ``window`` defaults to the first contact phase. The RMSE is normalised by the
+    experiment's largest absolute value in the window (the peak indentation for
+    ``indentation_rel``, the hop height for ``specimen_lift``).
+    """
     t0, t1 = window or exp.window()
-    te, ye = exp.curve()
+    te, ye = exp.curve(column)
     sel = (te >= t0) & (te <= t1)
     te, ye = te[sel], ye[sel]
-    ts, ys = sim["t"].to_numpy(), sim["indentation_rel"].to_numpy()
+    ts, ys = sim["t"].to_numpy(), sim[column].to_numpy()
     if len(te) < 3 or not np.isfinite(ys).any() or ts[-1] < t1:
         return {"rmse": float("nan"), "nrmse": float("nan")}
     yi = np.interp(te, ts, ys)
-    peak_e, peak_s = float(ye.max()), float(ys[(ts >= t0) & (ts <= t1)].max())
-    rmse = float(np.sqrt(np.mean((yi - ye) ** 2)))
     sim_win = (ts >= t0) & (ts <= t1)
+    scale = float(np.abs(ye).max())
+    rmse = float(np.sqrt(np.mean((yi - ye) ** 2)))
     return {
         "rmse": rmse,
-        "nrmse": rmse / peak_e if peak_e > 0 else float("nan"),
-        "peak_exp": peak_e,
-        "peak_sim": peak_s,
+        "nrmse": rmse / scale if scale > 0 else float("nan"),
+        "peak_exp": float(ye.max()),
+        "peak_sim": float(ys[sim_win].max()),
         "t_peak_exp": float(te[np.argmax(ye)]),
         "t_peak_sim": float(ts[sim_win][np.argmax(ys[sim_win])]),
         "window_end": t1,
     }
+
+
+def compare_case(sim: pd.DataFrame, exp: ExperimentCase, window: tuple[float, float] | None = None) -> dict[str, float]:
+    """Error metrics between a simulated and an experimental indentation curve (first contact by default)."""
+    return compare_observable(sim, exp, "indentation_rel", window)

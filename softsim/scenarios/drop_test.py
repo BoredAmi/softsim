@@ -8,6 +8,11 @@ Simulation starts with the weight's lowest point ``drop.gap`` above the
 specimen, moving at the speed it would have after free fall from
 ``drop.height`` (air drag neglected), so the long free fall is not simulated.
 
+Optional ``support``: instead of resting on the rigid table, the specimen sits
+on a thin carrier plate that can lift off the table against a spring and
+damper (a lumped model of e.g. a cloth or mat the specimen sticks to). Heights
+then include the plate thickness.
+
 Sign conventions: ``indentation`` = height of the specimen's undeformed contact
 surface (top face plus the backend's collision skin, ``contact.soft_radius``)
 minus the height of the weight's bottom centre, positive = compressing.
@@ -26,12 +31,13 @@ from pydantic import Field
 
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
-from softsim.config.units import Angle, Length, Mass, Velocity
+from softsim.config.units import Angle, Length, Mass, Stiffness, Velocity, ViscousDamping
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution, load_rigid_body
+from softsim.geometry.rigid import Part
 from softsim.materials.models import Friction
 from softsim.scenarios.base import Scenario, ScenarioConfig
-from softsim.scene import Pose, RigidBodySpec, Scene, SoftBodySpec
+from softsim.scene import GROUND_NAME, Pose, RigidBodySpec, Scene, SoftBodySpec
 
 GRAVITY_FALLBACK = 9.81
 
@@ -61,11 +67,24 @@ class DropConfig(StrictModel):
     angular_velocity: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
+class SupportConfig(StrictModel):
+    """Compliant support under the specimen (see module docstring)."""
+
+    enabled: bool = False
+    name: str = "support"
+    mass: Annotated[Mass, Field(gt=0)] = 0.005
+    size: tuple[Length, Length, Length] = (0.08, 0.08, 0.002)
+    stiffness: Annotated[Stiffness, Field(ge=0)] = 50.0
+    damping: Annotated[ViscousDamping, Field(ge=0)] = 0.1
+    friction: Friction = Friction(sliding=1.0)
+
+
 class DropTestConfig(ScenarioConfig):
     scenario: Literal["drop_test"] = "drop_test"
     specimen: SpecimenConfig
     weight: WeightConfig
     drop: DropConfig = DropConfig()
+    support: SupportConfig = SupportConfig()
 
 
 class DropTestScenario(Scenario):
@@ -106,15 +125,21 @@ class DropTestScenario(Scenario):
         check_resolution(spec_cfg.geometry, spec_cfg.mesh)
         mesh = spec_cfg.geometry.mesh(spec_cfg.mesh)
         pinned = tuple(mesh.vertices_where(lambda p: p[:, 2] < 1e-9).tolist()) if spec_cfg.base == "bonded" else ()
+        support = cfg.support
+        base_z = support.size[2] if support.enabled else 0.0
+        if support.enabled and spec_cfg.base == "bonded":
+            raise ConfigError("specimen.base 'bonded' pins the specimen to the world; it can't ride on a support")
         specimen = SoftBodySpec(
             name=spec_cfg.name,
             mesh=mesh,
             material=self.load_material(spec_cfg.material),
+            pose=Pose((0.0, 0.0, base_z)),
             mass=spec_cfg.mass,
             pinned=pinned,
             self_collision=spec_cfg.self_collision,
         )
-        self._top = spec_cfg.geometry.top_height
+        self._base = base_z
+        self._top = spec_cfg.geometry.top_height + base_z
         self._top_center = int(np.argmin(np.hypot(mesh.points[:, 0], mesh.points[:, 1])
                                          + 1e3 * (self._top - mesh.points[:, 2])))
 
@@ -135,9 +160,22 @@ class DropTestScenario(Scenario):
             angular_velocity=drop.angular_velocity,
             friction=cfg.weight.friction,
         )
+        rigid = [weight]
+        if support.enabled:
+            sx, sy, sz = support.size
+            rigid.append(RigidBodySpec(
+                name=support.name,
+                parts=(Part("box", (sx / 2, sy / 2, sz / 2), (0.0, 0.0, sz / 2)),),
+                mass=support.mass,
+                friction=support.friction,
+                rgba=(0.2, 0.55, 0.3, 1.0),
+                mount="slider_z",
+                mount_stiffness=support.stiffness,
+                mount_damping=support.damping,
+            ))
         return Scene(
             soft_bodies=(specimen,),
-            rigid_bodies=(weight,),
+            rigid_bodies=tuple(rigid),
             simulation=cfg.simulation,
             contact=cfg.contact,
             ground=cfg.ground,
@@ -153,8 +191,9 @@ class DropTestScenario(Scenario):
         center_xy = verts[:, :2].mean(axis=0)
         radial = np.hypot(verts[:, 0] - center_xy[0], verts[:, 1] - center_xy[1])
         contact = state.contact_between(cfg.specimen.name, cfg.weight.name)
-        ground = state.contact_between("ground", cfg.specimen.name)
-        return {
+        below = cfg.support.name if cfg.support.enabled else GROUND_NAME
+        ground = state.contact_between(below, cfg.specimen.name)
+        out = {
             "t": state.time,
             "weight_z": float(w.position[2]),
             "weight_vz": float(w.linear_velocity[2]),
@@ -170,6 +209,9 @@ class DropTestScenario(Scenario):
             "ground_force_z": float(ground.force[2]) if ground else 0.0,
             "weight_tilt": float(_tilt_angle(w.quaternion)),
         }
+        if cfg.support.enabled:
+            out["support_z"] = float(state.rigid[cfg.support.name].position[2])
+        return out
 
     def summarize(self, ts: pd.DataFrame) -> dict[str, float]:
         """Impact summary. Contact = weight/specimen force above 1% of the weight's gravity load."""
@@ -198,7 +240,7 @@ class DropTestScenario(Scenario):
             "first_contact_duration": float(ts["t"].iloc[i1] - ts["t"].iloc[i0]) if len(after) else float("nan"),
             "rebound_speed": float(ts["weight_vz"].iloc[i1]) if len(after) else float("nan"),
             "final_indentation": final,
-            "specimen_lift_off": float(ts["specimen_min_z"].max()),
+            "specimen_lift_off": float(ts["specimen_min_z"].max() - self._base),
         })
         out["restitution"] = out["rebound_speed"] / out["impact_speed"]
         settled = np.abs(ts["indentation"].to_numpy() - final) <= 0.05 * max(peak, 1e-9)
