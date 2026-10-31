@@ -17,8 +17,11 @@ from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time
 from softsim.geometry.rigid import Part
-from softsim.materials.models import Friction, Material
+from softsim.materials.models import Adhesion, Friction, Material
 from softsim.meshing import TetMesh
+
+
+GROUND_NAME = "ground"  # name of the ground in contact reports, in every backend
 
 
 class SimulationSettings(StrictModel):
@@ -64,10 +67,11 @@ class ContactSettings(StrictModel):
 
 
 class GroundSettings(StrictModel):
-    """Flat rigid ground at z = 0."""
+    """Flat rigid ground at z = 0, with optional adhesion of soft bodies to it."""
 
     enabled: bool = True
     friction: Friction = Friction(sliding=0.8)
+    adhesion: Adhesion | None = None
 
 
 @dataclass(frozen=True)
@@ -142,9 +146,12 @@ class SoftBodySpec:
 
 @dataclass(frozen=True)
 class RigidBodySpec:
-    """A free rigid body made of primitive parts.
+    """A rigid body made of primitive parts.
 
-    Velocities are in the world frame; angular velocity in rad/s.
+    Velocities are in the world frame; angular velocity in rad/s. ``mount``
+    is ``"free"`` (6 DOF) or ``"slider_z"``: vertical translation only, held
+    by a spring (``mount_stiffness`` [N/m], ``mount_damping`` [N s/m]) whose
+    rest position is the initial pose, e.g. a compliant support.
     """
 
     name: str
@@ -155,10 +162,14 @@ class RigidBodySpec:
     angular_velocity: tuple[float, float, float] = (0.0, 0.0, 0.0)
     friction: Friction = Friction()
     rgba: tuple[float, float, float, float] = (0.75, 0.6, 0.2, 1.0)
+    mount: Literal["free", "slider_z"] = "free"
+    mount_stiffness: float = 0.0
+    mount_damping: float = 0.0
 
     @property
     def requires(self) -> frozenset[Capability]:
-        return frozenset({Capability.RIGID_BODIES}) | self.friction.requires
+        req = frozenset({Capability.RIGID_BODIES}) | self.friction.requires
+        return req | {Capability.SPRING_MOUNT} if self.mount != "free" else req
 
 
 @dataclass(frozen=True)
@@ -179,6 +190,8 @@ class Scene:
             req |= body.requires
         if self.ground.enabled:
             req |= self.ground.friction.requires
+            if self.ground.adhesion is not None and self.soft_bodies:
+                req |= self.ground.adhesion.requires
         return frozenset(req)
 
     def soft(self, name: str) -> SoftBodySpec:

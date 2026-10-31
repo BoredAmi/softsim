@@ -10,6 +10,7 @@ import numpy as np
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.backends.mujoco.builder import GROUND, build_spec, scene_to_mjcf
 from softsim.capabilities import Capability
+from softsim.contact.adhesion import AdhesionField, RigidFrame, adhesion_fields
 from softsim.errors import SoftSimError
 from softsim.materials.models import StableNeoHookean
 from softsim.scene import Scene
@@ -27,6 +28,8 @@ class MujocoBackend(Backend):
           experimental Stable Neo-Hookean model (MuJoCo 3.15+). Classic ``neo_hookean``
           (ln J form) is not available.
         * Only stiffness-proportional (Rayleigh beta) damping exists.
+        * Adhesion is applied as explicit external forces (``xfrc_applied``)
+          on surface vertices and rigid bodies, recomputed every step.
     """
 
     name: ClassVar[str] = "mujoco"
@@ -37,10 +40,12 @@ class MujocoBackend(Backend):
         Capability.TET_MESH,
         Capability.PINNED_VERTICES,
         Capability.RIGID_BODIES,
+        Capability.SPRING_MOUNT,
         Capability.CONTACT_FRICTION,
         Capability.TORSIONAL_ROLLING_FRICTION,
         Capability.SELF_COLLISION,
         Capability.CONTACT_FORCES,
+        Capability.CONTACT_ADHESION,
     })
 
     def __init__(self) -> None:
@@ -48,6 +53,8 @@ class MujocoBackend(Backend):
         self.spec: mujoco.MjSpec | None = None
         self.model: mujoco.MjModel | None = None
         self.data: mujoco.MjData | None = None
+        self._adhesion: list[AdhesionField] = []
+        self._adhesion_last: dict[tuple[str, str], tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
 
     @classmethod
     def extra_checks(cls, scene: Scene) -> list[str]:
@@ -88,7 +95,8 @@ class MujocoBackend(Backend):
     def _index(self) -> None:
         m = self.model
         self._rigid_ids = {b.name: m.body(b.name).id for b in self._scene.rigid_bodies}
-        self._free_dof = {b.name: m.jnt_dofadr[m.joint(f"{b.name}/free").id] for b in self._scene.rigid_bodies}
+        self._free_dof = {b.name: m.jnt_dofadr[m.joint(f"{b.name}/free").id]
+                          for b in self._scene.rigid_bodies if b.mount == "free"}
         self._flex = {}
         for body in self._scene.soft_bodies:
             fid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_FLEX, body.name)
@@ -105,20 +113,53 @@ class MujocoBackend(Backend):
             bid = m.geom_bodyid[gid]
             self._owner_geom[gid] = GROUND if bid == 0 else m.body(bid).name
         self._owner_flex = {i: mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_FLEX, i) for i in range(m.nflex)}
+        self._adhesion = adhesion_fields(self._scene)
+        self._adhesion_bodies = {}
+        for f in self._adhesion:
+            adr, num, bodies, dofs = self._flex[f.soft_name]
+            movable = dofs[f.vertices, 0] >= 0  # pinned vertices take no external force
+            self._adhesion_bodies[f.soft_name] = (adr + f.vertices, bodies[f.vertices], movable)
 
     def reset(self) -> None:
         m, d = self.model, self.data
         mujoco.mj_resetData(m, d)
         for body in self._scene.rigid_bodies:
+            if body.name not in self._free_dof:  # mounted bodies start at rest
+                continue
             dof = self._free_dof[body.name]
             d.qvel[dof:dof + 3] = body.linear_velocity
             rot = np.zeros(9)
             mujoco.mju_quat2Mat(rot, np.array(body.pose.quaternion, dtype=float))
             d.qvel[dof + 3:dof + 6] = rot.reshape(3, 3).T @ np.array(body.angular_velocity)  # local frame
+        for f in self._adhesion:
+            f.reset()
+        self._adhesion_last = {}
         mujoco.mj_forward(m, d)
 
     def step(self, n: int = 1) -> None:
-        mujoco.mj_step(self.model, self.data, nstep=n)
+        if not self._adhesion:
+            mujoco.mj_step(self.model, self.data, nstep=n)
+            return
+        for _ in range(n):
+            self._apply_adhesion()
+            mujoco.mj_step(self.model, self.data)
+
+    def _apply_adhesion(self) -> None:
+        """Recompute adhesive forces from the current state and load them into ``xfrc_applied``."""
+        d = self.data
+        frames = {name: RigidFrame(d.xpos[bid].copy(), d.xmat[bid].reshape(3, 3).copy(), d.xipos[bid].copy())
+                  for name, bid in self._rigid_ids.items()}
+        d.xfrc_applied[:] = 0.0
+        self._adhesion_last = {}
+        for f in self._adhesion:
+            xpos_rows, bodies, movable = self._adhesion_bodies[f.soft_name]
+            result = f.compute(d.flexvert_xpos[xpos_rows], frames)
+            np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), result.vertex_forces[movable])
+            for name, (force, torque, point) in result.wrenches.items():
+                if name in self._rigid_ids:
+                    d.xfrc_applied[self._rigid_ids[name], :3] += force
+                    d.xfrc_applied[self._rigid_ids[name], 3:] += torque
+                self._adhesion_last[(f.soft_name, name)] = (force, torque, point)
 
     @property
     def time(self) -> float:
@@ -203,4 +244,23 @@ class MujocoBackend(Backend):
         for (a, b), (force, moment, weighted, normal_sum, n) in acc.items():
             point = weighted / normal_sum if normal_sum > 0 else np.zeros(3)
             out.append(ContactWrench(a, b, force, moment - np.cross(point, force), point, n))
+        return self._with_adhesion(out)
+
+    def _with_adhesion(self, contacts: list[ContactWrench]) -> list[ContactWrench]:
+        """Add the adhesive forces of the last step to the (soft, counterpart) contact wrenches."""
+        if not self._adhesion_last:
+            return contacts
+        out = list(contacts)
+        for (soft, other), (force, _torque, point) in self._adhesion_last.items():
+            if not np.any(force):
+                continue
+            for i, c in enumerate(out):
+                if {c.body_a, c.body_b} == {soft, other}:
+                    sign = 1.0 if (c.body_a, c.body_b) == (soft, other) else -1.0
+                    total = c.force + sign * force
+                    torque = c.torque + sign * np.cross(point - c.point, force)
+                    out[i] = ContactWrench(c.body_a, c.body_b, total, torque, c.point, c.n_contacts)
+                    break
+            else:
+                out.append(ContactWrench(soft, other, force.copy(), np.zeros(3), point.copy(), 0))
         return out

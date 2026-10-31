@@ -99,7 +99,12 @@ def _soft_body_xml(parent: ET.Element, body: SoftBodySpec, scene: Scene) -> None
 def _rigid_body_xml(parent: ET.Element, body: RigidBodySpec) -> None:
     el = ET.SubElement(parent, "body", {
         "name": body.name, "pos": _fmt(body.pose.position), "quat": _fmt(body.pose.quaternion)})
-    ET.SubElement(el, "freejoint", {"name": f"{body.name}/free"})
+    if body.mount == "slider_z":
+        ET.SubElement(el, "joint", {
+            "name": f"{body.name}/slide", "type": "slide", "axis": "0 0 1", "springref": "0",
+            "stiffness": f"{body.mount_stiffness:.9g}", "damping": f"{body.mount_damping:.9g}"})
+    else:
+        ET.SubElement(el, "freejoint", {"name": f"{body.name}/free"})
     volumes = np.array([p.volume() for p in body.parts])
     for i, (part, vol) in enumerate(zip(body.parts, volumes)):
         size = part.size[:2] if part.kind == "cylinder" else part.size

@@ -31,9 +31,11 @@ _UNITS: dict[str, tuple[float, str]] = {
     "N": (1.0, "force"), "mN": (1e-3, "force"),
     "Hz": (1.0, "frequency"), "kHz": (1e3, "frequency"),
     "rad": (1.0, "angle"), "deg": (0.017453292519943295, "angle"),
+    "N/m": (1.0, "stiffness"), "N/mm": (1e3, "stiffness"),
+    "N*s/m": (1.0, "viscous_damping"), "Ns/m": (1.0, "viscous_damping"),
 }
 
-_QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([A-Za-z/^0-9]+)?\s*$")
+_QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([A-Za-z/^*0-9]+)?\s*$")
 
 
 def parse_quantity(value: object, dimension: str) -> float:
@@ -79,3 +81,5 @@ Velocity = Annotated[float, _field("velocity")]
 Force = Annotated[float, _field("force")]
 Frequency = Annotated[float, _field("frequency")]
 Angle = Annotated[float, _field("angle")]
+Stiffness = Annotated[float, _field("stiffness")]
+ViscousDamping = Annotated[float, _field("viscous_damping")]

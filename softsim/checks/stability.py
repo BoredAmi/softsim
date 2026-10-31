@@ -15,6 +15,8 @@ import math
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
+import numpy as np
+
 from softsim.materials.models import LinearElastic, StVenantKirchhoff
 from softsim.scene import Scene
 
@@ -130,4 +132,27 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None) -> l
                 out.append(Finding("error", "explicit-unstable",
                                    f"{body.name}: explicit integrator with dt {dt:.1e} s > element wave transit "
                                    f"time {limit:.1e} s"))
+        out += _adhesion_findings(scene, body, dt)
     return out
+
+
+def _adhesion_findings(scene: Scene, body, dt: float) -> list[Finding]:
+    """Adhesive forces are explicit: their stiffness per surface vertex must be resolvable at ``dt``."""
+    laws = [a for a in (body.material.adhesion, scene.ground.adhesion if scene.ground.enabled else None) if a]
+    if not laws:
+        return []
+    from softsim.contact.adhesion import surface_areas
+
+    idx, area = surface_areas(body.mesh)
+    mass = body.mesh.lumped_masses(body.effective_density)[idx]
+    omega_dt = dt * math.sqrt(max(a.max_stiffness for a in laws) * float(np.max(area / mass)))
+    if omega_dt > 1.0:
+        return [Finding("error", "adhesion-unstable",
+                        f"{body.name}: adhesion stiffness e*strength/range is too high for dt {dt:.1e} s "
+                        f"(omega*dt = {omega_dt:.2f} > 1 on the lightest surface vertex); raise the range or "
+                        "lower the timestep")]
+    if omega_dt > 0.3:
+        return [Finding("warning", "adhesion-stiff",
+                        f"{body.name}: adhesion resolved with only omega*dt = {omega_dt:.2f}; results may depend "
+                        "on the timestep")]
+    return []

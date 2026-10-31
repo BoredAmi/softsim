@@ -18,12 +18,13 @@ Notes and limits (see docs/backends/sofa.md):
     * ``simulation.integrator`` / ``solver`` are MuJoCo settings and ignored:
       SOFA uses implicit Euler + sparse LDL + Gauss-Seidel constraint solving.
     * contact wrenches are reconstructed from momentum balance per body (net
-      force only; no centre of pressure, no torque).
+      force only; no centre of pressure, no torque); they include adhesion.
+    * adhesion (``softsim.contact.adhesion``) is applied through
+      ``ConstantForceField``s updated before every step, like on MuJoCo.
 """
 
 from __future__ import annotations
 
-import math
 import os
 import sys
 from pathlib import Path
@@ -33,6 +34,7 @@ import numpy as np
 
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
+from softsim.contact.adhesion import RigidFrame, adhesion_fields
 from softsim.errors import SoftSimError
 from softsim.geometry.rigid import Part
 from softsim.materials.models import (
@@ -48,6 +50,7 @@ from softsim.materials.models import (
 from softsim.scene import RigidBodySpec, Scene, SoftBodySpec
 
 GROUND = "ground"
+GROUND_GROUP = 1  # collision group of the ground (models in the same group never collide)
 PLUGINS = [
     "Sofa.Component.AnimationLoop", "Sofa.Component.Collision.Detection.Algorithm",
     "Sofa.Component.Collision.Detection.Intersection", "Sofa.Component.Collision.Geometry",
@@ -58,6 +61,7 @@ PLUGINS = [
     "Sofa.Component.ODESolver.Backward", "Sofa.Component.SolidMechanics.FEM.Elastic",
     "Sofa.Component.SolidMechanics.FEM.HyperElastic", "Sofa.Component.StateContainer",
     "Sofa.Component.Topology.Container.Constant", "Sofa.Component.Topology.Container.Dynamic",
+    "Sofa.Component.MechanicalLoad",
 ]
 # Blow-up guard: an exploding FEM state floods the constraint solver with contacts
 # and SOFA segfaults before any NaN appears, so stepping stops above this speed.
@@ -198,12 +202,14 @@ class SofaBackend(Backend):
         Capability.RIGID_BODIES,
         Capability.CONTACT_FRICTION,
         Capability.CONTACT_FORCES,
+        Capability.CONTACT_ADHESION,
     })
 
     def __init__(self) -> None:
         self._scene: Scene | None = None
         self.root = None
         self._diverged = False
+        self._adhesion = {}
 
     @classmethod
     def extra_checks(cls, scene: Scene) -> list[str]:
@@ -249,8 +255,9 @@ class SofaBackend(Backend):
             gp = [[-10, -10, 0], [20, -10, 0], [-10, 20, 0]]
             g.addObject("MeshTopology", position=gp, triangles=[[0, 1, 2]])
             g.addObject("MechanicalObject", position=gp)
-            g.addObject("TriangleCollisionModel", moving=False, simulated=False)
+            g.addObject("TriangleCollisionModel", moving=False, simulated=False, group=GROUND_GROUP)
 
+        self._adhesion = {f.soft_name: f for f in adhesion_fields(scene)}
         self._soft, self._rigid = {}, {}
         for body in scene.soft_bodies:
             self._soft[body.name] = self._add_soft(root, body, contact.soft_radius)
@@ -278,14 +285,22 @@ class SofaBackend(Backend):
         if body.pinned:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
         node.addObject("LinearSolverConstraintCorrection")
+        adhesion = None
+        if body.name in self._adhesion:
+            vertices = self._adhesion[body.name].vertices
+            adhesion = node.addObject("ConstantForceField", name="adhesion", indices=vertices.tolist(),
+                                      forces=np.zeros((len(vertices), 3)).tolist())
         coll = node.addChild("collision")
         coll.addObject("MeshTopology", position=pts.tolist(), triangles=body.mesh.surface_triangles().tolist())
         coll.addObject("MechanicalObject", position=pts.tolist())
-        coll.addObject("TriangleCollisionModel")
-        coll.addObject("PointCollisionModel")  # line-line tests omitted: ~3x faster, same result for this scene
+        # pinned bodies don't collide with the ground: contact constraints on fixed vertices
+        # (zero compliance) make the constraint solve singular (NaN); the pins hold them anyway
+        groups = {"group": GROUND_GROUP} if body.pinned else {}
+        coll.addObject("TriangleCollisionModel", **groups)
+        coll.addObject("PointCollisionModel", **groups)  # line-line tests omitted: ~3x faster, same result here
         coll.addObject("IdentityMapping")
         masses = body.mesh.lumped_masses(body.effective_density)
-        return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot}
+        return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion}
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -294,13 +309,16 @@ class SofaBackend(Backend):
         w, x, y, z = body.pose.quaternion
         node = root.addChild(body.name)
         node.addObject("EulerImplicitSolver")
-        node.addObject("CGLinearSolver", iterations=25, tolerance=1e-12, threshold=1e-12)
+        # direct solve: CG hits its denominator threshold (NaN) for light bodies with small inertia
+        node.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixd")
         dofs = node.addObject("MechanicalObject", template="Rigid3d",
                               position=[[*com_world, x, y, z, w]],
                               velocity=[[*body.linear_velocity, *body.angular_velocity]])
         volume = sum(p.volume() for p in body.parts)
         node.addObject("UniformMass", vertexMass=[body.mass, volume, *(inertia / body.mass).ravel()])
         node.addObject("UncoupledConstraintCorrection")
+        adhesion = (node.addObject("ConstantForceField", name="adhesion", template="Rigid3d", indices=[0],
+                                   forces=[[0.0] * 6]) if self._adhesion else None)
         coll = node.addChild("collision")
         meshes = [part_mesh(p) for p in body.parts]
         pts, tris, n = [], [], 0
@@ -315,7 +333,7 @@ class SofaBackend(Backend):
         coll.addObject("LineCollisionModel")
         coll.addObject("PointCollisionModel")
         coll.addObject("RigidMapping")
-        return {"dofs": dofs, "com_local": com_local, "mass": body.mass}
+        return {"dofs": dofs, "com_local": com_local, "mass": body.mass, "adhesion": adhesion}
 
     # -- runtime --------------------------------------------------------------
 
@@ -339,9 +357,33 @@ class SofaBackend(Backend):
             if self._blown_up(self._prev):
                 self._diverged = True
                 return
+            if self._adhesion:
+                self._apply_adhesion()
             self._sofa.Simulation.animate(self.root, dt)
 
+    def _apply_adhesion(self) -> None:
+        """Recompute adhesive forces from the current state and load them into the force fields."""
+        frames = {}
+        for name, d in self._rigid.items():
+            p = np.asarray(d["dofs"].position.value[0], float)
+            rot = _quat_to_mat(np.array([p[6], p[3], p[4], p[5]]))
+            frames[name] = RigidFrame(p[:3] - rot @ d["com_local"], rot, p[:3].copy())
+        totals = {name: np.zeros(6) for name in self._rigid}
+        for name, field in self._adhesion.items():
+            d = self._soft[name]
+            positions = np.asarray(d["dofs"].position.value, float)[field.vertices]
+            result = field.compute(positions, frames)
+            d["adhesion"].forces.value = result.vertex_forces.tolist()
+            for other, (force, torque, _point) in result.wrenches.items():
+                if other in totals:
+                    totals[other] += np.r_[force, torque]
+        for name, d in self._rigid.items():
+            if d["adhesion"] is not None:
+                d["adhesion"].forces.value = [totals[name].tolist()]
+
     def reset(self) -> None:
+        for field in self._adhesion.values():
+            field.reset()
         self._sofa.Simulation.reset(self.root)
         self._prev = None
         self._diverged = False

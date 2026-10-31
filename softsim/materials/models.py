@@ -1,7 +1,7 @@
 """Material models as validated, backend-neutral data.
 
 A :class:`Material` combines density, an elastic constitutive model, optional
-damping and surface friction. Each model declares the capabilities it needs
+damping, surface friction and optional surface adhesion (tack). Each model declares the capabilities it needs
 (``requires``) so backends can reject what they cannot simulate.
 
 All elastic models expose small-strain equivalents (``initial_youngs_modulus``,
@@ -11,13 +11,14 @@ tests, never as a silent substitute for the requested model.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, ClassVar, Literal, Union
 
 from pydantic import Field, model_validator
 
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
-from softsim.config.units import Density, Pressure, Time
+from softsim.config.units import Density, Length, Pressure, Time
 
 PoissonRatio = Annotated[float, Field(gt=-1.0, lt=0.5)]
 NonNegative = Annotated[float, Field(ge=0.0)]
@@ -262,6 +263,45 @@ class Friction(StrictModel):
         return frozenset(req)
 
 
+class Adhesion(StrictModel):
+    """Normal adhesion (tack) between a soft surface and what it touches.
+
+    Exponential cohesive law per unit (reference) surface area, for a gap
+    ``g >= 0`` opened after the surface has touched the counterpart::
+
+        t(g) = strength * (g / range) * exp(1 - g / range)
+
+    ``strength`` is the peak tensile traction (reached at ``g = range``); the
+    work of separation is ``e * strength * range`` per area. A bond forms when
+    a surface point comes into contact (gap below ``BOND_GAPS * range``, a
+    round-off tolerance) and breaks for good once the gap exceeds
+    ``BREAK_GAPS * range`` (where the traction has dropped to 4% of the peak),
+    until the next contact. Elastic while bonded, so it adds no damping; the
+    energy still stored at breakage is the only loss. Rate-dependent
+    (viscoelastic) tack is not modelled.
+    """
+
+    BOND_GAPS: ClassVar[float] = 0.01
+    BREAK_GAPS: ClassVar[float] = 6.0
+
+    strength: Annotated[Pressure, Field(gt=0)]
+    range: Annotated[Length, Field(gt=0)]
+
+    @property
+    def work_of_separation(self) -> float:
+        """Energy per unit area to separate a bond completely [J/m^2]."""
+        return math.e * self.strength * self.range
+
+    @property
+    def max_stiffness(self) -> float:
+        """Largest slope dt/dg of the traction law (at g = 0) [Pa/m]."""
+        return math.e * self.strength / self.range
+
+    @property
+    def requires(self) -> frozenset[Capability]:
+        return frozenset({Capability.CONTACT_ADHESION})
+
+
 class Material(StrictModel):
     """A complete soft material description.
 
@@ -273,6 +313,7 @@ class Material(StrictModel):
         elastic: Constitutive model.
         damping: Optional dissipation model.
         friction: Surface friction against other bodies.
+        adhesion: Optional tack against rigid bodies (the ground has its own setting).
         provenance: Optional metadata, e.g. the mesh/backend a fit is tied to.
     """
 
@@ -283,6 +324,7 @@ class Material(StrictModel):
     elastic: ElasticModel
     damping: DampingModel | None = None
     friction: Friction = Friction()
+    adhesion: Adhesion | None = None
     provenance: dict[str, object] = Field(default_factory=dict)
 
     @property
@@ -290,4 +332,6 @@ class Material(StrictModel):
         req = set(self.elastic.requires) | set(self.friction.requires)
         if self.damping is not None:
             req |= self.damping.requires
+        if self.adhesion is not None:
+            req |= self.adhesion.requires
         return frozenset(req)
