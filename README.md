@@ -4,11 +4,18 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status: M1 (core + MuJoCo drop test), M2 (ROS 2 layer), M3 (video
-tracking + calibration) and M4 (SOFA backend) done.** Backends: MuJoCo flex
-(default, fast) and SOFA (more material laws, optional install), plus an
-axisymmetric reference FEM (locking-free, for verification; in progress). See
-[docs/roadmap.md](docs/roadmap.md) for what's next.
+**Status:** M1 (core + MuJoCo drop test), M2 (ROS 2 layer), M3 (video
+tracking + calibration) and M4 (SOFA backend) are done. **M5, soft-material
+fidelity, is in progress.**
+
+Backends:
+
+- **MuJoCo flex:** the default, fast.
+- **SOFA:** more material laws; optional install.
+- **`fem`:** a locking-free 3D reference. Slow, but exact where the others
+  are not, and it is the referee for them.
+
+See [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
@@ -48,6 +55,13 @@ and MuJoCo's new volumetric flex is fast but low-level. softsim adds:
   stability limits, and density/mass consistency.
 - **Validation first.** Every scenario produces metrics that are meant to be
   compared with experimental data (see [docs/experiments.md](docs/experiments.md)).
+- **Material cards, not magic numbers.** A card states whether it is
+  *physical* (fitted to material tests) or *effective* (valid on one backend
+  and mesh), its strain range, uncertainty and references. The library holds
+  25 silicone cards fitted to public tension, compression and relaxation data.
+  Fit your own with `softsim fit-material`. Carry a physical card to MuJoCo or
+  SOFA by transfer, with the error bar stated
+  ([docs/materials.md](docs/materials.md)).
 
 ## Install
 
@@ -61,9 +75,15 @@ python3 -m venv --system-site-packages .venv
 
 `numpy<2` is pinned so ROS 2 Humble's compiled Python modules keep working.
 
-**Reference FEM (optional).** `pip install -e ".[fem]"` adds JAX (CPU,
-float64) for `softsim.fem`, the axisymmetric locking-free solver used to
-cross-check the backends ([docs/reference_fem.md](docs/reference_fem.md)).
+**Reference FEM (optional).** `pip install -e ".[fem,fast]"` adds JAX (CPU,
+float64) and MKL PARDISO for `softsim.fem`
+([docs/reference_fem.md](docs/reference_fem.md)). This provides:
+
+- the locking-free reference solvers (axisymmetric and 3D);
+- the **`fem` backend** (`--backend fem`): slow but exact, for checking the
+  other backends and fitting physical material cards;
+- the material homogeneous tests and fitting ([docs/materials.md](docs/materials.md));
+- Prony viscoelasticity on MuJoCo and SOFA.
 
 **SOFA backend (optional).** Unzip the SOFA v26.06 Linux release (Python 3.10)
 and point `SOFA_ROOT` at it; then add `--backend sofa` to any command. Without
@@ -73,15 +93,25 @@ it, the SOFA tests skip. See [docs/backends/sofa.md](docs/backends/sofa.md).
 
 ```bash
 softsim materials                                   # list material presets
+softsim material show ecoflex_00_10                 # one card: moduli, wave speeds, time steps, stresses
+softsim material plot ecoflex_00_10 dragon_skin_10 --tests uniaxial,simple_shear   # needs the fem extra
+softsim params scenarios/drop_test/cases/w020.yaml  # every changeable value: key, value, unit, range
 softsim check scenarios/drop_test/cases/w020.yaml   # mesh stats, physics findings, backend support
 softsim run   scenarios/drop_test/cases/w020.yaml   # results in runs/<name>_<timestamp>/
 softsim run   scenarios/drop_test/cases/w020.yaml \
     --set specimen.material.elastic.youngs_modulus="45 kPa" --set drop.tilt="[5 deg, 0]"
 softsim view  scenarios/drop_test/cases/w050.yaml   # interactive MuJoCo viewer (slowed 200x)
 softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5
+softsim sensitivity scenarios/drop_test/cases/w050.yaml --metric peak_indentation --jobs 8 \
+    --param "specimen.material.elastic.youngs_modulus=30 kPa:150 kPa" --param "drop.height=0.2:0.4"
 softsim export scenarios/drop_test/cases/w020.yaml --out model.xml
 softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5       # video tracking (needs the dataset zips)
 softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3    # fit E and damping to the recordings
+softsim fetch datasets/roels2025_elastomers.yaml                   # public material-test data (checksummed)
+softsim fit-material datasets/roels2025_elastomers.yaml ecoflex_00_30 --strain-min=-0.25 --strain-max 1.5
+softsim material project ecoflex_00_30_roels2025 --to neo_hookean --out eco30_nh.yaml   # for MuJoCo
+softsim run   scenarios/drop_test/cases/w050.yaml --backend fem \
+    --set specimen.material=ecoflex_00_30_roels2025 --set simulation.duration=12ms      # 3D reference
 softsim run   scenarios/drop_test/cases/w020.yaml --backend sofa \
     --set specimen.material=ecoflex_00_10_drop_fit_sofa_ogden --set specimen.mesh.size=5mm --set simulation.timestep=5e-5
 ```
@@ -95,6 +125,7 @@ sim = Simulation("scenarios/drop_test/cases/w020.yaml")
 result = sim.run()
 print(result.summary["peak_indentation"])
 sim.set_material("specimen", {"preset": "ecoflex_00_10", "elastic": {"youngs_modulus": "40 kPa"}})
+sim.set_material("specimen", None, ["elastic.model=yeoh", "elastic.c10=12 kPa"])  # change single values
 sim.action("drop", preset="czopek2026_w100", height=0.2)
 state = sim.state()            # rigid poses/twists, soft vertices, contact wrenches
 ```
@@ -122,14 +153,17 @@ and `model.xml`.
 ```text
 softsim/            core library (no ROS)
   config/           YAML loading (extends, --set overrides), units, strict schemas
-  materials/        constitutive models + presets/*.yaml
+  materials/        material cards (laws, Prony, tack, validity, uncertainty) + presets/*.yaml,
+                    homogeneous tests, fitting to test data, Prony overstress for backends
   geometry/         soft and rigid primitives + rigid body presets
   meshing/          tetrahedral meshing (structured built-in, gmsh optional)
   scene.py          backend-neutral scene description
-  backends/         Backend interface, MuJoCo flex backend, SOFA backend
+  backends/         Backend interface, MuJoCo flex, SOFA, fem (3D reference solver)
+  fem/              locking-free reference solvers: axisymmetric and 3D quadratic tetrahedra (JAX)
   scenarios/        Scenario base class + drop_test
   checks/           pre-run physics checks
-  experiments/      datasets, video tracking, sim-vs-experiment comparison, calibration, plots
+  experiments/      datasets (drop recordings, material tests), video tracking (incl. tilt),
+                    sim-vs-experiment comparison, calibration, plots
   runner.py         Simulation / run_config
   sweep.py, cli.py
 ros2/               softsim_interfaces, softsim_ros (generic node), softsim_bringup (launch, RViz)
@@ -145,14 +179,18 @@ tests/
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Materials: cards, changing any value, homogeneous test curves, fitting](docs/materials.md)
+- [Material library: 25 silicone cards fitted to public tension, compression and relaxation data](docs/material_library.md)
 - How to add a [material](docs/adding_a_material.md), [body](docs/adding_a_body.md),
   [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md)
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
 - [SOFA backend: setup, physics notes and limits](docs/backends/sofa.md)
-- [Reference FEM (axisymmetric, locking-free) and backend cross-checks](docs/reference_fem.md)
+- [Reference FEM (axisymmetric and 3D, locking-free; backend `fem`), performance and cross-checks](docs/reference_fem.md)
 - [Drop test scenario and dataset](docs/scenarios/drop_test.md)
 - [ROS 2 integration](docs/ros2.md)
 - [Experiments: video tracking and calibration](docs/experiments.md)
+- [Validation: predictions on data the model never saw](docs/validation.md)
+- [Moving to a faster machine: setup, data to copy, long jobs](docs/new_machine.md)
 
 ## Data and citation
 

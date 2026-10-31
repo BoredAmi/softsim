@@ -59,7 +59,8 @@ def _label(img: Image.Image, lines: list[str], size: int = 13) -> Image.Image:
 
 
 def render_simulation(case: str, times: np.ndarray, size: int, extra: list[str] = (),
-                      lookat_z: float = 0.014, distance: float = 0.12) -> tuple[list[Image.Image], float]:
+                      lookat_z: float = 0.014, distance: float = 0.12,
+                      elevation: float = -32.0) -> tuple[list[Image.Image], float]:
     """Render frames at ``times`` (seconds relative to first contact); also return the peak indentation."""
     sim = Simulation(CASES / f"{case}.yaml", [*SIM_OVERRIDES, *extra])
     model, data = sim.backend.model, sim.backend.data
@@ -67,7 +68,7 @@ def render_simulation(case: str, times: np.ndarray, size: int, extra: list[str] 
     cam = mujoco.MjvCamera()
     cam.lookat[:] = (0.0, 0.0, lookat_z)
     cam.distance = distance
-    cam.elevation = -32.0  # steep enough that the floor fills the background
+    cam.elevation = elevation  # default steep enough that the floor fills the background
     cam.azimuth = 90.0
     weight = sim.config.weight.name
     dt = sim.config.simulation.timestep

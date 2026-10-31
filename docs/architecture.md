@@ -27,7 +27,9 @@
 | Data-driven | Pydantic models with `extra="forbid"` (`config/schema.py`), units in `config/units.py`, `extends:` and `--set` in `config/loader.py`. |
 | New phenomenon = new scenario | `scenarios/base.py: Scenario`, discovered through the `softsim.scenarios` entry-point group. |
 | Comparable to experiments | Scenarios emit named metrics in SI units at a configurable output rate. `experiments/`: datasets, video tracking, comparison over any observable and window, calibration. |
-| Physics shared across backends | Backend-neutral models a backend applies as external forces, e.g. `contact/adhesion.py` (cohesive tack from analytic signed distances). |
+| Physics shared across backends | Backend-neutral models a backend applies as external forces: `contact/adhesion.py` (cohesive tack from analytic signed distances) and `materials/viscoelastic.py` (Prony Maxwell overstress; the backend's own elasticity carries the long-term law). |
+| Materials are physics, backends are approximations | A material card (`materials/models.py`) is `physical` or `effective`. `materials/homogeneous.py` gives its exact response in standard tests, `materials/fit.py` fits cards to public test data (`experiments/material_tests.py`), and the locking-free reference (`fem/`, backend `fem`) is the referee for the tetrahedral backends. |
+| Every value is a parameter | `config/params.py` lists every dotted key with unit and range (`softsim params`). The same keys work in `--set`, sweeps, `Material.with_overrides`, `Simulation.set_material` and the ROS `set_material` service. |
 
 ## Key decisions
 
@@ -48,6 +50,11 @@
 - **Contact compliance is a physical parameter.** `contact.timeconst` is fixed
   in scenario configs (not tied to the timestep), because it changes results
   about as much as the material does.
+- **One Prony implementation for every backend.** SOFA ships a
+  visco-hyperelastic force field (MJED), but it relaxes the volumetric part too
+  and uses non-isochoric invariants. Using it would silently change the model,
+  so MuJoCo and SOFA both get the same explicit overstress, with the reference
+  solver's update.
 - **Model the experiment, not only the material.** What happens after impact
   in the drop recordings is set by the specimen's tack and the cloth under it
   as much as by its elasticity, so both are scene elements (`adhesion`,
