@@ -125,14 +125,16 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
                                    f"{body.name}: crude estimate predicts ~{min(strain, 1):.0%} compression; "
                                    "results depend on the large-strain law, compressibility (silicone is nearly "
                                    "incompressible) and rate effects; validate against data at this strain"))
-        density = body.material.density
-        if body.mass is not None and abs(body.effective_density / density - 1) > 0.05:
+        if body.mass is not None and abs(body.mass / body.material_mass - 1) > 0.05:
             out.append(Finding("info", "density-mismatch",
-                               f"{body.name}: mass {body.mass * 1e3:.2f} g implies "
-                               f"{body.effective_density:.0f} kg/m^3 vs material {density:.0f} kg/m^3"))
+                               f"{body.name}: mass {body.mass * 1e3:.2f} g vs {body.material_mass * 1e3:.2f} g from "
+                               f"the material densities: every density is scaled by "
+                               f"{body.mass / body.material_mass:.3g}"))
         if sim.integrator not in ("discrete", "implicit", "implicitfast"):
-            c = p_wave_speed(elastic.initial_youngs_modulus(), nu, body.effective_density)
-            limit = quality["min_edge"] / c
+            scale = body.total_mass / body.material_mass
+            limit = min(quality["min_edge"] / p_wave_speed(m.elastic.initial_youngs_modulus(),
+                                                           m.elastic.initial_poisson_ratio(), m.density * scale)
+                        for m, _ in body.material_groups())
             if dt > limit:
                 out.append(Finding("error", "explicit-unstable",
                                    f"{body.name}: explicit integrator with dt {dt:.1e} s > element wave transit "
@@ -191,22 +193,38 @@ def _cable_findings(scene: Scene, body, dt: float) -> list[Finding]:
 
     out = []
     k_elastic = body.material.elastic.initial_youngs_modulus() * body.mesh.quality()["mean_edge"]
-    inv_mass = 1.0 / (body.mesh.lumped_masses(body.effective_density) + dt * dt * k_elastic)
+    inv_mass = 1.0 / (body.vertex_masses() + dt * dt * k_elastic)
     inv_mass[list(body.pinned)] = 0.0
     for a in scene.actuators:
         if not isinstance(a, CableActuator) or a.body != body.name:
             continue
-        tension = max([a.tension, *(v for _, v in a.schedule)])
+        values = [a.tension, *(v for _, v in a.schedule)]
+        # a stroke-controlled tendon's tension is bounded by k times its largest stroke
+        tension = a.stiffness * max(max(values), 0.0) if a.stroke_controlled else max(values)
         via = np.array(a.via)
-        inv_len = 1.0 / np.linalg.norm(np.diff(via, axis=0), axis=1)
+        seg = np.diff(via, axis=0)
+        inv_len = 1.0 / np.linalg.norm(seg, axis=1)
         stiffness = tension * (np.append(inv_len, 0.0) + np.insert(inv_len, 0, 0.0))
         elems, w = embed(body.mesh.points, body.mesh.tets, via)
-        omega_dt = dt * math.sqrt(float(np.max(stiffness * np.sum(w**2 * inv_mass[body.mesh.tets[elems]], axis=1))))
+        lam = float(np.max(stiffness * np.sum(w**2 * inv_mass[body.mesh.tets[elems]], axis=1)))
+        if a.stroke_controlled:
+            # the taut tendon's axial term k dL dL^T: largest eigenvalue k sum_v |dL/dx_v|^2 / m_v
+            u = seg * inv_len[:, None]
+            g_via = np.zeros_like(via)
+            g_via[:-1] -= u
+            g_via[1:] += u
+            g = np.zeros_like(body.mesh.points)
+            np.add.at(g, body.mesh.tets[elems].ravel(), (w[:, :, None] * g_via[:, None, :]).reshape(-1, 3))
+            lam = max(lam, a.stiffness * float(np.sum(np.sum(g**2, axis=1) * inv_mass)))
+        omega_dt = dt * math.sqrt(lam)
         if omega_dt > 1.0:
+            what = (f"tendon stiffness {a.stiffness:.3g} N/m" if a.stroke_controlled else
+                    f"cable tension {tension:.3g} N over {1e3 / inv_len.max():.2f} mm segments")
+            fix = ("lower the tendon stiffness or the timestep" if a.stroke_controlled else
+                   "use a larger via-point spacing (a smaller timestep helps little)")
             out.append(Finding("error", "cable-unstable",
-                               f"actuator {a.name!r}: cable tension {tension:.3g} N over {1e3 / inv_len.max():.2f} mm "
-                               f"segments is too stiff for explicit forces at dt {dt:.1e} s (omega*dt = "
-                               f"{omega_dt:.2f} > 1); use a larger via-point spacing (a smaller timestep helps little)"))
+                               f"actuator {a.name!r}: {what} is too stiff for explicit forces at dt {dt:.1e} s "
+                               f"(omega*dt = {omega_dt:.2f} > 1); {fix}"))
         elif omega_dt > 0.5:
             out.append(Finding("warning", "cable-stiff",
                                f"actuator {a.name!r}: explicit cable forces resolved with only omega*dt = "
@@ -222,7 +240,7 @@ def _adhesion_findings(scene: Scene, body, dt: float) -> list[Finding]:
     from softsim.contact.adhesion import surface_areas
 
     idx, area = surface_areas(body.mesh)
-    mass = body.mesh.lumped_masses(body.effective_density)[idx]
+    mass = body.vertex_masses()[idx]
     omega_dt = dt * math.sqrt(max(a.max_stiffness for a in laws) * float(np.max(area / mass)))
     if omega_dt > 1.0:
         return [Finding("error", "adhesion-unstable",

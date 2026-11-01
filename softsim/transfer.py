@@ -175,28 +175,39 @@ class Transfer:
                                         if all(np.isclose(r.get(k, np.nan), v) for k, v in initial.items())),
                   "per_observable": {c: best[c] for c in self.observables if c in best},
                   "checks": checks, "evaluations": len(self.history), "wall_time_s": wall}
-        # the effective card: the scenario's material with the fitted values
+        # the effective cards: the body's material, and every other fitted material (a zone's), with the
+        # fitted values
         cls = get_scenario(raw0["scenario"])
         scenario = cls(validate(cls.config_model, raw0), self.config.parent)
         key = scenario.material_key(scenario.build_scene().soft_bodies[0].name)
         raw = raw0
         for k, v in values.items():
             raw = set_dotted(raw, k, v)
-        material = scenario.load_material(get_dotted(raw, key))
         mesh = get_dotted(raw0, key.rsplit(".", 1)[0]).get("mesh", {})
-        card = material.model_copy(update={
-            "kind": "effective",
-            "name": f"{material.name}_{self.backend}_transfer",
-            "source": f"Transfer of {material.name} to {self.backend} against the {self.ref_backend} reference "
-                      f"({_relative(self.path)}).",
-            "provenance": {"fitted_by": "softsim transfer", "transfer_file": _relative(self.path),
-                           "backend": self.backend, "mesh_size": mesh.get("size", "scenario default"),
-                           "element": "linear tetrahedra", "reference": self.ref_backend,
-                           "observables": self.observables, "cost": best["cost"], "checks": checks,
-                           "note": "Effective parameters: valid only with this backend, element type and mesh size."},
-        })
+        keys = [key] + sorted({k[:k.index(".material.") + len(".material")] for k in values
+                               if ".material." in k} - {key})
         self.output.mkdir(parents=True, exist_ok=True)
-        report["material_file"] = str(save_material(card, self.output / f"{card.name}.yaml"))
+        files = []
+        for k in keys:
+            material = scenario.load_material(get_dotted(raw, k))
+            owner = "" if k == key else f"_{get_dotted(raw, k.rsplit('.', 1)[0]).get('name', k.split('.')[-2])}"
+            card = material.model_copy(update={
+                "kind": "effective",
+                "name": f"{material.name}{owner}_{self.backend}_transfer",
+                "source": f"Transfer of {material.name} ({k}) to {self.backend} against the {self.ref_backend} "
+                          f"reference ({_relative(self.path)}).",
+                "provenance": {"fitted_by": "softsim transfer", "transfer_file": _relative(self.path),
+                               "config_key": k, "backend": self.backend,
+                               "mesh_size": mesh.get("size", "scenario default"),
+                               "element": "linear tetrahedra", "reference": self.ref_backend,
+                               "observables": self.observables, "cost": best["cost"], "checks": checks,
+                               "note": "Effective parameters: valid only with this backend, element type and "
+                                       "mesh size, and fitted jointly with the other cards of this transfer."},
+            })
+            files.append(str(save_material(card, self.output / f"{card.name}.yaml")))
+        report["material_file"] = files[0]
+        if len(files) > 1:
+            report["material_files"] = files
         (self.output / "report.yaml").write_text(yaml.safe_dump(json.loads(json.dumps(report, default=float)),
                                                                 sort_keys=False))
         return report

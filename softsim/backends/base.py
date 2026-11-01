@@ -18,7 +18,7 @@ value in effect.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 import numpy as np
@@ -177,9 +177,25 @@ class Backend(ABC):
         arrays = [r.position for r in s.rigid.values()] + [v.vertices for v in s.soft.values()]
         return all(np.isfinite(a).all() for a in arrays)
 
+    def mount_gravity(self, t: float) -> np.ndarray:
+        """Gravity in the mount's frame at ``t``: ``g - a(t)`` (the scene's gravity without a moving mount)."""
+        g = np.asarray(self.scene.simulation.gravity, float)
+        return g if self.scene.mount is None else g - self.scene.mount.acceleration(t)
+
+    def _to_world(self, state: SimState) -> SimState:
+        """``state`` with the moving mount's position and velocity added to the soft bodies'."""
+        mount = self.scene.mount
+        if mount is None:
+            return state
+        p, v = mount.position(state.time), mount.velocity(state.time)
+        soft = {n: SoftState(s.vertices + p, s.velocities + v) for n, s in state.soft.items()}
+        return replace(state, soft=soft)
+
     def set_control(self, name: str, value: float) -> None:
-        """Override actuator ``name`` with ``value`` (SI) from the next step on."""
-        if isinstance(self.scene.actuator(name), CableActuator) and value < 0:
+        """Override actuator ``name`` with ``value`` (SI: a pressure, a tension, or a stroke-controlled
+        cable's stroke) from the next step on."""
+        actuator = self.scene.actuator(name)
+        if isinstance(actuator, CableActuator) and not actuator.stroke_controlled and value < 0:
             raise ValueError(f"actuator {name!r}: a cable can only pull, tension must be >= 0 (got {value})")
         self.__dict__.setdefault("_control_overrides", {})[name] = float(value)
 

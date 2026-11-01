@@ -13,7 +13,7 @@ from typing import Annotated, Literal, Union
 import numpy as np
 from pydantic import Field
 
-from softsim.actuation import Actuator, CableActuator, PressureActuator, embed
+from softsim.actuation import Actuator, CableActuator, ForceActuator, PressureActuator, embed
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time
@@ -112,8 +112,8 @@ def quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 @dataclass(frozen=True)
 class MaterialZone:
     """Elements ``elements`` (tetrahedron indices) of a soft body made of ``material`` instead of the
-    body's own (e.g. a strain-limiting layer). It must have the body's density and damping, so masses
-    and the viscous history stay those of one material."""
+    body's own (e.g. a strain-limiting layer, or a heavier insert). It may have its own elastic law and
+    density; it must have the body's damping, so the viscous history stays that of one material."""
 
     name: str
     elements: np.ndarray
@@ -158,9 +158,6 @@ class SoftBodySpec:
             if seen[z.elements].any():
                 raise ValueError(f"soft body {self.name!r}: zone {z.name!r} overlaps another zone")
             seen[z.elements] = True
-            if not math.isclose(z.material.density, self.material.density, rel_tol=1e-9):
-                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} has density {z.material.density:g} kg/m^3, "
-                                 f"the body {self.material.density:g}; zones must share the body's density")
             if z.material.damping != self.material.damping:
                 raise ValueError(f"soft body {self.name!r}: zone {z.name!r} must have the body's damping "
                                  f"({self.material.damping!r})")
@@ -177,12 +174,39 @@ class SoftBodySpec:
             raise KeyError(f"soft body {self.name!r} has no region {name!r}; have {sorted(self.regions)}")
         return self.regions[name]
 
+    def _material_densities(self) -> np.ndarray:
+        rho = np.full(len(self.mesh.tets), float(self.material.density))
+        for z in self.zones:
+            rho[z.elements] = z.material.density
+        return rho
+
+    def element_densities(self) -> np.ndarray:
+        """Density of every tetrahedron [kg/m^3]: its material's, all scaled to ``mass`` if given."""
+        rho = self._material_densities()
+        return rho * (self.mass / self.material_mass) if self.mass is not None else rho
+
+    def vertex_masses(self) -> np.ndarray:
+        """Lumped vertex masses [kg]: a quarter of each tetrahedron's mass to each of its vertices."""
+        m = np.zeros(self.mesh.n_points)
+        np.add.at(m, self.mesh.tets.ravel(), np.repeat(self.element_densities() * self.mesh.tet_volumes() / 4, 4))
+        return m
+
+    @property
+    def uniform_density(self) -> bool:
+        return all(math.isclose(z.material.density, self.material.density, rel_tol=1e-12) for z in self.zones)
+
+    @property
+    def material_mass(self) -> float:
+        """Mass from the materials' densities (ignores the ``mass`` override)."""
+        return float(self._material_densities() @ self.mesh.tet_volumes())
+
     @property
     def total_mass(self) -> float:
-        return self.mass if self.mass is not None else self.material.density * self.mesh.volume()
+        return self.mass if self.mass is not None else self.material_mass
 
     @property
     def effective_density(self) -> float:
+        """Mean density (total mass / volume)."""
         return self.total_mass / self.mesh.volume()
 
     @property
@@ -226,6 +250,50 @@ class RigidBodySpec:
 
 
 @dataclass(frozen=True)
+class MountMotion:
+    """Prescribed translation of the soft body's fixed (pinned) vertices: a moving mount, e.g. a finger
+    on a robot arm. ``positions[i]`` [m] is the mount's displacement from rest at ``times[i]`` [s] (the
+    first is zero). Between waypoints it moves point to point with minimum jerk (quintic, at rest at
+    every waypoint: continuous acceleration, no overshoot); before and after it is held.
+
+    Backends simulate in the mount's frame, which is exact for a translation: the pinned vertices stay
+    put and every element feels the inertial body force ``-rho a(t)``, i.e. gravity ``g - a(t)``
+    (:meth:`Backend.mount_gravity`); reported positions and velocities add the mount's back."""
+
+    times: tuple[float, ...]
+    positions: tuple[tuple[float, float, float], ...]
+
+    def __post_init__(self) -> None:
+        t = np.asarray(self.times, float)
+        if len(t) < 2 or np.any(np.diff(t) <= 0) or len(self.positions) != len(t):
+            raise ValueError("mount motion needs two or more waypoints at increasing times")
+        if np.any(np.asarray(self.positions[0], float) != 0):
+            raise ValueError("mount motion: the first waypoint is the rest position, displacement [0, 0, 0]")
+
+    def _eval(self, t: float, nu: int) -> np.ndarray:
+        """``nu``-th time derivative of the displacement at ``t``."""
+        times = self.times
+        if t <= times[0] or t >= times[-1]:
+            return np.asarray(self.positions[-1 if t >= times[-1] else 0], float) * (nu == 0)
+        i = int(np.searchsorted(times, t, side="right")) - 1
+        span = times[i + 1] - times[i]
+        u = (t - times[i]) / span
+        step = np.asarray(self.positions[i + 1], float) - np.asarray(self.positions[i], float)
+        s = (10 * u**3 - 15 * u**4 + 6 * u**5, (30 * u**2 - 60 * u**3 + 30 * u**4) / span,
+             (60 * u - 180 * u**2 + 120 * u**3) / span**2)[nu]
+        return (np.asarray(self.positions[i], float) if nu == 0 else 0.0) + s * step
+
+    def position(self, t: float) -> np.ndarray:
+        return self._eval(t, 0)
+
+    def velocity(self, t: float) -> np.ndarray:
+        return self._eval(t, 1)
+
+    def acceleration(self, t: float) -> np.ndarray:
+        return self._eval(t, 2)
+
+
+@dataclass(frozen=True)
 class Scene:
     """Everything a backend needs to build a model."""
 
@@ -236,14 +304,21 @@ class Scene:
     ground: GroundSettings = GroundSettings()
     metadata: dict[str, object] = field(default_factory=dict)
     actuators: tuple[Actuator, ...] = ()
+    mount: MountMotion | None = None
 
     def __post_init__(self) -> None:
+        if self.mount is not None:
+            if self.rigid_bodies or self.ground.enabled or len(self.soft_bodies) != 1:
+                raise ValueError("a moving mount is simulated in the mount's frame: it needs one soft body and no "
+                                 "ground or rigid bodies (they would have to move with it)")
+            if not self.soft_bodies[0].pinned:
+                raise ValueError("a moving mount moves the body's fixed vertices: fix a region (body.fixed)")
         names = [a.name for a in self.actuators]
         if len(set(names)) != len(names):
             raise ValueError(f"actuator names must be unique, got {names}")
         for a in self.actuators:
             body = self.soft(a.body)
-            if isinstance(a, PressureActuator):
+            if isinstance(a, (PressureActuator, ForceActuator)):
                 body.region(a.region)
             elif isinstance(a, CableActuator):
                 try:
@@ -262,6 +337,8 @@ class Scene:
         req: set[Capability] = set()
         for body in (*self.soft_bodies, *self.rigid_bodies, *self.actuators):
             req |= body.requires
+        if self.mount is not None:
+            req.add(Capability.MOVING_MOUNT)
         if self.ground.enabled:
             req |= self.ground.friction.requires
             if self.ground.adhesion is not None and self.soft_bodies:

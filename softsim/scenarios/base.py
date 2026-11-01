@@ -17,6 +17,7 @@ import pandas as pd
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
 from softsim.errors import ConfigError
+from softsim.geometry.soft import bind_files
 from softsim.materials import load_material
 from softsim.materials.models import Material
 from softsim.scene import ContactSettings, GroundSettings, Scene, SimulationSettings
@@ -61,6 +62,7 @@ class Scenario(ABC):
     def __init__(self, config: ScenarioConfig, base_dir: Path | None = None):
         self.config = config
         self.base_dir = base_dir or Path.cwd()
+        bind_files(config, self.base_dir)  # mesh files relative to the config file
 
     def load_material(self, ref: str | dict) -> Material:
         """Resolve a material reference relative to the config file."""

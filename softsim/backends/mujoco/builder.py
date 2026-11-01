@@ -166,7 +166,7 @@ def build_spec(scene: Scene, mjcf: str | None = None) -> mujoco.MjSpec:
     for body in scene.soft_bodies:
         if isinstance(body.material.elastic, StableNeoHookean):
             flexes[body.name].elastic3d = 1
-        masses = body.mesh.lumped_masses(body.effective_density)
+        masses = body.vertex_masses()
         pinned = set(body.pinned)
         for i, mass in enumerate(masses):
             if i in pinned:

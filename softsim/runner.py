@@ -8,6 +8,7 @@ is the one-call batch entry point.
 from __future__ import annotations
 
 import datetime as _dt
+import math
 import platform
 import time
 from dataclasses import dataclass, field
@@ -156,8 +157,13 @@ class Simulation:
         self.backend.reset()
 
     def run(self, duration: float | None = None, record_vertices: bool | None = None,
-            progress: Callable[[float], None] | None = None) -> RunResult:
-        """Run from the current state for ``duration`` (default: config duration)."""
+            progress: Callable[[float], None] | None = None,
+            controller: Callable[["Simulation"], Mapping[str, float] | None] | None = None) -> RunResult:
+        """Run from the current state for ``duration`` (default: config duration).
+
+        ``controller(sim)`` (closed-loop control) is called before every output interval with this
+        simulation (``sim.time``, ``sim.metrics()``, ``sim.state()``) and returns actuator values to
+        hold from then on, ``{name: value}`` in SI (NaN: back to the schedule), or None."""
         sim = self.config.simulation
         duration = sim.duration if duration is None else duration
         record_vertices = self.config.output.save_vertices if record_vertices is None else record_vertices
@@ -167,6 +173,8 @@ class Simulation:
         for i in range(n_samples + 1):
             if i:
                 self.step()
+            if controller is not None and i < n_samples:
+                self.apply_controls(controller(self) or {})
             state = self.backend.state()
             rows.append(self.scenario.metrics(state))
             for name in verts:
@@ -206,6 +214,14 @@ class Simulation:
         )
 
     # -- runtime changes -----------------------------------------------------
+
+    def apply_controls(self, values: Mapping[str, float]) -> None:
+        """Hold each actuator ``name`` at ``value`` (SI) from the next step on; NaN returns it to its schedule."""
+        for name, value in values.items():
+            if math.isnan(value):
+                self.backend.release_control(name)
+            else:
+                self.backend.set_control(name, float(value))
 
     def set_material(self, body: str, material: str | Mapping[str, Any] | None,
                      overrides: Iterable[str] = ()) -> None:

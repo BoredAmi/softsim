@@ -69,6 +69,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
         print(f"  soft body {body.name}: {q['n_points']} vertices, {q['n_tets']} tets, mean edge "
               f"{q['mean_edge'] * 1e3:.2f} mm, min quality {q['min_quality']:.2f}, mass {body.total_mass * 1e3:.2f} g, "
               f"material {body.material.name} ({body.material.elastic.model})")
+        if body.regions:
+            print("    regions: " + ", ".join(f"{k} ({len(v)} triangles)" for k, v in body.regions.items()))
+        for zone in body.zones:
+            print(f"    zone {zone.name}: {len(zone.elements)} tets, {zone.material.name} "
+                  f"({zone.material.elastic.model}, E0 {zone.material.elastic.initial_youngs_modulus() / 1e3:.4g} kPa)")
     print("estimates:", {k: float(f"{v:.4g}") for k, v in scenario.estimates().items()})
     try:
         backend_cls = get_backend(config.backend)
@@ -108,6 +113,8 @@ def _cmd_sweep(args: argparse.Namespace) -> int:
 def _cmd_export(args: argparse.Namespace) -> int:
     from softsim.runner import Simulation
 
+    if args.cad:
+        return _export_cad(args)
     sim = Simulation(args.config, args.overrides, backend=args.backend)
     text = sim.backend.export_model()
     if text is None:
@@ -118,6 +125,34 @@ def _cmd_export(args: argparse.Namespace) -> int:
         print(f"wrote {args.out}", file=sys.stderr)
     else:
         print(text)
+    return 0
+
+
+def _export_cad(args: argparse.Namespace) -> int:
+    """Write the config's soft body geometry as CAD, e.g. to start your own design from a parametric one."""
+    from softsim.config.loader import apply_overrides, load_yaml
+    from softsim.config.schema import StrictModel, validate
+    from softsim.scenarios.registry import get_scenario
+
+    raw = apply_overrides(load_yaml(args.config), args.overrides)
+    config = validate(get_scenario(raw["scenario"]).config_model, raw)
+
+    def shapes(model):
+        if isinstance(model, StrictModel):
+            if getattr(type(model), "export", None) and "type" in type(model).model_fields:
+                yield model
+            for name in type(model).model_fields:
+                yield from shapes(getattr(model, name))
+        elif isinstance(model, (list, tuple)):
+            for item in model:
+                yield from shapes(item)
+
+    found = list(shapes(config))
+    if not found:
+        print("the config has no soft body shape that can be written as CAD", file=sys.stderr)
+        return 1
+    found[0].export(args.cad)
+    print(f"wrote {args.cad} ({found[0].type}, metres, body frame)", file=sys.stderr)
     return 0
 
 
@@ -422,9 +457,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", help="write the indices (and .runs.csv) here")
     p.set_defaults(func=_cmd_sensitivity)
 
-    p = sub.add_parser("export", help="print/write the backend-native model (e.g. MJCF)")
+    p = sub.add_parser("export", help="print/write the backend-native model (e.g. MJCF), or the body as CAD")
     _add_config_args(p)
     p.add_argument("--out")
+    p.add_argument("--cad", metavar="FILE", help="write the soft body's geometry as CAD (.step, .brep) instead")
     p.set_defaults(func=_cmd_export)
 
     p = sub.add_parser("materials", help="list material presets")

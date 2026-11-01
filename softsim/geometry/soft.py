@@ -12,10 +12,11 @@ and ``outer``.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Annotated, Literal, Union
 
 import numpy as np
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 
 from softsim.config.schema import StrictModel
 from softsim.config.units import Length
@@ -68,6 +69,10 @@ class SoftCylinder(StrictModel):
             return gmsh_cylinder(self.radius, self.height, settings.size)
         return structured_cylinder(self.radius, self.height, settings.size)
 
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame)."""
+        gmsh_cylinder(self.radius, self.height, 1.0, export=path)
+
     def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
         tol = _tol(mesh)
         return _resolve(mesh, {"base": lambda p: p[:, 2] < tol, "top": lambda p: p[:, 2] > self.height - tol,
@@ -95,6 +100,10 @@ class SoftBox(StrictModel):
         if settings.method == "gmsh":
             return gmsh_box(self.size, settings.size)
         return structured_box(self.size, settings.size)
+
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame)."""
+        gmsh_box(self.size, 1.0, export=path)
 
     def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
         tol = _tol(mesh)
@@ -166,6 +175,12 @@ class SoftClosedTube(StrictModel):
         return gmsh_closed_tube(self.inner_diameter / 2, self.outer_diameter / 2, self.height, self.cap,
                                 settings.size, tuple(self.cavity_offset))
 
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame)."""
+        _check_hollow(self.inner_diameter, self.outer_diameter)
+        gmsh_closed_tube(self.inner_diameter / 2, self.outer_diameter / 2, self.height, self.cap, 1.0,
+                         tuple(self.cavity_offset), export=path)
+
     def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
         tol = _tol(mesh)
         ri, ro, h, t = self.inner_diameter / 2, self.outer_diameter / 2, self.height, self.cap
@@ -236,11 +251,19 @@ class SoftPneuNet(StrictModel):
                 - n_gaps * self.wall * self.channel_width * self.channel_height)
 
     def mesh(self, settings: MeshSettings) -> TetMesh:
+        return self._gmsh(settings.size)
+
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame); with a ``layer``, as two
+        solids (the layer and the rest)."""
+        self._gmsh(1.0, export=path)
+
+    def _gmsh(self, size: float, export=None):
         chambers = self._chambers()
         return gmsh_pneunet(self.length, self.width, self.height, chambers, self.width / 2 - self.side_wall,
                             (self.base, self.height - self.top_wall),
                             (chambers[0][0], chambers[-1][1], self.channel_width / 2, self.base + self.channel_height),
-                            self.layer, settings.size)
+                            self.layer, size, export=export)
 
     def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
         tol = _tol(mesh)
@@ -256,7 +279,148 @@ class SoftPneuNet(StrictModel):
         return {"layer": np.nonzero(below)[0], "body": np.nonzero(~below)[0]}
 
 
-SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet],
+Box = tuple[tuple[Length, Length, Length], tuple[Length, Length, Length]]
+
+
+class SoftMeshFile(StrictModel):
+    """A body from a file (softsim.meshing.io): CAD (STEP, IGES, BREP) or a closed STL or OBJ surface
+    meshed at ``mesh.size`` (its own triangles are kept with ``remesh: false``), a volume mesh (gmsh
+    ``.msh``, ``.vtk``, Medit ``.mesh``; used as it is) or a gmsh ``.geo`` script. ``path`` is
+    relative to the config file. Files without units are multiplied by ``scale`` (STL from CAD:
+    usually 1e-3, millimetres); STEP and IGES carry theirs.
+
+    Placement, in order: ``rotate`` (degrees about x, then y, then z), ``center: base`` (the
+    bounding box's bottom centre to the origin, the convention of the other shapes), then
+    ``translate``.
+
+    Regions: the file's 2D physical groups (boundary triangles only), ``surface`` (the whole
+    boundary), ``cavity`` (``cavity_1``, ``cavity_2``... if several, largest first) for every closed
+    inner shell, and ``box_regions`` given here as boxes (boundary triangles with all three vertices
+    inside, after placement). Volume regions: the file's 3D physical groups (else ``volume_<tag>`` for each of several
+    volumes) and ``body`` (all)."""
+
+    type: Literal["mesh_file"] = "mesh_file"
+    path: str
+    scale: Annotated[float, Field(gt=0)] = 1.0
+    remesh: bool = True                        # STL, OBJ: remesh at mesh.size (false: keep its triangles)
+    feature_angle: Annotated[float, Field(gt=0, lt=180)] = 40.0  # STL: edges sharper than this stay
+    rotate: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    center: Literal["none", "base"] = "none"
+    translate: tuple[Length, Length, Length] = (0.0, 0.0, 0.0)
+    box_regions: dict[str, Box] = {}
+
+    _cache: dict = PrivateAttr(default_factory=dict)
+    _base_dir: Path | None = PrivateAttr(default=None)
+
+    def bind(self, base_dir) -> None:
+        """Resolve a relative ``path`` against ``base_dir`` (the config file's folder)."""
+        self._base_dir = Path(base_dir)
+
+    @property
+    def file(self) -> Path:
+        path = Path(self.path).expanduser()
+        return path if path.is_absolute() or self._base_dir is None else (self._base_dir / path).resolve()
+
+    def _load(self, settings: MeshSettings):
+        from softsim.meshing.io import load_mesh_file
+
+        key = (settings.size, settings.method)
+        if key not in self._cache:
+            f = load_mesh_file(self.file, settings.size, self.scale,
+                               remesh=self.remesh and self.file.suffix.lower() in (".stl", ".obj"),
+                               feature_angle=self.feature_angle)
+            x = f.mesh.points @ _rotation(self.rotate).T
+            if self.center == "base":
+                lo, hi = x.min(axis=0), x.max(axis=0)
+                x = x - [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]]
+            mesh = TetMesh(x + np.asarray(self.translate), f.mesh.tets)
+            self._cache.clear()
+            self._cache[key] = (mesh, f.surfaces, f.volumes)
+            self._cache["last"] = mesh
+        return self._cache[key]
+
+    @property
+    def _mesh(self) -> TetMesh:
+        if "last" not in self._cache:
+            self._load(MeshSettings(method="gmsh"))
+        return self._cache["last"]
+
+    @property
+    def top_height(self) -> float:
+        return float(self._mesh.points[:, 2].max())
+
+    @property
+    def min_feature(self) -> float:
+        return math.inf  # unknown before meshing; the mesh quality check covers the result
+
+    def volume(self) -> float:
+        return self._mesh.volume()
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        return self._load(settings)[0]
+
+    def _files(self, mesh: TetMesh):
+        for key, value in self._cache.items():
+            if key != "last" and value[0] is mesh:
+                return value
+        raise ConfigError("regions of a mesh_file shape: pass the mesh its mesh() returned")
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        from softsim.meshing.io import surface_cavities
+
+        _, surfaces, _ = self._files(mesh)
+        boundary = mesh.surface_triangles()
+        keys = {tuple(k): i for i, k in enumerate(np.sort(boundary, axis=1))}
+        out = {}
+        for name, tris in surfaces.items():
+            rows = [keys[k] for k in map(tuple, np.sort(tris, axis=1)) if k in keys]
+            if rows:
+                out[name] = boundary[rows]
+        out["surface"] = boundary
+        cavities = surface_cavities(mesh)
+        for i, c in enumerate(cavities):
+            out.setdefault("cavity" if len(cavities) == 1 else f"cavity_{i + 1}", c)
+        tol = _tol(mesh)
+        for name, (lo, hi) in self.box_regions.items():
+            lo, hi = np.asarray(lo) - tol, np.asarray(hi) + tol
+            out[name] = mesh.surface_where(lambda p: np.all((p >= lo) & (p <= hi), axis=1))
+            if not len(out[name]):
+                raise ConfigError(f"mesh_file region {name!r}: no boundary triangle inside its box")
+        return out
+
+    def volume_regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        _, _, volumes = self._files(mesh)
+        return {**volumes, "body": np.arange(mesh.n_tets)}
+
+
+def _rotation(degrees: tuple[float, float, float]) -> np.ndarray:
+    """Rotation about x, then y, then z (fixed axes), angles in degrees."""
+    r = np.eye(3)
+    for axis, a in enumerate(np.radians(degrees)):
+        c, s = math.cos(a), math.sin(a)
+        i, j = [k for k in range(3) if k != axis]
+        m = np.eye(3)
+        m[i, i], m[i, j], m[j, i], m[j, j] = c, -s, s, c
+        r = m @ r
+    return r
+
+
+def bind_files(model, base_dir) -> None:
+    """Bind every file-backed shape inside the config ``model`` to ``base_dir``."""
+    if hasattr(model, "bind"):
+        model.bind(base_dir)
+    elif isinstance(model, StrictModel):
+        for name in type(model).model_fields:
+            bind_files(getattr(model, name), base_dir)
+    elif isinstance(model, (list, tuple)):
+        for item in model:
+            bind_files(item, base_dir)
+    elif isinstance(model, dict):
+        for item in model.values():
+            bind_files(item, base_dir)
+
+
+SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftMeshFile],
                       Field(discriminator="type")]
 
 

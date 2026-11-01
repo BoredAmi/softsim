@@ -55,3 +55,32 @@ def cable_beam_tip_angle(tension: float, cable_x: float, length: float, youngs: 
     cable's axial pre-compression."""
     x_na, ei, ea = composite_section(youngs, edges, width)
     return tension * (cable_x - x_na) * length / (ei * (1 + 2 * tension / ea))
+
+
+def cable_beam_stroke(stroke: float, stiffness: float, cable_x: float, length: float, youngs: list[float],
+                      edges: list[float], width: float) -> tuple[float, float]:
+    """(tension [N], tip rotation [rad]) of the clamped (composite) beam of :func:`cable_beam_tip_angle`
+    driven by a stroke-controlled cable (tendon ``stiffness`` [N/m], motor stroke ``stroke`` [m]). The
+    cable's shortening is the tendon's stretch plus the beam's: bending ``L a theta / L`` and axial
+    ``T L / EA`` along the cable, so ``stroke = T / k + L (a^2 T / (E_t I) + T / EA)`` with arm ``a``;
+    solved for ``T`` with the Neo-Hookean tangent ``E_t`` of :func:`cable_beam_tip_angle`."""
+    x_na, ei, ea = composite_section(youngs, edges, width)
+    arm = cable_x - x_na
+    tension = 0.0
+    for _ in range(100):
+        new = stroke / (1 / stiffness + length * (arm**2 / (ei * (1 + 2 * tension / ea)) + 1 / ea))
+        if abs(new - tension) < 1e-12 * max(new, 1e-12):
+            break
+        tension = new
+    return tension, cable_beam_tip_angle(tension, cable_x, length, youngs, edges, width)
+
+
+def cantilever_tip_deflection(force: float, length: float, youngs: float, poisson: float, width: float,
+                              height: float) -> float:
+    """Tip deflection [m] of a clamped rectangular beam (``width`` along the load) under an end force
+    (Timoshenko, linear): bending ``F L^3 / (3 E I)`` plus shear ``F L / (k G A)``, ``k = 10 (1 + nu) /
+    (12 + 11 nu)`` (Cowper's rectangle)."""
+    inertia = height * width**3 / 12
+    shear = youngs / (2 * (1 + poisson))
+    k = 10 * (1 + poisson) / (12 + 11 * poisson)
+    return force * length**3 / (3 * youngs * inertia) + force * length / (k * shear * width * height)

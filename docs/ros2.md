@@ -69,8 +69,8 @@ All of these are under the node namespace (`/softsim/...`), except `/clock` and 
 | `metrics` | ScenarioMetrics | all scenario metrics; for the drop test: indentation, compression, bulge, forces, ... |
 | `metrics/<name>` | std_msgs/Float64 | one topic per metric (rqt_plot / PlotJuggler) |
 | `status` | SimulationStatus | 2 Hz: sim time, real-time factor, paused/finished, warnings |
-| `actuators/<name>/state` | std_msgs/Float64 | the actuator's value in effect: pressure [Pa] or cable tension [N] |
-| `actuators/<name>/command` (subscribed) | std_msgs/Float64 | hold this value from the next step on; NaN returns to the schedule; a negative tension is ignored with a warning |
+| `actuators/<name>/state` | std_msgs/Float64 | the actuator's value in effect: pressure [Pa], cable tension [N], a stroke-controlled cable's stroke [m], or a region force [N] |
+| `actuators/<name>/command` (subscribed) | std_msgs/Float64 | hold this value from the next step on; NaN returns to the schedule; a negative tension is ignored with a warning (a negative stroke pays the cable out) |
 
 ## Services
 

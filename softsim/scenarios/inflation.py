@@ -5,12 +5,17 @@ The actuation scenario (M6): a soft body, e.g. a hollow sphere or a closed tube
 regions (``fixed``), with pressure actuators on its regions and cables routed
 through it (``type: cable``), each following a schedule or a controller
 (``Backend.set_control``). An actuator without ``type`` is a pressure actuator.
-``body.zones`` give parts of the body other materials (e.g. a strain-limiting layer).
+``body.zones`` give parts of the body other materials (e.g. a strain-limiting layer);
+``body.mount_path`` moves the fixed regions along a prescribed translation (a moving mount,
+softsim.scene.MountMotion).
 
 Outputs per sample: each pressure actuator's pressure ``<name>_pressure`` [Pa]
 and the volume its region encloses ``<name>_volume`` [m^3] (from the backend's
 surface vertices); each cable's tension ``<name>_tension`` [N] and length
-through its via points ``<name>_length`` [m]; and the body's extent (``max_z``,
+through its via points ``<name>_length`` [m] (a stroke-controlled cable also gives its
+command ``<name>_command`` [m]; its tension follows from its length); each region force its
+force ``<name>_force`` [N] and its region's displacement along it ``<name>_displacement`` [m]
+(area-weighted centroid); and the body's extent (``max_z``,
 ``min_z``, ``max_radius`` about the body's axis). Shapes with a ``tip`` (else
 ``top``) region also give the tip: that face's area-weighted centroid (``tip_x``,
 ``tip_y``, ``tip_z``) and its rotation from its rest orientation (``bend_angle``
@@ -26,15 +31,16 @@ import numpy as np
 import pandas as pd
 from pydantic import Field, model_validator
 
-from softsim.actuation import (CableActuator, CableActuatorConfig, PressureActuator, PressureActuatorConfig,
+from softsim.actuation import (CableActuator, CableActuatorConfig, ForceActuator, ForceActuatorConfig,
+                               PressureActuator, PressureActuatorConfig,
                                cable_length, embed, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
-from softsim.config.units import Length, Mass
+from softsim.config.units import Length, Mass, Time
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution
 from softsim.scenarios.base import Scenario, ScenarioConfig
-from softsim.scene import MaterialZone, Pose, Scene, SoftBodySpec
+from softsim.scene import MaterialZone, MountMotion, Pose, Scene, SoftBodySpec
 
 
 class MaterialZoneConfig(StrictModel):
@@ -63,12 +69,15 @@ class InflatedBodyConfig(StrictModel):
     position: tuple[Length, Length, Length] = (0.0, 0.0, 0.0)
     fixed: list[str] = []  # regions whose vertices are pinned (e.g. ["base"])
     zones: list[MaterialZoneConfig] = []  # multi-material bodies
+    # moving mount: the fixed regions follow this translation, [[time, [dx, dy, dz]], ...] from rest
+    mount_path: list[tuple[Annotated[Time, Field(ge=0)], tuple[Length, Length, Length]]] = []
 
 
 class InflationConfig(ScenarioConfig):
     scenario: Literal["inflation", "actuation"] = "inflation"
     body: InflatedBodyConfig
-    actuators: list[Annotated[Union[PressureActuatorConfig, CableActuatorConfig], Field(discriminator="type")]] = [
+    actuators: list[Annotated[Union[PressureActuatorConfig, CableActuatorConfig, ForceActuatorConfig],
+                              Field(discriminator="type")]] = [
         PressureActuatorConfig()]
 
     @model_validator(mode="before")
@@ -126,25 +135,35 @@ class InflationScenario(Scenario):
         except ValueError as exc:
             raise ConfigError(f"body.zones: {exc}") from None
         actuators = tuple(PressureActuator.from_config(a, cfg.name) if isinstance(a, PressureActuatorConfig)
+                          else ForceActuator.from_config(a, cfg.name) if isinstance(a, ForceActuatorConfig)
                           else CableActuator.from_config(a, cfg.name, cfg.mesh.size) for a in self.config.actuators)
-        self._cables = {}
+        self._cables, self._loaded = {}, {}
         for a in actuators:
-            if isinstance(a, PressureActuator) and a.region not in regions:
+            if isinstance(a, (PressureActuator, ForceActuator)) and a.region not in regions:
                 raise ConfigError(f"actuator {a.name!r}: no region {a.region!r}; have {sorted(regions)}")
+            if isinstance(a, ForceActuator):
+                self._loaded[a.name] = (_face_centre_normal(mesh.points, regions[a.region])[0], np.array(a.direction))
             if isinstance(a, CableActuator):
                 try:
                     elems, bary = embed(mesh.points, mesh.tets, np.array(a.via))
                 except ValueError as exc:
                     raise ConfigError(f"actuator {a.name!r}: {exc}") from None
-                self._cables[a.name] = (mesh.tets[elems], bary)
+                self._cables[a.name] = (mesh.tets[elems], bary, a, cable_length(mesh.points, mesh.tets[elems], bary))
         self._regions = regions
         self._tip = next((r for r in ("tip", "top") if r in regions), None)
         if self._tip is not None:
             self._tip_normal = _face_centre_normal(mesh.points, regions[self._tip])[1]
         self._axis = np.asarray(cfg.position[:2], float)
-        return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,
-                     ground=self.config.ground, metadata={"name": self.config.name or self.config.scenario},
-                     actuators=actuators)
+        try:
+            mount = MountMotion(tuple(t for t, _ in cfg.mount_path),
+                                tuple(tuple(p) for _, p in cfg.mount_path)) if cfg.mount_path else None
+            return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,
+                         ground=self.config.ground, metadata={"name": self.config.name or self.config.scenario},
+                         actuators=actuators, mount=mount)
+        except ValueError as exc:
+            if not cfg.mount_path:
+                raise
+            raise ConfigError(f"body.mount_path: {exc}") from None
 
     def metrics(self, state: SimState) -> dict[str, float]:
         cfg = self.config
@@ -152,8 +171,19 @@ class InflationScenario(Scenario):
         out = {"t": state.time}
         for a in cfg.actuators:
             if isinstance(a, CableActuatorConfig):
-                out[f"{a.name}_tension"] = float(state.controls.get(a.name, np.nan))
-                out[f"{a.name}_length"] = cable_length(x, *self._cables[a.name])
+                nodes, bary, cable, rest = self._cables[a.name]
+                length = cable_length(x, nodes, bary)
+                value = float(state.controls.get(a.name, np.nan))
+                if cable.stroke_controlled:
+                    out[f"{a.name}_command"] = value
+                out[f"{a.name}_tension"] = cable.tension_at(length, value, rest)
+                out[f"{a.name}_length"] = length
+                continue
+            if isinstance(a, ForceActuatorConfig):
+                centre0, direction = self._loaded[a.name]
+                out[f"{a.name}_force"] = float(state.controls.get(a.name, np.nan))
+                out[f"{a.name}_displacement"] = float(
+                    (_face_centre_normal(x, self._regions[a.region])[0] - centre0) @ direction)
                 continue
             out[f"{a.name}_pressure"] = float(state.controls.get(a.name, np.nan))
             out[f"{a.name}_volume"] = enclosed_volume(x, self._regions[a.region])
@@ -173,6 +203,10 @@ class InflationScenario(Scenario):
                 length = ts[f"{a.name}_length"].to_numpy()
                 out[f"{a.name}_final_tension"] = float(ts[f"{a.name}_tension"].iloc[-1])
                 out[f"{a.name}_stroke"] = float(length[0] - length[-1])
+                continue
+            if isinstance(a, ForceActuatorConfig):
+                out[f"{a.name}_final_force"] = float(ts[f"{a.name}_force"].iloc[-1])
+                out[f"{a.name}_final_displacement"] = float(ts[f"{a.name}_displacement"].iloc[-1])
                 continue
             v = ts[f"{a.name}_volume"].to_numpy()
             out[f"{a.name}_final_pressure"] = float(ts[f"{a.name}_pressure"].iloc[-1])

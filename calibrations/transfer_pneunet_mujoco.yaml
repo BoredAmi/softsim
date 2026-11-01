@@ -1,0 +1,19 @@
+# Transfer of the PneuNet finger's two materials (Ecoflex 00-30 body, 1 MPa strain-limiting layer) to
+# MuJoCo at 1.5 mm: which pair of MuJoCo moduli curls the finger and inflates its cavity like the
+# locking-free reference? Fitted jointly on the 0-8 kPa bend angle and cavity volume histories. Checked
+# on what the fit never saw: 11 kPa (larger strain, towards the walls' limit pressure) and a shorter
+# finger (4 chambers, same section).
+#   softsim transfer calibrations/transfer_pneunet_mujoco.yaml        (~2.5 h, 6-7 min per MuJoCo run)
+config: ../scenarios/actuation/pneunet.yaml
+backend: mujoco
+overrides: [output.save_model=false]
+reference: {backend: fem, overrides: [simulation.timestep=2ms]}
+observables: {bend_angle: 1.0, cavity_volume: 1.0}
+parameters:
+  body.material.elastic.youngs_modulus: {initial: 114 kPa, bounds: [40 kPa, 140 kPa], log: true}
+  body.zones[0].material.elastic.youngs_modulus: {initial: 1 MPa, bounds: [0.3 MPa, 3 MPa], log: true}
+checks:
+  p_11kPa: ["actuators[0].schedule=[[0, 0], [0.05, 176], [0.1, 1139], [0.15, 3027], [0.2, 5500], [0.25, 7973], [0.3, 9861], [0.35, 10824], [0.4, 11000], [0.5, 11000]]"]
+  chambers_4: [body.geometry.chambers=4]
+max_evaluations: 14
+output: ../runs/transfer/pneunet_mujoco_1.5mm

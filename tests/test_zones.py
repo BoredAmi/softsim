@@ -37,8 +37,8 @@ def test_zone_validation():
     assert len(zone.elements) == len(body.mesh.tets) // 5  # one of five 2 mm columns across x
     groups = body.material_groups()
     assert sum(len(e) for _, e in groups) == len(body.mesh.tets) and groups[1][0].elastic.youngs_modulus == 5e6
-    with pytest.raises(ConfigError, match="density"):
-        _beam(["body.zones[0].material.density=2000 kg/m^3"]).build_scene()
+    with pytest.raises(ConfigError, match="damping"):
+        _beam(["body.zones[0].material.damping={model: rayleigh, alpha: 1.0, beta: 0.0}"]).build_scene()
     with pytest.raises(ConfigError, match="no elements"):
         _beam(["body.zones[0].box=[[20 mm, 0, 0], [30 mm, 1 mm, 1 mm]]"]).build_scene()
 
@@ -110,3 +110,59 @@ def test_sofa_zones():
     no_zone = _final_angle(SofaBackend, [*ov, "body.zones=[]"], 30)
     np.testing.assert_allclose(plain["bend_angle"], no_zone["bend_angle"], rtol=1e-6)
     assert _final_angle(SofaBackend, ov, 30)["bend_angle"] < 0.9 * no_zone["bend_angle"]
+
+
+HEAVY_TIP = ["body.zones[0].box=[[-5 mm, -5 mm, 30 mm], [5 mm, 5 mm, 60 mm]]",
+             "body.zones[0].material.elastic.youngs_modulus=500 kPa", "body.zones[0].material.density=4280 kg/m^3",
+             "actuators=[]", "simulation.gravity=[2, 0, 0]"]
+
+
+def _gravity_sag(density_tip, g=2.0, rho=1070.0, e=5e5, a=0.01, length=0.06):
+    """Euler-Bernoulli tip deflection of a cantilever under its own weight, outer half of density
+    ``density_tip``: tip = integral of M(z) (L - z) / EI, M(z) = integral_z^L q(s) (s - z) ds."""
+    z = np.linspace(0, length, 6001)
+    q = np.where(z > length / 2, density_tip, rho) * g * a * a
+    moment = np.array([np.trapz(q[i:] * (z[i:] - zi), z[i:]) for i, zi in enumerate(z)])
+    return float(np.trapz(moment * (length - z), z) / (e * a**4 / 12))
+
+
+def test_zone_density_masses():
+    """A zone with its own density: per-element densities, lumped masses and every backend's masses."""
+    sc = _beam(HEAVY_TIP)
+    body = sc.build_scene().soft_bodies[0]
+    vol = body.mesh.tet_volumes()
+    assert body.total_mass == pytest.approx(1070 * vol.sum() + (4280 - 1070) * vol[body.zones[0].elements].sum())
+    assert body.vertex_masses().sum() == pytest.approx(body.total_mass) and not body.uniform_density
+    scaled = _beam([*HEAVY_TIP, "body.mass=20 g"]).build_scene().soft_bodies[0]  # a mass override scales all
+    np.testing.assert_allclose(scaled.element_densities() / body.element_densities(), 0.02 / body.total_mass)
+    pytest.importorskip("mujoco")
+    from softsim.backends.mujoco import MujocoBackend
+
+    mj = MujocoBackend()
+    mj.build(sc.build_scene())
+    free = [i for i in range(body.mesh.n_points) if i not in set(body.pinned)]
+    masses = [mj.model.body(f"beam_{i}").mass[0] for i in free]
+    np.testing.assert_allclose(masses, body.vertex_masses()[free], rtol=1e-6)
+
+
+def test_reference_heavy_tip_sag():
+    """Quasi-static reference under gravity, outer half four times as dense: the sag grows as Euler-
+    Bernoulli says (x3.56) and matches it (measured: +0.15%; +0.34% for the uniform beam)."""
+    pytest.importorskip("jax")
+    from softsim.backends.fem import FemBackend
+    from softsim.fem.solid3d import Solid3DSolver
+
+    sags = []
+    for overrides in (HEAVY_TIP, [*HEAVY_TIP, "body.zones[0].material.density=1070 kg/m^3"]):
+        sc = _beam(overrides)
+        backend = FemBackend()
+        backend.build(sc.build_scene())
+        assert backend.solver.total_mass == pytest.approx(sc.build_scene().soft_bodies[0].total_mass, rel=1e-9)
+        s = Solid3DSolver(backend._problem, dynamic=False)
+        backend.solver = s
+        x0 = sc.metrics(backend.state())["tip_x"]
+        assert s.advance(1.0)
+        sags.append(sc.metrics(backend.state())["tip_x"] - x0)
+    heavy, uniform = sags
+    assert heavy == pytest.approx(_gravity_sag(4280), rel=0.01)
+    assert heavy / uniform == pytest.approx(_gravity_sag(4280) / _gravity_sag(1070), rel=0.005)

@@ -20,7 +20,7 @@ Parameters (all optional):
                     (hold/stop); in loop mode only on ~/save
     viewer          open the MuJoCo passive viewer (false)
 
-Actuators (a pressure [Pa] or a cable tension [N]): ``~/actuators/<name>/command``
+Actuators (a pressure [Pa], a cable tension [N] or stroke [m], a region force [N]): ``~/actuators/<name>/command``
 (std_msgs/Float64, SI units) holds that value from the next step on; NaN returns
 the actuator to its schedule. ``~/actuators/<name>/state`` publishes the value in
 effect. A rebuild (reset of a changed config, set_material, action) clears commands.

@@ -16,9 +16,11 @@ from softsim.geometry.soft import (
     SoftClosedTube,
     SoftCylinder,
     SoftHollowSphere,
+    SoftMeshFile,
     SoftPneuNet,
     SoftShape,
     check_resolution,
+    bind_files,
 )
 
 __all__ = [
@@ -32,10 +34,12 @@ __all__ = [
     "SoftClosedTube",
     "SoftCylinder",
     "SoftHollowSphere",
+    "SoftMeshFile",
     "SoftPneuNet",
     "SoftShape",
     "WeightWithKnob",
     "check_resolution",
     "load_rigid_body",
+    "bind_files",
     "rigid_presets",
 ]

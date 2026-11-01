@@ -1,4 +1,4 @@
-"""Actuators: inputs that drive soft bodies (pressure and cables).
+"""Actuators: inputs that drive soft bodies (pressure, cables and region forces).
 
 A :class:`PressureActuator` loads a named surface region of a soft body (e.g. a
 hollow shape's ``cavity``) with a gauge pressure ``p``: the traction ``-p n``,
@@ -23,6 +23,22 @@ internal, so the net force on the body is zero. Its load is the potential
 symmetric positive semi-definite tangent). The reference interpolates the via
 points with its quadratic shape functions; MuJoCo and SOFA with the linear ones
 (:func:`cable_forces`, explicit). The cable stays taut: pulling with ``T > 0``.
+
+A cable with ``control: stroke`` is driven by length instead, like a servo
+reeling it in: its value is the stroke ``s`` [m] and the cable is a tendon of
+axial ``stiffness`` k, slack when shorter than its free length ``L0 - s`` (``L0``
+its length at rest): ``T = k max(L - L0 + s, 0)`` (:meth:`CableActuator.tension_at`).
+With a stiff tendon the stroke sets the shortening; the tension follows from
+the body. The reference adds ``k/2 (L - L0 + s)^2`` to its potential (implicit);
+MuJoCo and SOFA compute ``T`` from the current length every step (explicit).
+
+A :class:`ForceActuator` is a total force ``F`` [N] along a fixed world
+``direction`` spread over a named surface region by area (a dead load: e.g. a
+payload on a fingertip, or a probe pressing on it). The reference applies the
+consistent load of a uniform traction on its quadratic faces (all of it on the
+mid-edge nodes); MuJoCo and SOFA give each triangle's vertices a third of its
+share (:func:`region_force_weights`). It depends on no position, so it has no
+stability limit.
 """
 
 from __future__ import annotations
@@ -31,11 +47,11 @@ from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
-from softsim.config.units import Force, Length, Pressure, Time
+from softsim.config.units import Force, Length, Pressure, Stiffness, Time, parse_quantity
 
 
 class PressureActuatorConfig(StrictModel):
@@ -77,15 +93,41 @@ class PressureActuator:
 class CableActuatorConfig(StrictModel):
     """YAML form of a cable actuator: ``path`` is ``[[x, y, z], ...]`` in the body's frame (its mesh
     coordinates), from the exit towards the motor to the anchor; ``schedule`` is
-    ``[[time, tension], ...]``. Via points are placed along the path at most ``spacing`` apart
-    (default: the body's mesh size)."""
+    ``[[time, tension], ...]``, or with ``control: stroke`` ``[[time, stroke], ...]`` (lengths; the
+    cable then needs its tendon ``stiffness``). Via points are placed along the path at most
+    ``spacing`` apart (default: the body's mesh size)."""
 
     name: str = "cable"
     type: Literal["cable"] = "cable"
     path: list[tuple[Length, Length, Length]] = Field(min_length=2)
+    control: Literal["tension", "stroke"] = "tension"
     tension: Annotated[Force, Field(ge=0)] = 0.0
-    schedule: list[tuple[Annotated[Time, Field(ge=0)], Annotated[Force, Field(ge=0)]]] = []
+    stroke: Length = 0.0
+    stiffness: Annotated[Stiffness, Field(gt=0)] | None = None
+    schedule: list[tuple[Annotated[Time, Field(ge=0)], float]] = []
     spacing: Annotated[Length, Field(gt=0)] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _schedule_units(cls, data):
+        """Schedule values are forces, or lengths for a stroke-controlled cable."""
+        if isinstance(data, dict) and isinstance(data.get("schedule"), list):
+            dim = "length" if data.get("control") == "stroke" else "force"
+            rows = []
+            for row in data["schedule"]:
+                if isinstance(row, (list, tuple)) and len(row) == 2:
+                    row = (row[0], parse_quantity(row[1], dim))
+                rows.append(row)
+            data = {**data, "schedule": rows}
+        return data
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "CableActuatorConfig":
+        if self.control == "stroke" and self.stiffness is None:
+            raise ValueError(f"cable {self.name!r}: control: stroke needs the tendon's stiffness (N/m)")
+        if self.control == "tension" and any(v < 0 for _, v in self.schedule):
+            raise ValueError(f"cable {self.name!r}: a cable can only pull, its tensions must be >= 0")
+        return self
 
 
 @dataclass(frozen=True)
@@ -96,13 +138,26 @@ class CableActuator:
     name: str
     body: str
     via: tuple[tuple[float, float, float], ...]
-    tension: float = 0.0
+    tension: float = 0.0            # the constant value: a tension, or the stroke if stroke-controlled
     schedule: tuple[tuple[float, float], ...] = ()
+    stiffness: float | None = None  # set: stroke-controlled tendon of this stiffness [N/m]
 
     @classmethod
     def from_config(cls, cfg: CableActuatorConfig, body: str, spacing: float) -> "CableActuator":
+        stroke = cfg.control == "stroke"
         return cls(cfg.name, body, tuple(map(tuple, resample(np.array(cfg.path, float), cfg.spacing or spacing))),
-                   cfg.tension, tuple(map(tuple, cfg.schedule)))
+                   cfg.stroke if stroke else cfg.tension, tuple(map(tuple, cfg.schedule)),
+                   cfg.stiffness if stroke else None)
+
+    @property
+    def stroke_controlled(self) -> bool:
+        return self.stiffness is not None
+
+    def tension_at(self, length: float, value: float, rest_length: float) -> float:
+        """Tension [N] at current ``length`` for control ``value`` (a tension, or a stroke)."""
+        if self.stiffness is None:
+            return value
+        return self.stiffness * max(length - rest_length + value, 0.0)
 
     def value(self, t: float) -> float:
         if not self.schedule:
@@ -115,8 +170,66 @@ class CableActuator:
         return frozenset({Capability.CABLE_ACTUATION})
 
 
-Actuator = PressureActuator | CableActuator
-ActuatorConfig = PressureActuatorConfig | CableActuatorConfig
+class ForceActuatorConfig(StrictModel):
+    """YAML form of a region force: ``force`` [N] (or ``schedule: [[time, force], ...]``) along the
+    world ``direction`` (normalised), spread over ``region`` by area. A negative force pushes the
+    other way."""
+
+    name: str = "force"
+    type: Literal["force"] = "force"
+    region: str
+    direction: tuple[float, float, float]
+    force: Force = 0.0
+    schedule: list[tuple[Annotated[Time, Field(ge=0)], Force]] = []
+
+    @model_validator(mode="after")
+    def _direction(self) -> "ForceActuatorConfig":
+        if not np.linalg.norm(self.direction) > 0:
+            raise ValueError(f"force {self.name!r}: direction must be a non-zero vector")
+        return self
+
+
+@dataclass(frozen=True)
+class ForceActuator:
+    """Total force [N] along unit ``direction`` (world) on region ``region`` of soft body ``body``,
+    spread by area; see module docstring."""
+
+    name: str
+    body: str
+    region: str
+    direction: tuple[float, float, float]
+    force: float = 0.0
+    schedule: tuple[tuple[float, float], ...] = ()
+
+    @classmethod
+    def from_config(cls, cfg: ForceActuatorConfig, body: str) -> "ForceActuator":
+        d = np.asarray(cfg.direction, float)
+        return cls(cfg.name, body, cfg.region, tuple((d / np.linalg.norm(d)).tolist()), cfg.force,
+                   tuple(map(tuple, cfg.schedule)))
+
+    def value(self, t: float) -> float:
+        if not self.schedule:
+            return self.force
+        times, values = zip(*self.schedule)
+        return float(np.interp(t, times, values))
+
+    @property
+    def requires(self) -> frozenset[Capability]:
+        return frozenset({Capability.REGION_FORCE})
+
+
+Actuator = PressureActuator | CableActuator | ForceActuator
+ActuatorConfig = PressureActuatorConfig | CableActuatorConfig | ForceActuatorConfig
+
+
+def region_force_weights(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
+    """Share of a region force on every vertex (N,), summing to 1: a third of each triangle's area
+    to each of its vertices, over the region's area."""
+    tri = points[tris]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    w = np.zeros(len(points))
+    np.add.at(w, tris.ravel(), np.repeat(area / 3, 3))
+    return w / area.sum()
 
 
 def resample(path: np.ndarray, spacing: float) -> np.ndarray:

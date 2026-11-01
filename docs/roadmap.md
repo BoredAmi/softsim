@@ -216,20 +216,45 @@ Done so far ([actuation.md](actuation.md)):
   load).
 - **PneuNet finger** (`pneunet` shape: chambers, channel, conforming
   strain-limiting layer). MuJoCo and SOFA agree to 0.1% and bend 24% less than
-  the reference at 8 kPa.
+  the reference at 8 kPa. A two-card transfer (body and layer) brings MuJoCo
+  to 2.9%, holding at 11 kPa (3.2%) and on a 4-chamber finger (4.3%).
+- **Bodies from files** (`mesh_file`: STEP/IGES/BREP, STL/OBJ, .msh/VTK/Medit,
+  .geo through gmsh). Physical groups become regions and zones, closed inner
+  shells become `cavity`, and boxes name faces. Several CAD solids are bonded
+  into one body. `softsim export --cad` writes the parametric shapes as STEP.
+  The PneuNet read back from its own STEP is the same body (volumes exact) and
+  bends within 0.5% on MuJoCo.
+- **Zones with their own density** on all backends. Check: a cantilever with a
+  heavy outer half sags as Euler–Bernoulli says (reference within 0.15%).
+- **Stroke-controlled cables** (`control: stroke`: a servo reeling in a tendon
+  of given stiffness, slack when short; implicit in the reference, explicit
+  with a stability check on MuJoCo/SOFA). Check: the reference within 0.8% of
+  Euler–Bernoulli with the beam's bending and axial compliance in series with
+  the tendon.
+- **Region forces** (`type: force`: a dead load spread over a surface region by
+  area, consistent on the reference's quadratic faces). Check: a tip-loaded
+  cantilever converges to beam theory.
+- **Moving mount** (`body.mount_path`: the fixed regions follow a minimum-jerk
+  translation), simulated in the mount's frame on every backend. Check: the
+  reference agrees with a world-frame run with prescribed base motion to 0.03%
+  (second order in the step).
+- **Closed-loop control from Python:** `Simulation.run(controller=...)`
+  (a PI loop holding a cable beam's tip angle is a test).
 
 Still to do:
-- **Geometry:** mesh and CAD import (STL/OBJ/STEP through gmsh, .msh/.vtk), with
-  physical groups mapped to regions. Parametric cable-finger body. Zones from shape regions and imported
-  physical groups (today: boxes); zones with their own density or damping.
-- **More actuators:** cable length (displacement) control, region force and
-  prescribed displacement, with Python control callbacks.
+- **Geometry:** parametric cable-finger body; zones with their own damping.
+- **More actuators:** a rotating mount, prescribed displacement of any region
+  (not only the fixed ones). A cable anchor spread over a face
+  (today a point, which under stroke control gives way locally; use a stiff
+  tip zone).
 - **Backend mappings (optional, for speed or stability):** SoftRobots
   `CableConstraint` and `SurfacePressureConstraint` on SOFA, spatial tendons on
   MuJoCo, as implicit alternatives to the explicit forces.
 - **Damping debt:** Rayleigh α on SOFA. (The compliant support and
   post-contact observables are done; see above.)
-- **Analytic checks:** the pressurised thick-walled cylinder (Lamé).
+- **Analytic checks:** the pressurised thick-walled cylinder (Lamé), as a
+  closed-end tube with axial extension: a plane-strain slice needs an open lid
+  that the reference's `-p V` load can't close.
 
 ## M7: pneumatic finger
 

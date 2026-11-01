@@ -1,0 +1,44 @@
+# The PneuNet finger of pneunet.yaml, from a CAD file: how to simulate your own design. cad/pneunet.step
+# was written by `softsim export scenarios/actuation/pneunet.yaml --cad scenarios/actuation/cad/pneunet.step`
+# (two solids: the 1.5 mm layer and the rest, bonded on import). The cavity (the closed inner shell) is
+# found by itself; the bonded base face and the tip face are picked by boxes, the layer zone by element
+# centroid. Same body, materials, load and outputs as pneunet.yaml.
+#   softsim run scenarios/actuation/pneunet_from_step.yaml
+scenario: actuation
+description: PneuNet finger from a STEP file, Ecoflex 00-30 with a 1 MPa layer, 0-8 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+  iterations: 300
+
+ground:
+  enabled: false
+
+body:
+  name: finger
+  geometry:
+    type: mesh_file
+    path: cad/pneunet.step                 # STEP carries its units; an STL from CAD needs scale: 1e-3
+    box_regions:
+      base: [[0, -8 mm, 0], [0, 8 mm, 16 mm]]
+      tip: [[54 mm, -8 mm, 0], [54 mm, 8 mm, 16 mm]]
+  material: {preset: ecoflex_00_30, damping: null}
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+  zones:
+    - name: layer
+      box: [[0, -8 mm, 0], [54 mm, 8 mm, 1.5 mm]]
+      material: {preset: ecoflex_00_30, damping: null, elastic: {youngs_modulus: 1 MPa}}
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0.000 kPa], [25 ms, 0.018 kPa], [50 ms, 0.128 kPa], [75 ms, 0.390 kPa],
+               [100 ms, 0.828 kPa], [125 ms, 1.440 kPa], [150 ms, 2.202 kPa], [175 ms, 3.072 kPa],
+               [200 ms, 4.000 kPa], [225 ms, 4.928 kPa], [250 ms, 5.798 kPa], [275 ms, 6.560 kPa],
+               [300 ms, 7.172 kPa], [325 ms, 7.610 kPa], [350 ms, 7.872 kPa], [375 ms, 7.982 kPa],
+               [400 ms, 8.000 kPa], [500 ms, 8.000 kPa]]

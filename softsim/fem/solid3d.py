@@ -463,12 +463,15 @@ class Problem3D:
     Cable loads: ``cables[k] = (nodes, weights)``, (K, 10) each: via point ``i`` sits at
     ``sum_j weights[i, j] x[nodes[i, j]]`` (the quadratic shape functions of its element, see
     :func:`p2_weights`); the cable carries the tension ``Solver.tensions[k]`` as the potential
-    ``T L(x)``, ``L`` the length of the polyline through the via points."""
+    ``T L(x)``, ``L`` the length of the polyline through the via points. A cable with
+    ``cable_stiffness[k]`` = k > 0 is stroke-controlled instead: a tendon of stiffness k and free
+    length ``Solver.free_lengths[k]`` (its rest length minus the motor's stroke), potential
+    ``k/2 (L - L_free)^2`` while taut (``L > L_free``), tension ``k (L - L_free)``."""
 
     mesh: QuadraticTetMesh
     law: IsochoricLaw
     bulk_modulus: float
-    density: float
+    density: float | np.ndarray                 # [kg/m^3], or one per element (material zones)
     prony: Prony | None = None
     gravity: tuple[float, float, float] = (0.0, 0.0, -9.81)
     rigid: tuple[RigidBody3D, ...] = ()
@@ -476,6 +479,9 @@ class Problem3D:
     fixed_dofs: np.ndarray = field(default_factory=lambda: np.zeros(0, int))  # single dofs (3 * node + axis)
     pressure_faces: tuple[np.ndarray, ...] = ()  # per pressure load: outward faces (K, 6); ``Solid3DSolver.pressures``
     cables: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per cable: via-point (nodes, weights); ``.tensions``
+    cable_stiffness: tuple[float, ...] = ()  # per cable: 0 = tension-controlled, k > 0 = stroke-controlled
+    force_loads: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per region force: (faces (K, 6), direction (3,));
+    #   ``Solid3DSolver.forces`` [N]: uniform traction, consistent (mid-edge nodes, a third of the face area each)
     zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
 
 
@@ -514,13 +520,14 @@ class Solid3DSolver:
 
         det_m = np.linalg.det(np.einsum("eni,qnj->eqij", x, _DN_M))
         nn = np.einsum("qa,qb->qab", _N_M, _N_M)
-        me = problem.density * np.einsum("eq,qab->eab", det_m * _W_M, nn)
+        rho = np.broadcast_to(np.asarray(problem.density, float), (len(m.tets),))
+        me = rho[:, None, None] * np.einsum("eq,qab->eab", det_m * _W_M, nn)
         rows = np.repeat(m.tets, 10, axis=1).ravel()
         cols = np.tile(m.tets, (1, 10)).ravel()
         mass = sp.csr_matrix((me.ravel(), (rows, cols)), shape=(self.n, self.n))
         self.mass_matrix = sp.kron(mass, sp.eye(3), format="csr")
         self._node_mass = np.asarray(mass.sum(axis=1)).ravel()                # consistent nodal masses
-        self.total_mass = problem.density * self.volume
+        self.total_mass = float(rho @ self._wv.sum(axis=1))
 
         # dof layout: 3 per node, then each rigid body's dofs
         self._rdof = []
@@ -547,6 +554,16 @@ class Solid3DSolver:
         self._lam = [np.zeros(k) for _ in range(nb)]
         groups = [self._edofs]
         self.pressures = np.zeros(len(problem.pressure_faces))
+        self.forces = np.zeros(len(problem.force_loads))
+        self.gravity = np.asarray(problem.gravity, float)  # changeable between steps (a moving frame)
+        self.fixed_motion = None  # optional t -> values of the fixed dofs (``self.fixed``): prescribed motion
+        self._force_vecs = []  # per region force: its nodal loads for 1 N total
+        for faces, direction in problem.force_loads:
+            c = m.nodes[faces[:, :3]]
+            area = 0.5 * np.linalg.norm(np.cross(c[:, 1] - c[:, 0], c[:, 2] - c[:, 0]), axis=1)
+            share = np.zeros(self.n)
+            np.add.at(share, faces[:, 3:].ravel(), np.repeat(area / 3, 3))
+            self._force_vecs.append((share[:, None] / area.sum() * np.asarray(direction, float)).ravel())
         self._pdofs = [(3 * np.asarray(f, int)[:, :, None] + np.arange(3)).reshape(len(f), 18)
                        for f in problem.pressure_faces]
         self.tensions = np.zeros(len(problem.cables))
@@ -557,6 +574,13 @@ class Solid3DSolver:
             self._cables.append((seg_dofs, np.concatenate([-weights[:-1], weights[1:]], axis=1),
                                  m.nodes[seg_nodes]))
             groups.append(seg_dofs)
+        self.stiffness = np.zeros(len(problem.cables))
+        self.stiffness[:len(problem.cable_stiffness)] = problem.cable_stiffness
+        self._cable_dofs = {}  # stroke-controlled cables: every dof of the cable (the k dL dL^T term couples them)
+        for k in np.nonzero(self.stiffness)[0]:
+            dofs = np.unique(self._cables[k][0])
+            self._cable_dofs[k] = dofs
+            groups.append(dofs[None, :])
         for i in range(nb):
             rigid = np.broadcast_to(self._rdof[i], (k, len(self._rdof[i])))
             groups.append(np.concatenate([self._sdofs, rigid], axis=1))
@@ -566,6 +590,11 @@ class Solid3DSolver:
         self._epos = self._pattern.positions(np.repeat(self._edofs, 30, axis=1), np.tile(self._edofs, (1, 30)))
         self._ppos = [self._pattern.positions(np.repeat(d, 18, axis=1), np.tile(d, (1, 18))) for d in self._pdofs]
         self._cpos = [self._pattern.positions(np.repeat(d, 60, axis=1), np.tile(d, (1, 60))) for d, *_ in self._cables]
+        self._cdense = {k: self._pattern.positions(np.repeat(d[None, :], len(d), axis=1),
+                                                   np.tile(d[None, :], (1, len(d))))
+                        for k, d in self._cable_dofs.items()}
+        self.rest_lengths = np.array([self.cable_length(k, np.zeros(self.ndof)) for k in range(len(self._cables))])
+        self.free_lengths = self.rest_lengths.copy()  # stroke-controlled cables: rest length - stroke
         mass = self.mass_matrix.tocoo()
         msel, self._mpos = self._pattern.locate(mass.row, mass.col)
         self._mval = mass.data[msel]
@@ -796,8 +825,10 @@ class Solid3DSolver:
         # rigid inertia (world frame) and loads
         rows, cols, vals = [], [], []
         f_ext = np.zeros(self.ndof)
-        g = np.asarray(self.p.gravity, float)
+        g = np.asarray(self.gravity, float)
         f_ext[:3 * self.n] = np.repeat(self._node_mass, 3) * np.tile(g, self.n)
+        for force, vec in zip(self.forces, self._force_vecs):
+            f_ext[:3 * self.n] += force * vec
         spring = np.zeros(self.ndof)
         damper = np.zeros(self.ndof)
         for i, body in enumerate(self.p.rigid):
@@ -857,7 +888,9 @@ class Solid3DSolver:
             if pressure:
                 e += pressure * float(self._face_s(self._face_x(y, k)))
         for k, tension in enumerate(self.tensions):
-            if tension:
+            if self.stiffness[k]:
+                e += 0.5 * self.stiffness[k] * max(self.cable_length(k, y) - self.free_lengths[k], 0.0) ** 2
+            elif tension:
                 e += tension * self.cable_length(k, y)
         for i, k in enumerate(self._contact):
             cr, rr = ctx["refs"][i]
@@ -878,6 +911,12 @@ class Solid3DSolver:
     def cable_length(self, k: int, y: np.ndarray | None = None) -> float:
         """Current length of cable ``k`` through its via points."""
         return float(self._segments(k, self.y if y is None else y)[1].sum())
+
+    def cable_tension(self, k: int, y: np.ndarray | None = None) -> float:
+        """Tension [N] of cable ``k``: its set tension, or for a stroke-controlled one ``k (L - L_free)+``."""
+        if not self.stiffness[k]:
+            return float(self.tensions[k])
+        return float(self.stiffness[k] * max(self.cable_length(k, y) - self.free_lengths[k], 0.0))
 
     def enclosed_volume(self, k: int) -> float:
         """Volume enclosed by pressure load ``k``'s faces (the cavity), current configuration."""
@@ -907,17 +946,22 @@ class Solid3DSolver:
                 hf = self._project_psd(hf)
             grad += np.bincount(self._pdofs[k].ravel(), weights=gf.ravel(), minlength=self.ndof)
             hess += pat.scatter(self._ppos[k], hf.reshape(-1))
-        for k, tension in enumerate(self.tensions):
+        for k in range(len(self._cables)):
+            tension = self.cable_tension(k, y)
             if not tension:
                 continue
             dofs, w, _ = self._cables[k]
             s, n = self._segments(k, y)
             u = s / n[:, None]
-            gc = tension * w[:, :, None] * u[:, None, :]                                 # (S, 20, 3)
+            gl = w[:, :, None] * u[:, None, :]                                           # dL/dx, (S, 20, 3)
             proj = (np.eye(3) - u[:, :, None] * u[:, None, :]) / n[:, None, None]       # PSD
             hc = tension * np.einsum("sa,sb,sij->saibj", w, w, proj)
-            grad += np.bincount(dofs.ravel(), weights=gc.ravel(), minlength=self.ndof)
+            g = np.bincount(dofs.ravel(), weights=gl.ravel(), minlength=self.ndof)
+            grad += tension * g
             hess += pat.scatter(self._cpos[k], hc.reshape(-1))
+            if self.stiffness[k]:  # taut tendon: + k dL dL^T over the whole cable
+                gd = g[self._cable_dofs[k]]
+                hess += pat.scatter(self._cdense[k], self.stiffness[k] * np.outer(gd, gd).ravel())
         x0 = jnp.asarray(self.p.mesh.nodes[self._snodes])
         area = jnp.asarray(self._sarea)
         for i, k in enumerate(self._contact):
@@ -945,7 +989,7 @@ class Solid3DSolver:
         """One implicit step; returns False (state unchanged) if Newton does not converge."""
         ctx = self._context(dt)
         y = self.y + dt * self.v + 0.5 * dt * dt * self.a if self.dynamic else self.y.copy()
-        y[self.fixed] = self.y[self.fixed]
+        y[self.fixed] = self.y[self.fixed] if self.fixed_motion is None else self.fixed_motion(self.t + dt)
         scale = max(float(np.ptp(self.p.mesh.nodes, axis=0).max()), 1e-3)
         e_old = self.energy(y, ctx)
         if not np.isfinite(e_old):

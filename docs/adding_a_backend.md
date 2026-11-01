@@ -51,3 +51,22 @@ good template. It shows:
   (momentum balance);
 - documenting where results differ from other backends
   ([backends/sofa.md](backends/sofa.md)).
+
+## Actuators and the moving mount
+
+Actuators live in `scene.actuators` (`softsim.actuation`). Read the value in
+effect with `self.control(name)`, which is the schedule or a `set_control`
+override, and apply it every step:
+- **pressure:** `pressure_forces`;
+- **cable:** `cable_forces`, with `CableActuator.tension_at` for a
+  stroke-controlled one;
+- **region force:** `region_force_weights` times the value and direction.
+
+Declare the matching capabilities.
+
+A moving mount (`scene.mount`) needs two calls from the base class:
+- set gravity to `self.mount_gravity(t)` before every step;
+- return `self._to_world(state)` from `state()`.
+
+Then the backend simulates in the mount's frame. See
+[actuation.md](actuation.md#moving-mount).

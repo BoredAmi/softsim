@@ -34,7 +34,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import CableActuator, PressureActuator, embed, open_edges
+from softsim.actuation import CableActuator, ForceActuator, PressureActuator, embed, open_edges
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.errors import StabilityError
@@ -85,6 +85,8 @@ class FemBackend(Backend):
         Capability.CONTACT_ADHESION,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.REGION_FORCE,
+        Capability.MOVING_MOUNT,
         Capability.MULTI_MATERIAL,
     })
 
@@ -153,16 +155,22 @@ class FemBackend(Backend):
             ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))) if int(t[i]) in pins and int(t[j]) in pins})
         self._pressure = [a for a in scene.actuators if isinstance(a, PressureActuator)]
         self._cables = [a for a in scene.actuators if isinstance(a, CableActuator)]
+        self._forces = [a for a in scene.actuators if isinstance(a, ForceActuator)]
         cables = []
         for a in self._cables:
             via = np.array(a.via) @ rot.T + np.asarray(body.pose.position, float)
             elems, bary = embed(mesh.nodes, mesh.tets[:, :4], via)
             cables.append((mesh.tets[elems], tet10_shape(bary[:, 1:])[0]))
-        self._problem = Problem3D(mesh, law, kappa, body.effective_density, prony=prony,
+        self._problem = Problem3D(mesh, law, kappa,
+                                  body.effective_density if body.uniform_density else body.element_densities(),
+                                  prony=prony,
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
                                   pinned=np.array(pinned, int),
                                   pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in self._pressure),
                                   cables=tuple(cables),
+                                  cable_stiffness=tuple(a.stiffness or 0.0 for a in self._cables),
+                                  force_loads=tuple((mesh.faces_of(body.region(a.region)), np.array(a.direction))
+                                                    for a in self._forces),
                                   zones=tuple((elements, *from_material(m)[:2]) for m, elements in
                                               body.material_groups()[1:]))
         self._names = [GROUND_NAME] * scene.ground.enabled + [rb.name for rb in scene.rigid_bodies]
@@ -181,7 +189,15 @@ class FemBackend(Backend):
             for k, a in enumerate(self._pressure):
                 self.solver.pressures[k] = self.control(a.name, self.solver.t + dt)
             for k, a in enumerate(self._cables):
-                self.solver.tensions[k] = self.control(a.name, self.solver.t + dt)
+                value = self.control(a.name, self.solver.t + dt)
+                if a.stroke_controlled:
+                    self.solver.free_lengths[k] = self.solver.rest_lengths[k] - value
+                else:
+                    self.solver.tensions[k] = value
+            for k, a in enumerate(self._forces):
+                self.solver.forces[k] = self.control(a.name, self.solver.t + dt)
+            if self._scene.mount is not None:  # in the mount's frame; Newmark balances forces at the step's end
+                self.solver.gravity = self.mount_gravity(self.solver.t + dt)
             if not self.solver.advance(dt):
                 raise StabilityError(f"fem: Newton did not converge at t = {self.solver.t:.6f} s even with "
                                      f"{dt / 16:.2e} s substeps")
@@ -216,7 +232,7 @@ class FemBackend(Backend):
             com_world = r @ np.asarray(rb.com, float)
             rigid[name] = RigidState(position=c - com_world, quaternion=_matrix_to_quat(r),
                                      linear_velocity=lin - np.cross(ang, com_world), angular_velocity=ang, com=c)
-        return SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls())
+        return self._to_world(SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls()))
 
     def is_finite(self) -> bool:
         return self.solver is not None and bool(np.all(np.isfinite(self.solver.y)))

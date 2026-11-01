@@ -191,7 +191,9 @@ def structured_box(size_xyz: tuple[float, float, float], size: float) -> TetMesh
     return TetMesh(points, _orient(points, tets))
 
 
-def _gmsh_mesh(build, size: float) -> TetMesh:
+def _gmsh_mesh(build, size: float, export: str | None = None) -> TetMesh | None:
+    """Mesh the OCC geometry ``build(occ)`` makes; with ``export`` (a ``.step``/``.brep``... path),
+    write the geometry there instead (metres) and return None."""
     try:
         import gmsh
     except ImportError:
@@ -201,6 +203,10 @@ def _gmsh_mesh(build, size: float) -> TetMesh:
         gmsh.option.setNumber("General.Terminal", 0)
         build(gmsh.model.occ)
         gmsh.model.occ.synchronize()
+        if export is not None:
+            gmsh.option.setString("Geometry.OCCTargetUnit", "M")
+            gmsh.write(str(export))
+            return None
         gmsh.option.setNumber("Mesh.MeshSizeMax", size)
         gmsh.option.setNumber("Mesh.MeshSizeMin", size)
         gmsh.model.mesh.generate(3)
@@ -218,7 +224,8 @@ def _gmsh_mesh(build, size: float) -> TetMesh:
     return TetMesh(points, _orient(points, tets))
 
 
-def gmsh_hollow_sphere(inner: float, outer: float, size: float, octant: bool = False) -> TetMesh:
+def gmsh_hollow_sphere(inner: float, outer: float, size: float, octant: bool = False,
+                       export: str | None = None) -> TetMesh | None:
     """Thick spherical shell (radii ``inner`` < ``outer``) centred at the origin; ``octant`` keeps
     x, y, z >= 0 only (symmetry planes through the centre)."""
     if not 0 < inner < outer:
@@ -229,11 +236,11 @@ def gmsh_hollow_sphere(inner: float, outer: float, size: float, octant: bool = F
         if octant:
             occ.intersect(shell, [(3, occ.addBox(0, 0, 0, outer, outer, outer))])
 
-    return _gmsh_mesh(build, size)
+    return _gmsh_mesh(build, size, export)
 
 
 def gmsh_closed_tube(inner: float, outer: float, height: float, cap: float, size: float,
-                     offset: tuple[float, float] = (0.0, 0.0)) -> TetMesh:
+                     offset: tuple[float, float] = (0.0, 0.0), export: str | None = None) -> TetMesh | None:
     """Cylinder (radius ``outer``, base at the origin, axis +z) around a closed cylindrical cavity of
     radius ``inner`` centred at ``offset`` (x, y), with end walls of thickness ``cap``."""
     ox, oy = offset
@@ -245,12 +252,12 @@ def gmsh_closed_tube(inner: float, outer: float, height: float, cap: float, size
         occ.cut([(3, occ.addCylinder(0, 0, 0, 0, 0, height, outer))],
                 [(3, occ.addCylinder(ox, oy, cap, 0, 0, height - 2 * cap, inner))])
 
-    return _gmsh_mesh(build, size)
+    return _gmsh_mesh(build, size, export)
 
 
 def gmsh_pneunet(length: float, width: float, height: float, chambers: list[tuple[float, float]],
                  chamber_y: float, chamber_z: tuple[float, float], channel: tuple[float, float, float, float],
-                 layer: float, size: float) -> TetMesh:
+                 layer: float, size: float, export: str | None = None) -> TetMesh | None:
     """Block ``[0, length] x [-width/2, width/2] x [0, height]`` around closed chambers (each spans
     ``chambers[i] = (x0, x1)``, ``|y| < chamber_y``, ``chamber_z``) joined by a channel ``(x0, x1,
     half-width, z1)`` from ``chamber_z[0]`` up to ``z1``. With ``layer`` > 0 the mesh conforms to the plane
@@ -265,15 +272,15 @@ def gmsh_pneunet(length: float, width: float, height: float, chambers: list[tupl
         if layer > 0:
             occ.fragment(body, [(3, occ.addBox(0, -width / 2, 0, length, width, layer))])
 
-    return _gmsh_mesh(build, size)
+    return _gmsh_mesh(build, size, export)
 
 
-def gmsh_cylinder(radius: float, height: float, size: float) -> TetMesh:
+def gmsh_cylinder(radius: float, height: float, size: float, export: str | None = None) -> TetMesh | None:
     """Unstructured cylinder mesh via gmsh."""
-    return _gmsh_mesh(lambda occ: occ.addCylinder(0, 0, 0, 0, 0, height, radius), size)
+    return _gmsh_mesh(lambda occ: occ.addCylinder(0, 0, 0, 0, 0, height, radius), size, export)
 
 
-def gmsh_box(size_xyz: tuple[float, float, float], size: float) -> TetMesh:
+def gmsh_box(size_xyz: tuple[float, float, float], size: float, export: str | None = None) -> TetMesh | None:
     """Unstructured box mesh via gmsh."""
     sx, sy, sz = size_xyz
-    return _gmsh_mesh(lambda occ: occ.addBox(-sx / 2, -sy / 2, 0, sx, sy, sz), size)
+    return _gmsh_mesh(lambda occ: occ.addBox(-sx / 2, -sy / 2, 0, sx, sy, sz), size, export)

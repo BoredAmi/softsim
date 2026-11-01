@@ -1,0 +1,50 @@
+# Stroke-controlled cable cantilever (docs/actuation.md): the beam of
+# cable_cantilever.yaml driven by length instead of tension, like a servo reeling
+# the cable in. The cable is a tendon of 300 N/m (compliant: an elastic tendon or
+# a compliant servo; explicit backends need it, see the cable-unstable check),
+# slack when shorter than its free length. It is anchored in a stiff 5 mm tip
+# cap (a 50 MPa zone): anchored at a point in the soft body, the material
+# around the anchor gives way, which a stroke-controlled cable feels as extra
+# compliance (mesh-dependent: a point load is singular). The stroke follows a
+# smooth ramp to 3 mm over 400 ms, then is held; the tension follows from the
+# beam. Euler-Bernoulli (softsim.analytic.cable_beam_stroke, soft length 55 mm):
+# the stroke is the tendon's stretch plus the beam's shortening along the cable
+# (bending and axial), 0.536 N and a tip angle of 0.208 rad at 3 mm.
+#   softsim run scenarios/actuation/cable_cantilever_stroke.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Stroke-controlled cable cantilever (10 x 10 x 60 mm, E = 500 kPa, 300 N/m tendon), 0-3 mm.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+  iterations: 300           # MuJoCo: the stiff cap makes the flex ill-conditioned
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+  zones:
+    - name: cap               # stiff tip piece holding the anchor (a point anchor in the soft body gives way)
+      material:
+        density: 1070 kg/m^3
+        elastic: {model: stable_neo_hookean, youngs_modulus: 50 MPa, poisson_ratio: 0.45}
+      box: [[-5 mm, -5 mm, 55 mm], [5 mm, 5 mm, 60 mm]]
+
+actuators:
+  - name: cable
+    type: cable
+    control: stroke
+    stiffness: 300 N/m
+    path: [[3 mm, 0 mm, 0 mm], [3 mm, 0 mm, 58 mm]]
+    schedule: [[0 ms, 0.0000 mm], [25 ms, 0.0067 mm], [50 ms, 0.0482 mm], [75 ms, 0.1463 mm], [100 ms, 0.3105 mm], [125 ms, 0.5400 mm], [150 ms, 0.8256 mm], [175 ms, 1.1521 mm], [200 ms, 1.5000 mm], [225 ms, 1.8479 mm], [250 ms, 2.1744 mm], [275 ms, 2.4600 mm], [300 ms, 2.6895 mm], [325 ms, 2.8537 mm], [350 ms, 2.9518 mm], [375 ms, 2.9933 mm], [400 ms, 3.0000 mm],
+               [500 ms, 3.0000 mm]]

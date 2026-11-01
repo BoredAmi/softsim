@@ -39,7 +39,8 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import CableActuator, PressureActuator, cable_forces, embed, pressure_forces
+from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length, embed,
+                               pressure_forces, region_force_weights)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.contact.adhesion import RigidFrame, adhesion_fields
@@ -196,6 +197,8 @@ class SofaBackend(Backend):
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.REGION_FORCE,
+        Capability.MOVING_MOUNT,
         Capability.MULTI_MATERIAL,
     })
 
@@ -278,7 +281,8 @@ class SofaBackend(Backend):
         node.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
         node.addObject("TetrahedronSetTopologyContainer", position=pts.tolist(), tetrahedra=body.mesh.tets.tolist())
         dofs = node.addObject("MechanicalObject", template="Vec3d", position=pts.tolist())
-        node.addObject("MeshMatrixMass", massDensity=body.effective_density, lumping=True)
+        density = body.effective_density if body.uniform_density else body.element_densities().tolist()
+        node.addObject("MeshMatrixMass", massDensity=density, lumping=True)  # per element with zones
         groups = native.material_groups()
         if len(groups) == 1:
             ff, args = force_field_args(native)
@@ -316,7 +320,13 @@ class SofaBackend(Backend):
                 loads.append((a.name, lambda x, v, tris=tris: pressure_forces(x, tris, v)))
             elif isinstance(a, CableActuator):
                 elems, bary = embed(body.mesh.points, body.mesh.tets, np.array(a.via))
-                loads.append((a.name, lambda x, v, n=body.mesh.tets[elems], w=bary: cable_forces(x, n, w, v)))
+                nodes = body.mesh.tets[elems]
+                rest = cable_length(body.mesh.points, nodes, bary)
+                loads.append((a.name, lambda x, v, a=a, n=nodes, w=bary, rest=rest: cable_forces(
+                    x, n, w, a.tension_at(cable_length(x, n, w) if a.stroke_controlled else 0.0, v, rest))))
+            elif isinstance(a, ForceActuator):
+                share = region_force_weights(body.mesh.points, body.region(a.region))[:, None] * np.array(a.direction)
+                loads.append((a.name, lambda x, v, share=share: v * share))
         actuation = (node.addObject("ConstantForceField", name="actuation", indices=list(range(len(pts))),
                                     forces=np.zeros((len(pts), 3)).tolist()) if loads else None)
         coll = node.addChild("collision")
@@ -328,7 +338,7 @@ class SofaBackend(Backend):
         coll.addObject("TriangleCollisionModel", **groups)
         coll.addObject("PointCollisionModel", **groups)  # line-line tests omitted: ~3x faster, same result here
         coll.addObject("IdentityMapping")
-        masses = body.mesh.lumped_masses(body.effective_density)
+        masses = body.vertex_masses()
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
                 "prony": overstress, "actuation": (actuation, loads)}
 
@@ -383,6 +393,8 @@ class SofaBackend(Backend):
         for _ in range(n):
             if self._diverged:
                 return
+            if self.scene.mount is not None:  # in the mount's frame (implicit Euler: forces at the step's end)
+                self.root.gravity.value = self.mount_gravity(self.time + dt).tolist()
             self._prev = self._velocities()
             if self._blown_up(self._prev):
                 self._diverged = True
@@ -459,7 +471,7 @@ class SofaBackend(Backend):
         for name, d in self._soft.items():
             pos = np.array(d["dofs"].position.value, float) - [0.0, 0.0, d["offset"][2] - self.scene.soft(name).pose.position[2]]
             soft[name] = SoftState(pos, np.array(d["dofs"].velocity.value, float))
-        return SimState(self.time, rigid, soft, self._contacts(), self.controls())
+        return self._to_world(SimState(self.time, rigid, soft, self._contacts(), self.controls()))
 
     def _contacts(self) -> list[ContactWrench]:
         """Net contact forces from momentum balance (implicit Euler: m dv/dt = f_ext + f_contact)."""

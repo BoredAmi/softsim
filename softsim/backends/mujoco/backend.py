@@ -9,7 +9,8 @@ from typing import ClassVar
 import mujoco
 import numpy as np
 
-from softsim.actuation import CableActuator, PressureActuator, cable_forces, embed, pressure_forces
+from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length, embed,
+                               pressure_forces, region_force_weights)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.backends.mujoco.builder import GROUND, build_spec, scene_to_mjcf
 from softsim.capabilities import Capability
@@ -56,6 +57,8 @@ class MujocoBackend(Backend):
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.REGION_FORCE,
+        Capability.MOVING_MOUNT,
         Capability.MULTI_MATERIAL,
     })
 
@@ -63,6 +66,7 @@ class MujocoBackend(Backend):
         self._scene: Scene | None = None
         self._pressure: list = []
         self._cables: list = []
+        self._forces: list = []
         self.spec: mujoco.MjSpec | None = None
         self.model: mujoco.MjModel | None = None
         self.data: mujoco.MjData | None = None
@@ -173,7 +177,7 @@ class MujocoBackend(Backend):
                 adr, num, bodies, dofs = self._flex[body.name]
                 overstress = PronyOverstress(body.material, body.mesh.points, body.mesh.tets)
                 self._prony.append((overstress, adr + np.arange(num), bodies, dofs[:, 0] >= 0))
-        self._pressure, self._cables = [], []
+        self._pressure, self._cables, self._forces = [], [], []
         for a in self._scene.actuators:
             adr, num, bodies, dofs = self._flex[a.body]
             soft = self._scene.soft(a.body)
@@ -181,8 +185,12 @@ class MujocoBackend(Backend):
                 self._pressure.append((a.name, soft.region(a.region), adr + np.arange(num), bodies, dofs[:, 0] >= 0))
             elif isinstance(a, CableActuator):
                 elems, bary = embed(soft.mesh.points, soft.mesh.tets, np.array(a.via))
-                self._cables.append((a.name, soft.mesh.tets[elems], bary, adr + np.arange(num), bodies,
-                                     dofs[:, 0] >= 0))
+                nodes = soft.mesh.tets[elems]
+                self._cables.append((a, nodes, bary, adr + np.arange(num), bodies, dofs[:, 0] >= 0,
+                                     cable_length(soft.mesh.points, nodes, bary)))
+            elif isinstance(a, ForceActuator):
+                share = region_force_weights(soft.mesh.points, soft.region(a.region))[:, None] * np.array(a.direction)
+                self._forces.append((a.name, share, bodies, dofs[:, 0] >= 0))
         self._adhesion = adhesion_fields(self._scene)
         self._adhesion_bodies = {}
         for f in self._adhesion:
@@ -209,10 +217,14 @@ class MujocoBackend(Backend):
         mujoco.mj_forward(m, d)
 
     def step(self, n: int = 1) -> None:
-        if not self._adhesion and not self._prony and not self._pressure and not self._cables:
+        mount = self._scene.mount is not None
+        if not (self._adhesion or self._prony or self._pressure or self._cables or self._forces or mount):
             mujoco.mj_step(self.model, self.data, nstep=n)
             return
+        dt = self.model.opt.timestep
         for _ in range(n):
+            if mount:  # in the mount's frame
+                self.model.opt.gravity[:] = self.mount_gravity(self.data.time + 0.5 * dt)
             self._apply_external()
             mujoco.mj_step(self.model, self.data)
 
@@ -228,9 +240,14 @@ class MujocoBackend(Backend):
         for name, tris, rows, bodies, movable in self._pressure:
             f = pressure_forces(d.flexvert_xpos[rows], tris, self.control(name))
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
-        for name, nodes, weights, rows, bodies, movable in self._cables:
-            f = cable_forces(d.flexvert_xpos[rows], nodes, weights, self.control(name))
+        for a, nodes, weights, rows, bodies, movable, rest in self._cables:
+            x = d.flexvert_xpos[rows]
+            tension = a.tension_at(cable_length(x, nodes, weights) if a.stroke_controlled else 0.0,
+                                   self.control(a.name), rest)
+            f = cable_forces(x, nodes, weights, tension)
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
+        for name, share, bodies, movable in self._forces:
+            np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), self.control(name) * share[movable])
         self._apply_adhesion()
 
     def _apply_adhesion(self) -> None:
@@ -305,7 +322,7 @@ class MujocoBackend(Backend):
             rot = d.xmat[bodies[free]].reshape(-1, 3, 3)
             velocities[free] = np.einsum("nij,nj->ni", rot, d.qvel[dofs[free]])
             soft[name] = SoftState(vertices.copy(), velocities)
-        return SimState(float(d.time), rigid, soft, self._contacts(), self.controls())
+        return self._to_world(SimState(float(d.time), rigid, soft, self._contacts(), self.controls()))
 
     def _owner(self, geom: int, flex: int) -> str:
         # geom/flex ids are -1 when unused: never index with them

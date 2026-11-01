@@ -1,0 +1,39 @@
+# Tip-loaded cantilever: the verification case for region forces (docs/actuation.md).
+# The 10 x 10 x 60 mm beam of cable_cantilever.yaml, clamped at its base, with a
+# 5 mN force along +x spread over its top face (a dead load, e.g. a payload or a
+# probe). Euler-Bernoulli: F L^3 / (3 E I) = 0.864 mm; Timoshenko adds 2.4% shear
+# (softsim.analytic.cantilever_tip_deflection, 0.884 mm), which the fully clamped
+# root offsets on this short beam: the reference converges to 0.864 mm. The force
+# follows a smooth ramp
+# over 400 ms, then is held; `tip_force_displacement` is the top face's motion
+# along the force.
+#   softsim run scenarios/actuation/tip_load_cantilever.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Cantilever (10 x 10 x 60 mm, E = 500 kPa) under a 5 mN tip force.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+
+actuators:
+  - name: tip_force
+    type: force
+    region: top
+    direction: [1, 0, 0]
+    schedule: [[0 ms, 0.0000 mN], [50 ms, 0.0803 mN], [100 ms, 0.5176 mN], [150 ms, 1.3760 mN], [200 ms, 2.5000 mN], [250 ms, 3.6240 mN], [300 ms, 4.4824 mN], [350 ms, 4.9197 mN], [400 ms, 5.0000 mN],
+               [500 ms, 5.0000 mN]]

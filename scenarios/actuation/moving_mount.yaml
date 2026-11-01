@@ -1,0 +1,33 @@
+# Moving mount: the 10 x 10 x 60 mm beam of cable_cantilever.yaml, its base
+# clamped to a mount that slides 20 mm along +x in 200 ms (point to point,
+# minimum jerk) and then stops, like a finger on a robot arm. No actuators, no
+# gravity. The tip lags behind while the mount accelerates, overtakes it while
+# it brakes, and swings about the new position after it stops (undamped). The
+# backends simulate in the mount's frame (exact for a translation: gravity
+# becomes g - a(t)); positions are reported in the world.
+#   softsim run scenarios/actuation/moving_mount.yaml
+#   softsim run scenarios/actuation/moving_mount.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Cantilever on a mount sliding 20 mm in 200 ms (10 x 10 x 60 mm, E = 500 kPa).
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 400 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+  mount_path: [[0 ms, [0, 0, 0]], [200 ms, [20 mm, 0, 0]]]
+
+actuators: []
