@@ -1,0 +1,32 @@
+# A PHYSICAL Ecoflex 00-10 card fitted jointly to the drop (impact, ms) and the quasi-static stiffness
+# (datasheet), on the locking-free 3D reference backend (fem). Same set-up as
+# ecoflex_00_10_drop_fem_prony.yaml, plus one material-test term:
+#
+#   Smooth-On's datasheet gives a 100% modulus of 8 psi = 55 kPa (ASTM D412, quasi-static). The
+#   drop-only fit (E0 = 143 kPa, g = 0.69) relaxes to E_inf = 44 kPa, about half the ~94 kPa this
+#   implies: impacts alone cannot tell how much of the stiffness relaxes. The datasheet term is
+#   compared with the card's fully relaxed curve. Datasheet moduli are approximate (Roels et al. 2025
+#   measured 93 kPa at 100% for Ecoflex 00-30 against a datasheet 69 kPa), hence weight 0.5.
+#
+# ~8 min per case and evaluation on a laptop, so run it on a faster machine; it resumes where it stopped:
+#   pip install -e ".[fem,fast]"
+#   softsim calibrate calibrations/ecoflex_00_10_drop_fem_joint.yaml --jobs 2
+dataset: ../datasets/czopek2026_ecoflex_drop.yaml
+tracks: ../data/processed/czopek2026_ecoflex_drop
+cases: {w020: 1.0, w050: 1.0}
+material_tests:
+  - {name: datasheet_100pct, points: {strain: [1.0], stress: [55 kPa]}, weight: 0.5}
+overrides:
+  - backend=fem
+  - "specimen.material={density: 1040, elastic: {model: neo_hookean, youngs_modulus: 143 kPa, poisson_ratio: 0.4995}, damping: {model: prony, g: [0.4], tau: [2 ms]}, friction: {sliding: 1.0}}"
+  - specimen.mesh.size=0.005
+  - simulation.timestep=0.00005
+  - simulation.duration=0.011
+  - simulation.output_rate=5000
+  - output.save_model=false
+parameters:
+  specimen.material.elastic.youngs_modulus: {initial: 143 kPa, bounds: [50 kPa, 600 kPa], log: true}
+  specimen.material.damping.g[0]: {initial: 0.4, bounds: [0.05, 0.95]}
+  specimen.material.damping.tau[0]: {initial: 2 ms, bounds: [0.1 ms, 50 ms], log: true}
+max_evaluations: 40
+output: ../runs/calibration/ecoflex_00_10_drop_fem_joint
