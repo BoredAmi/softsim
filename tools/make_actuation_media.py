@@ -117,6 +117,8 @@ def render(name: str, runs) -> Path:
                       for a in (azims if not orbit else np.arange(0.0, 360.0, 30.0))])
     lo, hi = spans[:, 0].min(axis=0), spans[:, 1].max(axis=0)
     pad = 0.06 * (hi - lo).max()
+    half = 0.65 * (spans[:, 1] - spans[:, 0]).max(axis=0)[:2].max()  # orbit: a square window that fits every angle
+    centre = (pts.min(axis=0) + pts.max(axis=0)) / 2
     images = []
     for ft, az in zip(frames_t, azims):
         rot = _view(elev, az)
@@ -127,8 +129,13 @@ def render(name: str, runs) -> Path:
             _draw(ax, extra["rest"][tris], rot, "none", (0.55, 0.55, 0.55, 0.25), lw=0.3)
             cur = x[i][tris]
             _draw(ax, cur, rot, _shade(cur, rot), "none")
-            ax.set_xlim(lo[0] - pad, hi[0] + pad)
-            ax.set_ylim(lo[1] - pad, hi[1] + pad)
+            if orbit:  # keep the body centred while the camera circles it
+                c = rot @ centre
+                ax.set_xlim(c[0] - half, c[0] + half)
+                ax.set_ylim(c[1] - half, c[1] + half)
+            else:
+                ax.set_xlim(lo[0] - pad, hi[0] + pad)
+                ax.set_ylim(lo[1] - pad, hi[1] + pad)
             ax.set_aspect("equal")
             ax.set_axis_off()
             text = f"{label}\nt = {1e3 * times[i]:.0f} ms"
