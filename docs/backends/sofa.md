@@ -104,9 +104,6 @@ these laws can be projected onto one SOFA has (`softsim material project`).
 
 ## Rods (BeamAdapter)
 
-`softsim.backends.sofa.rod` builds a chain of rigid frames joined by Euler–Bernoulli
-beams (`AdaptiveBeamForceFieldAndMass`). It is not yet a scene backend: only the
-clamped cantilever with a tip load (`RodCantileverConfig`). Check against
-`F L^3 / (3 E I)` (0.2% at 10 elements; independent of the element count; the
-long, large-deflection case is geometrically nonlinear, so compare it only at
-small loads). Reproduce: `SOFA_ROOT=... pytest tests/test_rod_sofa.py`.
+`softsim.backends.sofa.rod` is the bare clamped cantilever on BeamAdapter that the rod backend grew
+from (`F L^3 / (3 E I)` to 0.2%, `tests/test_rod_sofa.py`). The scene backend is `--backend rod`:
+see [rod.md](rod.md).

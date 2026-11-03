@@ -168,6 +168,8 @@ cases it never saw (`softsim/transfer.py`;
 
 The error is the NRMSE of the cavity-volume history against the reference.
 
+Re-run on 2026-11-03 after the MuJoCo step-timing fix: E 23.66 kPa, 0.5% / 1.2% / 2.2%, identical to the table.
+
 - **One effective modulus is enough over a 3× range of pressure:** fitted at
   33% inflation, it holds at 15% and 52% inflation within 2.2%.
 - **The softening is 21%,** close to the locking measured above (27% too
@@ -477,6 +479,9 @@ comparison: the beam is undamped and still swinging at 500 ms (the tension
 ramp ends at 400 ms), and the tip rotation is the difference of two segment
 rotations, each affected by linear-tet locking, so a quasi-static run with the
 transferred modulus would be needed to say anything. Not done.
+
+The **rod backend** ([backends/rod.md](backends/rod.md)) runs this arm in seconds and gives the linear
+piecewise Euler–Bernoulli S (0.2298, 0.1221 rad); the reference sits 8% lower from the compression stiffening.
 
 ## Region forces
 
@@ -878,6 +883,7 @@ the `tip` face's rotation from its rest orientation.
   one effective card per fitted material
   (`ecoflex_00_30_mujoco_transfer.yaml`, `ecoflex_00_30_layer_mujoco_transfer.yaml`).
   They are valid for MuJoCo, linear tetrahedra and 1.5 mm.
+  Re-run after the MuJoCo timing fix (2026-11-03): body E 91.0 kPa, layer 1.76 MPa, 2.9%, checks 3.2% and 4.3%, unchanged.
 - **Above about 15 kPa the walls balloon.** On MuJoCo the volume runs away:
   V/V0 2.85 and 39° at 16 kPa, then the run diverges. These thin Ecoflex
   chambers approach their limit pressure, like the sphere. The reference,

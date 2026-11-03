@@ -325,12 +325,15 @@ Done on the reference: the cable-finger shape and scenario (`cable_finger`,
 `docs/actuation.md`) and a two-segment cable arm with stiff disks
 (`cable_arm.yaml`, within 2% of piecewise Euler–Bernoulli). Not done: a rod
 (Cosserat) backend for slender bodies (SOFA BeamAdapter, PyElastica or our
-own) and the rod vs FEM cross-check. Library chosen by the recommendation
-([decisions.md](decisions.md), entry 4): SOFA BeamAdapter. First step done:
-`softsim/backends/sofa/rod.py` runs a clamped rectangular rod under a tip load
-and matches Euler–Bernoulli to 0.2% (`tests/test_rod_sofa.py`, 5 tests; a 10%
-section error fails 4 of them). Still to do: read a `Scene` (a `rod` body type),
-cables on rods, and the comparison with the 3D reference on the cable arm.
+own): chosen by the recommendation, SOFA BeamAdapter ([decisions.md](decisions.md), entry 4).
+**Done: `--backend rod`** ([backends/rod.md](backends/rod.md)): a slender clamped body of any scenario
+is reduced to beam frames (section stiffnesses from the tets with material zones exact; the mesh follows the frames),
+cables and region forces carried by virtual work. Verified on the tip load (0.8641 mm vs E–B 0.864),
+cable cantilever, 64° large rotation (arc of the compressed beam), layered section and the S of the
+two-segment arm (linear E–B within 0.7%; the 3D reference is 8% lower from the compression stiffening
+`1 + 2N/EA`, which a materially linear rod cannot have); 16 tests, 6 mutants caught, a figure.
+Open: alpha damping is inert on BeamAdapter's mass (refused), the explicit cable step limit, and
+rods that are not columns along z (curved or branched), PneuNet-like bodies being out of scope.
 
 ## M9: soft gripper and grasping
 

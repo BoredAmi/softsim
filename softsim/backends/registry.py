@@ -11,6 +11,7 @@ _BUILTIN = {
     "mujoco": "softsim.backends.mujoco:MujocoBackend",
     "sofa": "softsim.backends.sofa:SofaBackend",
     "fem": "softsim.backends.fem:FemBackend",
+    "rod": "softsim.backends.rod:RodBackend",
 }
 
 

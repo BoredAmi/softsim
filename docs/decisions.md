@@ -19,7 +19,7 @@ transfers used the old timing.
 - **Revert.** Hand-edit `softsim/backends/mujoco/backend.py` (it shares the file
   with prescribed motion). Keeps old numbers, keeps the bug.
 
-**Decision:** Keep the fix (my recommendation, applied 2026-11-03 under your "follow your recommendations"). Why: the old timing used last step's positions, a bug. The MuJoCo fits/transfers still need re-running; not done yet.
+**Decision:** Keep the fix (my recommendation, applied 2026-11-03 under your "follow your recommendations"). Why: the old timing used last step's positions, a bug. Re-run on 2026-11-03 from a frozen copy of the package: the bending, inflation and PneuNet transfers reproduce the committed numbers (bending unchanged; inflation E 23.66 vs 23.7 kPa, errors 0.5/1.2/2.2% as before; PneuNet body E 91.0 kPa, layer 1.76 MPa, cost 2.9%, checks 3.2% and 4.3%, as before), so the timing fix moves the transfers by less than their rounding and the documented tables stand. The Ecoflex 00-10 drop transfer (`transfer_ecoflex_00_10_mujoco.yaml`, 40 evaluations, fresh output folder) reproduces the committed run to every digit (E 64.89 kPa, g 0.678, tau 7.82 ms, cost 0.0593, 8.6% / 3.3%), so the numbers in docs/experiments.md are those of the current code. `ecoflex_00_10_drop.yaml` (fit against the recordings, 50 evaluations) is not re-run.
 
 ## 2. Joint drop + datasheet fit: stop or continue
 
