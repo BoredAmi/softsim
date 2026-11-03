@@ -1,0 +1,40 @@
+# Cable-bent cantilever with the cable anchored over the tip face (docs/actuation.md):
+# cable_cantilever.yaml with the cable running to the top face at L = 60 mm and
+# `anchor: top`, which spreads its end force over that face as the linear traction
+# with the same resultant and moment (a point anchor dents the face; here the whole
+# section carries the end load, as a real finger's tip does). The beam then bends as
+# Euler-Bernoulli over its full length: theta = T d L / (E_t I), L = 60 mm, 0.294 rad
+# at 0.7 N (the reference is within 0.5%, a point anchor is 2.6% low).
+#   softsim run scenarios/actuation/cable_cantilever_anchored.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Cable-bent cantilever (10 x 10 x 60 mm, E = 500 kPa), cable anchored over the tip face, 0-0.7 N.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: box, size: [10 mm, 10 mm, 60 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+
+actuators:
+  - name: cable
+    type: cable
+    path: [[3 mm, 0 mm, 0 mm], [3 mm, 0 mm, 60 mm]]
+    anchor: top
+    schedule: [[0 ms, 0 N], [25 ms, 0.0016 N], [50 ms, 0.0112 N], [75 ms, 0.0341 N], [100 ms, 0.0725 N],
+               [125 ms, 0.1260 N], [150 ms, 0.1926 N], [175 ms, 0.2688 N], [200 ms, 0.3500 N],
+               [225 ms, 0.4312 N], [250 ms, 0.5074 N], [275 ms, 0.5740 N], [300 ms, 0.6275 N],
+               [325 ms, 0.6659 N], [350 ms, 0.6888 N], [375 ms, 0.6984 N], [400 ms, 0.7000 N],
+               [500 ms, 0.7000 N]]

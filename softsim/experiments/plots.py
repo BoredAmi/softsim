@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -158,13 +158,20 @@ def peak_summary(tracks: str | Path, sims: Mapping[str, Mapping[str, pd.DataFram
     return path, df
 
 
+def tracked_cases(cases: Iterable[str], tracks: str | Path) -> list[str]:
+    """The ``cases`` that have a track in ``tracks``. A transfer calibration's reference tracks cover only the
+    fitted cases (the other weights have no 3D reference run), and plotting must not ask for the rest."""
+    return [c for c in cases if (Path(tracks) / f"{c}.parquet").is_file()]
+
+
 def calibration_plots(report: Mapping[str, Any], calibration_file: str | Path, out_dir: str | Path,
                       all_cases: bool = True) -> list[Path]:
-    """Overlay and summary plots for a finished calibration (before vs after)."""
+    """Overlay and summary plots for a finished calibration (before vs after): every dataset case that has
+    a track (``all_cases``), else the fitted ones."""
     from softsim.experiments.calibrate import Calibration, best_overrides
 
     cal = Calibration(calibration_file)
-    cases = list(cal.dataset.cases) if all_cases else list(cal.cases)
+    cases = tracked_cases(cal.dataset.cases if all_cases else cal.cases, cal.tracks)
     base = simulate_cases(cal.dataset, cal.tracks, cases, cal.overrides)
     fit = simulate_cases(cal.dataset, cal.tracks, cases, [*cal.overrides, *best_overrides(report)])
     best = ", ".join(f"{k.split('.')[-1]}={v:.3g}" for k, v in report["best"].items())

@@ -28,5 +28,5 @@ parameters:
   specimen.material.elastic.youngs_modulus: {initial: 143 kPa, bounds: [50 kPa, 600 kPa], log: true}
   specimen.material.damping.g[0]: {initial: 0.4, bounds: [0.05, 0.95]}
   specimen.material.damping.tau[0]: {initial: 2 ms, bounds: [0.1 ms, 50 ms], log: true}
-max_evaluations: 40
+max_evaluations: 80
 output: ../runs/calibration/ecoflex_00_10_drop_fem_joint

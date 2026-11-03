@@ -9,16 +9,16 @@ from typing import ClassVar
 import mujoco
 import numpy as np
 
-from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length, embed,
+from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length,
                                pressure_forces, region_force_weights)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
-from softsim.backends.mujoco.builder import GROUND, build_spec, scene_to_mjcf
+from softsim.backends.mujoco.builder import GROUND, build_spec, prescribed_equality, scene_to_mjcf
 from softsim.capabilities import Capability
 from softsim.contact.adhesion import AdhesionField, RigidFrame, adhesion_fields
 from softsim.errors import SoftSimError
 from softsim.materials.models import StableNeoHookean
 from softsim.materials.viscoelastic import PronyOverstress, native_scene, prony_of
-from softsim.scene import Scene
+from softsim.scene import Scene, rotating_mount_problems
 
 _ELASTIC_SOLVERS = {"CG", "Newton"}
 
@@ -38,6 +38,9 @@ class MujocoBackend(Backend):
         * Adhesion, the Prony overstress and pressure and cable actuators are applied as explicit
           external forces (``xfrc_applied``) on vertices and rigid bodies, recomputed
           every step.
+        * Prescribed regions: a joint equality per held axis of each vertex (timeconst 2 steps,
+          path velocity fed forward); the reaction is their constraint force. Only all three
+          axes may be held on a rotated body (vertices slide along the body's axes).
     """
 
     name: ClassVar[str] = "mujoco"
@@ -59,6 +62,8 @@ class MujocoBackend(Backend):
         Capability.CABLE_ACTUATION,
         Capability.REGION_FORCE,
         Capability.MOVING_MOUNT,
+        Capability.ROTATING_MOUNT,
+        Capability.PRESCRIBED_MOTION,
         Capability.MULTI_MATERIAL,
     })
 
@@ -84,6 +89,7 @@ class MujocoBackend(Backend):
                 "with integrator 'discrete'")
         if scene.soft_bodies and sim.solver not in _ELASTIC_SOLVERS:
             problems.append(f"solver '{sim.solver}': flex elasticity needs CG or Newton")
+        problems += rotating_mount_problems(scene)
         for body in scene.soft_bodies:
             if body.material.elastic.initial_poisson_ratio() < 0:
                 problems.append(f"{body.name}: negative Poisson's ratio (MuJoCo accepts [0, 0.5))")
@@ -93,6 +99,15 @@ class MujocoBackend(Backend):
                                     f"({body.material.elastic.model}; one flex has one model)")
                 if prony_of(body.material) is not None:
                     problems.append(f"{body.name}: material zones with Prony viscoelasticity")
+            if body.zone_damping_differs():
+                problems.append(f"{body.name}: zones {body.zone_damping_differs()} with their own damping (one flex "
+                                "has one damping coefficient; SOFA has one per material)")
+            rotated = not np.allclose(body.pose.quaternion, (1.0, 0.0, 0.0, 0.0))
+            for p in body.prescribed:
+                if rotated and not all(p.axes):
+                    problems.append(f"{body.name}: prescribed region {p.region!r} holds only some world axes of a "
+                                    "rotated body (a vertex slides along the body's axes); hold all three or "
+                                    "keep the body unrotated")
         return problems
 
     # -- lifecycle ---------------------------------------------------------
@@ -113,6 +128,7 @@ class MujocoBackend(Backend):
         self.model = self._compile(self.spec)
         self._apply_zones(native)
         self.data = mujoco.MjData(self.model)
+        self._kin = mujoco.MjData(self.model)  # scratch: kinematics at the current state (``_current``)
         self._index()
         self.reset()
 
@@ -184,13 +200,21 @@ class MujocoBackend(Backend):
             if isinstance(a, PressureActuator):
                 self._pressure.append((a.name, soft.region(a.region), adr + np.arange(num), bodies, dofs[:, 0] >= 0))
             elif isinstance(a, CableActuator):
-                elems, bary = embed(soft.mesh.points, soft.mesh.tets, np.array(a.via))
-                nodes = soft.mesh.tets[elems]
+                nodes, bary = soft.cable_rows(a)
                 self._cables.append((a, nodes, bary, adr + np.arange(num), bodies, dofs[:, 0] >= 0,
                                      cable_length(soft.mesh.points, nodes, bary)))
             elif isinstance(a, ForceActuator):
                 share = region_force_weights(soft.mesh.points, soft.region(a.region))[:, None] * np.array(a.direction)
                 self._forces.append((a.name, share, bodies, dofs[:, 0] >= 0))
+        # (body, region, path, equality ids, their axes, a vertex body: its frame is every vertex's axes)
+        self._prescribed = []
+        for body in self._scene.soft_bodies:
+            for p in body.prescribed:
+                pairs = [(int(i), k) for i in p.vertices for k in range(3) if p.axes[k]]
+                ids = np.array([m.equality(prescribed_equality(body.name, p.region, i, k)).id for i, k in pairs])
+                self._prescribed.append((body.name, p.region, p.path, ids, np.array([k for _, k in pairs]),
+                                         m.body(f"{body.name}_{int(p.vertices[0])}").id))
+        self._masses = {b.name: b.vertex_masses() for b in self._scene.soft_bodies}
         self._adhesion = adhesion_fields(self._scene)
         self._adhesion_bodies = {}
         for f in self._adhesion:
@@ -217,16 +241,45 @@ class MujocoBackend(Backend):
         mujoco.mj_forward(m, d)
 
     def step(self, n: int = 1) -> None:
-        mount = self._scene.mount is not None
-        if not (self._adhesion or self._prony or self._pressure or self._cables or self._forces or mount):
+        mount = self._scene.mount is not None or self._scene.spin is not None
+        if not (self._adhesion or self._prony or self._pressure or self._cables or self._forces or mount
+                or self._prescribed):
             mujoco.mj_step(self.model, self.data, nstep=n)
             return
         dt = self.model.opt.timestep
         for _ in range(n):
             if mount:  # in the mount's frame
                 self.model.opt.gravity[:] = self.mount_gravity(self.data.time + 0.5 * dt)
+            self._drive_prescribed(self.data.time + dt)  # before mj_step1: it builds the constraints
+            # mj_step computes positions before it integrates, so after it ``data``'s positions are
+            # a step old: split it, and compute the state-dependent forces from the current positions
+            mujoco.mj_step1(self.model, self.data)
             self._apply_external()
-            mujoco.mj_step(self.model, self.data)
+            mujoco.mj_step2(self.model, self.data)
+
+    def _drive_prescribed(self, t: float) -> None:
+        """Targets of the prescribed regions' joint equalities for a step ending at ``t``: the path plus
+        its velocity times 2 timeconst, which cancels the lag of MuJoCo's critically damped constraint
+        (reference acceleration -2 v / timeconst - error / timeconst^2: a target moving at v trails by
+        2 timeconst v). Measured: 0.75 um lag -> 0.006 um on a 200 um minimum-jerk pull in 0.2 s."""
+        for _, _, path, ids, axes, bid in self._prescribed:
+            lead = 2.0 * self.model.eq_solref[ids[0], 0]
+            local = self.data.xmat[bid].reshape(3, 3).T @ (path.position(t) + lead * path.velocity(t))
+            self.model.eq_data[ids, 0] = local[axes]
+
+    def _reactions(self) -> dict[str, dict[str, np.ndarray]]:
+        """Force each prescribed region's support exerted on the body in the last step: the sum of its
+        joint equalities' constraint forces, per body axis, rotated to the world."""
+        d = self.data
+        out: dict[str, dict[str, np.ndarray]] = {}
+        if not self._prescribed:
+            return out
+        rows = d.efc_type == mujoco.mjtConstraint.mjCNSTR_EQUALITY
+        per_eq = np.bincount(d.efc_id[rows], weights=d.efc_force[rows], minlength=self.model.neq)
+        for body, region, _, ids, axes, bid in self._prescribed:
+            local = np.bincount(axes, weights=per_eq[ids], minlength=3)
+            out.setdefault(body, {})[region] = d.xmat[bid].reshape(3, 3) @ local
+        return out
 
     def _apply_external(self) -> None:
         """Recompute the explicit forces (adhesion, Prony overstress, actuators) from the current state
@@ -248,7 +301,23 @@ class MujocoBackend(Backend):
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), f[movable])
         for name, share, bodies, movable in self._forces:
             np.add.at(d.xfrc_applied, (bodies[movable], slice(0, 3)), self.control(name) * share[movable])
+        if self._scene.spin is not None:
+            self._apply_fictitious(d.time + 0.5 * dt)
         self._apply_adhesion()
+
+    def _apply_fictitious(self, t: float) -> None:
+        """A rotating mount's Euler, centrifugal and Coriolis forces, ``m`` times
+        ``MountFrame.fictitious`` at the current positions and velocities, with the frame at ``t`` (the
+        step's middle, like gravity); explicit, like the other loads."""
+        d = self.data
+        frame = self._scene.frame(t)
+        lift = np.array([0.0, 0.0, self._scene.contact.soft_radius])
+        for name, (adr, num, bodies, dofs) in self._flex.items():
+            free = dofs[:, 0] >= 0
+            v = np.zeros((num, 3))
+            v[free] = np.einsum("nij,nj->ni", d.xmat[bodies[free]].reshape(-1, 3, 3), d.qvel[dofs[free]])
+            f = self._masses[name][:, None] * frame.fictitious(d.flexvert_xpos[adr:adr + num] - lift, v)
+            np.add.at(d.xfrc_applied, (bodies[free], slice(0, 3)), f[free])
 
     def _apply_adhesion(self) -> None:
         """Add adhesive forces from the current state to ``xfrc_applied``."""
@@ -305,8 +374,21 @@ class MujocoBackend(Backend):
 
     # -- state -------------------------------------------------------------
 
+    def _current(self) -> "mujoco.MjData":
+        """Positions and velocities at the current state (``qpos``, ``qvel``, ``time``). ``mj_step``
+        computes them before it integrates, so after it ``data``'s (``flexvert_xpos``, ``xpos``,
+        ``cvel``) are a step old (measured: 9.5 um on a vertex moving 94 mm/s at 0.1 ms). They are
+        recomputed on a scratch copy; ``data`` keeps the step's contacts and constraint forces."""
+        m, k = self.model, self._kin
+        k.qpos[:], k.qvel[:], k.time = self.data.qpos, self.data.qvel, self.data.time
+        mujoco.mj_kinematics(m, k)
+        mujoco.mj_comPos(m, k)
+        mujoco.mj_comVel(m, k)
+        mujoco.mj_flex(m, k)
+        return k
+
     def state(self) -> SimState:
-        m, d = self.model, self.data
+        m, d = self.model, self._current()
         rigid = {}
         vel = np.zeros(6)
         for name, bid in self._rigid_ids.items():
@@ -314,6 +396,7 @@ class MujocoBackend(Backend):
             rigid[name] = RigidState(d.xpos[bid].copy(), d.xquat[bid].copy(), vel[3:].copy(), vel[:3].copy(),
                                      d.xipos[bid].copy())
         soft = {}
+        reactions = self._reactions()
         for name, (adr, num, bodies, dofs) in self._flex.items():
             radius_offset = np.array([0.0, 0.0, self._scene.contact.soft_radius])
             vertices = d.flexvert_xpos[adr:adr + num] - radius_offset
@@ -321,7 +404,7 @@ class MujocoBackend(Backend):
             velocities = np.zeros((num, 3))
             rot = d.xmat[bodies[free]].reshape(-1, 3, 3)
             velocities[free] = np.einsum("nij,nj->ni", rot, d.qvel[dofs[free]])
-            soft[name] = SoftState(vertices.copy(), velocities)
+            soft[name] = SoftState(vertices.copy(), velocities, reactions.get(name, {}))
         return self._to_world(SimState(float(d.time), rigid, soft, self._contacts(), self.controls()))
 
     def _owner(self, geom: int, flex: int) -> str:

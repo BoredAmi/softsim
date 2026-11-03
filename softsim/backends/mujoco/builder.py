@@ -159,6 +159,35 @@ def scene_to_mjcf(scene: Scene) -> str:
     return ET.tostring(root, encoding="unicode")
 
 
+PRESCRIBED_SOLIMP = (0.9999, 0.9999, 0.001, 0.5, 2.0)  # as hard as MuJoCo's soft constraints go
+
+
+def prescribed_equality(body: str, region: str, vertex: int, axis: int) -> str:
+    """Name of the joint equality that drives one axis of one vertex of a prescribed region."""
+    return f"{body}/{region}/{vertex}{'xyz'[axis]}"
+
+
+def _prescribed_equalities(spec: mujoco.MjSpec, body: SoftBodySpec, timeconst: float) -> None:
+    """One joint equality per held axis of each prescribed vertex: ``q = target``, the target set
+    every step (``eq_data[:, 0]``; a free vertex's slide joints are its displacement from rest along
+    its body's axes). ``timeconst`` is MuJoCo's minimum, 2 steps; the backend feeds the path's velocity
+    forward to cancel the constraint's lag (2 timeconst * v)."""
+    for p in body.prescribed:
+        for i in p.vertices:
+            joints = spec.body(f"{body.name}_{i}").joints
+            for k in range(3):
+                if not p.axes[k]:
+                    continue
+                joints[k].name = f"{body.name}_{i}/{'xyz'[k]}"
+                eq = spec.add_equality()
+                eq.type = mujoco.mjtEq.mjEQ_JOINT
+                eq.name = prescribed_equality(body.name, p.region, int(i), k)
+                eq.name1 = joints[k].name
+                eq.data[:5] = 0.0
+                eq.solref = [timeconst, 1.0]
+                eq.solimp = list(PRESCRIBED_SOLIMP)
+
+
 def build_spec(scene: Scene, mjcf: str | None = None) -> mujoco.MjSpec:
     """MjSpec for ``scene`` with spec-only settings applied (``mjcf`` if already generated)."""
     spec = mujoco.MjSpec.from_string(mjcf or scene_to_mjcf(scene))
@@ -172,4 +201,5 @@ def build_spec(scene: Scene, mjcf: str | None = None) -> mujoco.MjSpec:
             if i in pinned:
                 continue
             spec.body(f"{body.name}_{i}").mass = float(mass)
+        _prescribed_equalities(spec, body, 2 * scene.simulation.timestep)
     return spec

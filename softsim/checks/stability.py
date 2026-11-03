@@ -143,6 +143,7 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
         if not implicit_actuation:
             out += _cable_findings(scene, body, dt)
         out += _prony_findings(body, dt)
+        out += _spin_findings(scene, body, dt)
         validity = body.material.validity
         strain = est.get("expected_strain")  # compressive, positive
         if validity is not None and validity.strain is not None and strain is not None and -strain < validity.strain[0]:
@@ -154,6 +155,33 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
             out.append(Finding("info", "no-rate-data",
                                f"{body.name}: material {body.material.name!r} has no damping (no rate data), so "
                                "impacts are undamped and rebound too high; give it a Prony series if one is known"))
+    return out
+
+
+def _spin_findings(scene: Scene, body, dt: float) -> list[Finding]:
+    """A rotating mount: the rotation per step, and the centrifugal strain it will cause."""
+    spin = scene.spin
+    if spin is None:
+        return []
+    out = []
+    # minimum jerk peaks at 1.875 x the mean rate of its segment
+    peak = max(1.875 * abs(b - a) / (t1 - t0) for a, b, t0, t1 in zip(spin.angles, spin.angles[1:], spin.times, spin.times[1:]))
+    if peak * dt > 0.15:
+        out.append(Finding("warning", "spin-step",
+                           f"{body.name}: the mount turns {peak * dt:.2f} rad per step at its peak rate "
+                           f"({peak:.0f} rad/s x {dt:.1e} s). The reference's trapezoidal rule develops a growing "
+                           "whirl at large rotations per step (a 6 mm lateral deflection at 0.23 rad on a 60 mm beam, "
+                           "0.5 mm at 0.11); MuJoCo and SOFA apply the Coriolis and centrifugal forces explicitly. "
+                           "Tested up to 0.11: keep it below ~0.15"))
+    n, c = np.asarray(spin.axis, float), np.asarray(spin.center, float)
+    d = body.mesh.points - c
+    radius = np.linalg.norm(d - np.outer(d @ n, n), axis=1).max()
+    strain = body.material.density * peak**2 * radius**2 / (3 * body.material.elastic.initial_youngs_modulus())
+    if strain > 0.2:
+        out.append(Finding("warning", "spin-centrifugal",
+                           f"{body.name}: at {peak:.0f} rad/s its farthest point, {radius * 1e3:.0f} mm from the axis, "
+                           f"is pulled out with a strain of about {strain:.0%} (rho w^2 r^2 / 3E): the body stretches "
+                           "a lot or is unstable (a soft beam spun fast enough has no equilibrium)"))
     return out
 
 
@@ -189,7 +217,7 @@ def _cable_findings(scene: Scene, body, dt: float) -> list[Finding]:
     cantilever on MuJoCo at 0.1 ms tracks the ramp up to omega dt ~ 1.3, then rings (self-excited,
     bounded) instead of settling. Once ``dt^2 k`` dominates the mass, omega dt tends to
     ``sqrt(k_cable / k)``: a smaller timestep helps little, a larger via-point spacing does."""
-    from softsim.actuation import CableActuator, embed
+    from softsim.actuation import CableActuator
 
     out = []
     k_elastic = body.material.elastic.initial_youngs_modulus() * body.mesh.quality()["mean_edge"]
@@ -205,8 +233,8 @@ def _cable_findings(scene: Scene, body, dt: float) -> list[Finding]:
         seg = np.diff(via, axis=0)
         inv_len = 1.0 / np.linalg.norm(seg, axis=1)
         stiffness = tension * (np.append(inv_len, 0.0) + np.insert(inv_len, 0, 0.0))
-        elems, w = embed(body.mesh.points, body.mesh.tets, via)
-        lam = float(np.max(stiffness * np.sum(w**2 * inv_mass[body.mesh.tets[elems]], axis=1)))
+        nodes, w = body.cable_rows(a)
+        lam = float(np.max(stiffness * np.sum(w**2 * inv_mass[nodes], axis=1)))
         if a.stroke_controlled:
             # the taut tendon's axial term k dL dL^T: largest eigenvalue k sum_v |dL/dx_v|^2 / m_v
             u = seg * inv_len[:, None]
@@ -214,7 +242,7 @@ def _cable_findings(scene: Scene, body, dt: float) -> list[Finding]:
             g_via[:-1] -= u
             g_via[1:] += u
             g = np.zeros_like(body.mesh.points)
-            np.add.at(g, body.mesh.tets[elems].ravel(), (w[:, :, None] * g_via[:, None, :]).reshape(-1, 3))
+            np.add.at(g, nodes.ravel(), (w[:, :, None] * g_via[:, None, :]).reshape(-1, 3))
             lam = max(lam, a.stiffness * float(np.sum(np.sum(g**2, axis=1) * inv_mass)))
         omega_dt = dt * math.sqrt(lam)
         if omega_dt > 1.0:

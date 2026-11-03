@@ -25,7 +25,7 @@ skip and `softsim check` still reports what SOFA would support.
 | `stvk`, `neo_hookean`, `stable_neo_hookean` | `TetrahedronHyperelasticityFEMForceField`, ParameterSet [μ, λ] |
 | `mooney_rivlin` | same force field, [C10, C01, bulk] |
 | `ogden` (one term) | same force field, [μ·α, α, bulk] (SOFA writes the term as μ₁/α²) |
-| Rayleigh α, β; Kelvin-Voigt | `EulerImplicitSolver rayleighMass/rayleighStiffness` (Kelvin-Voigt: β = η/E) |
+| Rayleigh α, β; Kelvin-Voigt | `EulerImplicitSolver rayleighMass/rayleighStiffness` (Kelvin-Voigt: β = η/E). α is checked against a free-falling body with linear drag (`v' = g − αv`): the velocity matches the implicit-Euler recurrence `v ← (v + g dt)/(1 + α dt)` to 1e-12 and the continuous solution to 1% at every step (first order in dt), 0.1% at the end (`tests/test_sofa_backend.py`). One damping per body: the solver owns it, and a force field's own `rayleighStiffness` has no effect on the elastic force fields (measured), so zones with their own damping are refused |
 | `prony` | the force field carries the long-term law; the Maxwell-branch overstress (`softsim/materials/viscoelastic.py`, the same code as on MuJoCo) goes through a `ConstantForceField` updated before every step. SOFA's own `MJEDTetrahedralForceField` (SofaMJEDFEM) is not used: it relaxes the whole stress including the volumetric part, and its laws use non-isochoric invariants (its Mooney-Rivlin has a stress at rest) |
 | `base: bonded` | `FixedProjectiveConstraint` |
 | Rigid body | `Rigid3d` DOF at the centre of mass, `UniformMass` with inertia, triangulated parts (`RigidMapping`) |
@@ -101,3 +101,12 @@ these laws can be projected onto one SOFA has (`softsim material project`).
   The differences are hard vs compliant contact and integrator damping
   (MuJoCo's contact alone adds about 0.5 mm of penetration). Calibrate per
   backend.
+
+## Rods (BeamAdapter)
+
+`softsim.backends.sofa.rod` builds a chain of rigid frames joined by Euler–Bernoulli
+beams (`AdaptiveBeamForceFieldAndMass`). It is not yet a scene backend: only the
+clamped cantilever with a tip load (`RodCantileverConfig`). Check against
+`F L^3 / (3 E I)` (0.2% at 10 elements; independent of the element count; the
+long, large-deflection case is geometrically nonlinear, so compare it only at
+small loads). Reproduce: `SOFA_ROOT=... pytest tests/test_rod_sofa.py`.

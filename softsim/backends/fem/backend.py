@@ -11,6 +11,10 @@ Mapping:
       ``stable_neo_hookean`` runs as the split Neo-Hookean of the reference (same
       small-strain response; see softsim.fem.materials);
     * ``base: bonded``: the pinned vertices and the mid-edge nodes between them;
+    * rotating mount: the world frame, the pinned nodes driven along the rotation (no fictitious forces),
+      integrated with the trapezoidal rule (the default's numerical damping dissipates the rotation);
+    * prescribed regions: their held dofs (vertices and the mid-edge nodes between them) follow the path
+      exactly at each step's end; the reaction is the step's converged residual at those dofs;
     * rigid bodies: ``free`` (6 DOF) or ``slider_z`` (spring and damper), their parts
       as cylinders/boxes with 0.5 mm rounded edges;
     * contact: penalty 2e11 Pa/m on surface nodes; friction coefficients combine by
@@ -34,12 +38,13 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import CableActuator, ForceActuator, PressureActuator, embed, open_edges
+from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, anchor_weights, embed, open_edges,
+                               pad_rows)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
 from softsim.errors import StabilityError
 from softsim.geometry.rigid import rigid_mass_properties
-from softsim.scene import GROUND_NAME, Scene
+from softsim.scene import GROUND_NAME, Scene, rotating_mount_problems
 
 CONTACT_STIFFNESS = 2e11  # Pa/m: penetration ~ p / k, 50 nm at 10 kPa
 EDGE_RADIUS = 5e-4
@@ -87,16 +92,19 @@ class FemBackend(Backend):
         Capability.CABLE_ACTUATION,
         Capability.REGION_FORCE,
         Capability.MOVING_MOUNT,
+        Capability.ROTATING_MOUNT,
+        Capability.PRESCRIBED_MOTION,
         Capability.MULTI_MATERIAL,
     })
 
     def __init__(self) -> None:
         self._scene: Scene | None = None
         self.solver = None
+        self._prescribed: list = []
 
     @classmethod
     def extra_checks(cls, scene: Scene) -> list[str]:
-        out = []
+        out = rotating_mount_problems(scene)
         if len(scene.soft_bodies) != 1:
             out.append(f"exactly one soft body (got {len(scene.soft_bodies)})")
         if any(b.self_collision for b in scene.soft_bodies):
@@ -150,36 +158,96 @@ class FemBackend(Backend):
                 angular_velocity=tuple(omega), mount=rb.mount, stiffness=rb.mount_stiffness,
                 damping=rb.mount_damping, edge_radius=EDGE_RADIUS,
                 contact=contact(max(mat.friction.sliding, rb.friction.sliding), mat.adhesion)))
-        pins = set(int(i) for i in body.pinned)
-        pinned = sorted(pins | {int(t[4 + k]) for t in mesh.tets for k, (i, j) in enumerate(
-            ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))) if int(t[i]) in pins and int(t[j]) in pins})
+        def with_midpoints(corners) -> list[int]:
+            """``corners`` and the mid-edge nodes between two of them (they move with them)."""
+            c = set(int(i) for i in corners)
+            return sorted(c | {int(t[4 + k]) for t in mesh.tets for k, (i, j) in enumerate(
+                ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))) if int(t[i]) in c and int(t[j]) in c})
+
+        pinned = with_midpoints(body.pinned)
+        # prescribed regions: (region, path, dofs per held axis); the dofs join the fixed ones
+        self._prescribed = [(p.region, p.path, [3 * np.array(with_midpoints(p.vertices)) + k
+                                                if p.axes[k] else np.zeros(0, int) for k in range(3)])
+                            for p in body.prescribed]
+        held = np.concatenate([d for *_, dofs in self._prescribed for d in dofs] or [np.zeros(0, int)])
         self._pressure = [a for a in scene.actuators if isinstance(a, PressureActuator)]
         self._cables = [a for a in scene.actuators if isinstance(a, CableActuator)]
         self._forces = [a for a in scene.actuators if isinstance(a, ForceActuator)]
         cables = []
         for a in self._cables:
             via = np.array(a.via) @ rot.T + np.asarray(body.pose.position, float)
-            elems, bary = embed(mesh.nodes, mesh.tets[:, :4], via)
-            cables.append((mesh.tets[elems], tet10_shape(bary[:, 1:])[0]))
+            n = len(via) - bool(a.anchor)
+            elems, bary = embed(mesh.nodes, mesh.tets[:, :4], via[:n])
+            rows = list(zip(mesh.tets[elems], tet10_shape(bary[:, 1:])[0]))
+            if a.anchor:  # the last via point is a traction over a region's corner nodes
+                rows.append(anchor_weights(mesh.nodes, mesh.faces_of(body.region(a.anchor)), via[-1]))
+            cables.append(pad_rows(rows))
         self._problem = Problem3D(mesh, law, kappa,
                                   body.effective_density if body.uniform_density else body.element_densities(),
                                   prony=prony,
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
-                                  pinned=np.array(pinned, int),
+                                  pinned=np.array(pinned, int), fixed_dofs=held.astype(int),
                                   pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in self._pressure),
                                   cables=tuple(cables),
                                   cable_stiffness=tuple(a.stiffness or 0.0 for a in self._cables),
                                   force_loads=tuple((mesh.faces_of(body.region(a.region)), np.array(a.direction))
                                                     for a in self._forces),
                                   zones=tuple((elements, *from_material(m)[:2]) for m, elements in
-                                              body.material_groups()[1:]))
+                                              body.material_groups()[1:]),
+                                  zone_pronys=tuple(from_material(m)[2] for m, _ in body.material_groups()[1:]))
         self._names = [GROUND_NAME] * scene.ground.enabled + [rb.name for rb in scene.rigid_bodies]
         self._solver_cls = Solid3DSolver
-        self.solver = Solid3DSolver(self._problem)
+        self.solver = self.attach(self._new_solver())
         self._prev_t = 0.0
 
+    def attach(self, solver):
+        """Give ``solver`` (one built on this backend's problem, e.g. a static one) its prescribed motion:
+        the prescribed regions' paths (held dofs' values at each step's end; pinned dofs stay at rest, in the
+        mount's frame), or with a rotating mount the world-frame motion of the pinned nodes."""
+        if self._scene.spin is not None:
+            return self._attach_spin(solver)
+        if not self._prescribed:
+            return solver
+        fixed = np.nonzero(solver.fixed)[0]
+        slots = [(path, [np.searchsorted(fixed, d) for d in dofs]) for _, path, dofs in self._prescribed]
+
+        def motion(t: float) -> np.ndarray:
+            values = np.zeros(len(fixed))
+            for path, idx in slots:
+                x = path.position(t)
+                for k in range(3):
+                    values[idx[k]] = x[k]
+            return values
+
+        solver.fixed_motion = motion
+        return solver
+
+    def _attach_spin(self, solver):
+        """A rotating mount, in the **world** frame: the pinned nodes (and mid-edge nodes between them)
+        follow ``x = R (X - c) + c + p`` exactly, and every element feels plain gravity: no fictitious
+        forces, so this is the reference the other backends' mount-frame runs are checked against."""
+        fixed = np.nonzero(solver.fixed)[0]
+        nodes, axis = fixed // 3, fixed % 3
+        rest = self._problem.mesh.nodes[nodes]
+        scene = self._scene
+
+        def motion(t: float) -> np.ndarray:
+            frame = scene.frame(t)
+            moved = (rest - frame.center) @ frame.rotation.T + frame.center + frame.offset
+            return (moved - rest)[np.arange(len(fixed)), axis]
+
+        solver.fixed_motion = motion
+        return solver
+
+    def _new_solver(self):
+        """A solver for the problem: the default Newmark scheme has numerical damping 0.25 (first order),
+        which dissipates a rotation's centripetal balance: a body turning 0.3 rad per step stretched 32%
+        less under its centrifugal load, with 4.6 mm of lateral deflection. A rotating mount therefore uses
+        the trapezoidal rule (no numerical damping, second order: 0.12 mm at half the step)."""
+        return self._solver_cls(self._problem, numerical_damping=0.0 if self._scene.spin is not None else 0.25)
+
     def reset(self) -> None:
-        self.solver = self._solver_cls(self._problem)
+        self.solver = self.attach(self._new_solver())
 
     # -- stepping ------------------------------------------------------------------------------
 
@@ -196,7 +264,8 @@ class FemBackend(Backend):
                     self.solver.tensions[k] = value
             for k, a in enumerate(self._forces):
                 self.solver.forces[k] = self.control(a.name, self.solver.t + dt)
-            if self._scene.mount is not None:  # in the mount's frame; Newmark balances forces at the step's end
+            if self._scene.mount is not None and self._scene.spin is None:  # in the mount's frame (a rotating
+                # mount is simulated in the world instead, see _attach_spin); Newmark balances forces at the step's end
                 self.solver.gravity = self.mount_gravity(self.solver.t + dt)
             if not self.solver.advance(dt):
                 raise StabilityError(f"fem: Newton did not converge at t = {self.solver.t:.6f} s even with "
@@ -218,7 +287,8 @@ class FemBackend(Backend):
         nc = self._problem.mesh.n_corner
         x = s.current_nodes()[:nc]
         v = s.v[:3 * s.n].reshape(s.n, 3)[:nc]
-        soft = {body.name: SoftState(x.copy(), v.copy())}
+        reactions = {region: np.array([s.residual[d].sum() for d in dofs]) for region, _, dofs in self._prescribed}
+        soft = {body.name: SoftState(x.copy(), v.copy(), reactions)}
         rigid, contacts = {}, []
         for i, (rb, name) in enumerate(zip(self._problem.rigid, self._names)):
             force = s.contact_force(i)
@@ -232,7 +302,8 @@ class FemBackend(Backend):
             com_world = r @ np.asarray(rb.com, float)
             rigid[name] = RigidState(position=c - com_world, quaternion=_matrix_to_quat(r),
                                      linear_velocity=lin - np.cross(ang, com_world), angular_velocity=ang, com=c)
-        return self._to_world(SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls()))
+        state = SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls())
+        return state if self._scene.spin is not None else self._to_world(state)  # a spin runs in the world
 
     def is_finite(self) -> bool:
         return self.solver is not None and bool(np.all(np.isfinite(self.solver.y)))

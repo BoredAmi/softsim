@@ -55,6 +55,21 @@ def _nrmse(ref: pd.DataFrame, sim: pd.DataFrame, column: str) -> float:
 class Transfer:
     """One transfer file; see module docstring."""
 
+    card_kind = "effective"        # what the fitted cards are (a subclass fitting the reference to data: physical)
+    card_suffix = "transfer"
+    card_verb = "Transfer"
+    fitted_by = "softsim transfer"
+    card_note = ("Effective parameters: valid only with this backend, element type and mesh size, and fitted "
+                 "jointly with the other cards of this transfer.")
+
+    @property
+    def ref_label(self) -> str:
+        return f"the {self.ref_backend} reference"
+
+    def report_extra(self) -> dict[str, Any]:
+        """Entries a subclass adds to the report."""
+        return {}
+
     def __init__(self, path: str | Path):
         self.path = Path(path)
         spec = load_yaml(self.path)
@@ -63,10 +78,7 @@ class Transfer:
         self.backend = spec["backend"]
         self.overrides = list(spec.get("overrides", []))
         self.backend_overrides = list(spec.get("backend_overrides", []))
-        ref = spec.get("reference", {})
-        self.ref_backend = ref.get("backend", "fem")
-        self.ref_overrides = list(ref.get("overrides", []))
-        self.observables = {k: float(v) for k, v in spec["observables"].items()}
+        self._read_reference(spec)
         self.params: list[Parameter] = _parse_parameters(spec["parameters"])
         self.checks = {name: list(o) for name, o in (spec.get("checks") or {}).items()}
         self.max_evaluations = int(spec.get("max_evaluations", 20))
@@ -75,6 +87,13 @@ class Transfer:
         self.history: list[dict[str, Any]] = []
         if self._log.exists():
             self.history = [json.loads(line) for line in self._log.read_text().splitlines() if line.strip()]
+
+    def _read_reference(self, spec: dict[str, Any]) -> None:
+        """What the backend is compared with: here another backend's run of the same scenario."""
+        ref = spec.get("reference", {})
+        self.ref_backend = ref.get("backend", "fem")
+        self.ref_overrides = list(ref.get("overrides", []))
+        self.observables = {k: float(v) for k, v in spec["observables"].items()}
 
     # -- runs ------------------------------------------------------------------------------------
 
@@ -174,7 +193,7 @@ class Transfer:
                   "raw_card_cost": next(r["cost"] for r in self.history
                                         if all(np.isclose(r.get(k, np.nan), v) for k, v in initial.items())),
                   "per_observable": {c: best[c] for c in self.observables if c in best},
-                  "checks": checks, "evaluations": len(self.history), "wall_time_s": wall}
+                  "checks": checks, "evaluations": len(self.history), "wall_time_s": wall, **self.report_extra()}
         # the effective cards: the body's material, and every other fitted material (a zone's), with the
         # fitted values
         cls = get_scenario(raw0["scenario"])
@@ -192,17 +211,17 @@ class Transfer:
             material = scenario.load_material(get_dotted(raw, k))
             owner = "" if k == key else f"_{get_dotted(raw, k.rsplit('.', 1)[0]).get('name', k.split('.')[-2])}"
             card = material.model_copy(update={
-                "kind": "effective",
-                "name": f"{material.name}{owner}_{self.backend}_transfer",
-                "source": f"Transfer of {material.name} ({k}) to {self.backend} against the {self.ref_backend} "
-                          f"reference ({_relative(self.path)}).",
-                "provenance": {"fitted_by": "softsim transfer", "transfer_file": _relative(self.path),
+                "kind": self.card_kind,
+                "name": f"{material.name}{owner}_{self.backend}_{self.card_suffix}",
+                "source": f"{self.card_verb} of {material.name} ({k}) to {self.backend} against {self.ref_label} "
+                          f"({_relative(self.path)}).",
+                "provenance": {"fitted_by": self.fitted_by, "transfer_file": _relative(self.path),
                                "config_key": k, "backend": self.backend,
                                "mesh_size": mesh.get("size", "scenario default"),
-                               "element": "linear tetrahedra", "reference": self.ref_backend,
+                               "element": "quadratic tetrahedra" if self.backend == "fem" else "linear tetrahedra",
+                               "reference": self.ref_backend,
                                "observables": self.observables, "cost": best["cost"], "checks": checks,
-                               "note": "Effective parameters: valid only with this backend, element type and "
-                                       "mesh size, and fitted jointly with the other cards of this transfer."},
+                               "note": self.card_note},
             })
             files.append(str(save_material(card, self.output / f"{card.name}.yaml")))
         report["material_file"] = files[0]

@@ -43,10 +43,14 @@ class RigidState:
 
 @dataclass(frozen=True)
 class SoftState:
-    """Current vertex positions/velocities of a soft body, indexed like its mesh points."""
+    """Current vertex positions/velocities of a soft body, indexed like its mesh points.
+
+    ``reactions`` maps each prescribed region (``SoftBodySpec.prescribed``) to the force its support
+    exerts on the body [N, world axes; zero along free axes]: e.g. positive along a pull."""
 
     vertices: np.ndarray
     velocities: np.ndarray
+    reactions: dict[str, np.ndarray] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -178,17 +182,20 @@ class Backend(ABC):
         return all(np.isfinite(a).all() for a in arrays)
 
     def mount_gravity(self, t: float) -> np.ndarray:
-        """Gravity in the mount's frame at ``t``: ``g - a(t)`` (the scene's gravity without a moving mount)."""
-        g = np.asarray(self.scene.simulation.gravity, float)
-        return g if self.scene.mount is None else g - self.scene.mount.acceleration(t)
+        """Gravity in the mount's frame at ``t``: ``R^T (g - p'')`` (the scene's gravity without a moving or
+        rotating mount)."""
+        return self.scene.frame(t).gravity(np.asarray(self.scene.simulation.gravity, float))
 
     def _to_world(self, state: SimState) -> SimState:
-        """``state`` with the moving mount's position and velocity added to the soft bodies'."""
-        mount = self.scene.mount
-        if mount is None:
+        """``state`` with the mount's motion added to the soft bodies' (rotation and translation)."""
+        scene = self.scene
+        if scene.mount is None and scene.spin is None:
             return state
-        p, v = mount.position(state.time), mount.velocity(state.time)
-        soft = {n: SoftState(s.vertices + p, s.velocities + v) for n, s in state.soft.items()}
+        frame = scene.frame(state.time)
+        soft = {}
+        for n, s in state.soft.items():
+            x, v = frame.to_world(s.vertices, s.velocities)
+            soft[n] = SoftState(x, v, s.reactions)
         return replace(state, soft=soft)
 
     def set_control(self, name: str, value: float) -> None:

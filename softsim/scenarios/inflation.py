@@ -7,7 +7,8 @@ through it (``type: cable``), each following a schedule or a controller
 (``Backend.set_control``). An actuator without ``type`` is a pressure actuator.
 ``body.zones`` give parts of the body other materials (e.g. a strain-limiting layer);
 ``body.mount_path`` moves the fixed regions along a prescribed translation (a moving mount,
-softsim.scene.MountMotion).
+softsim.scene.MountMotion); ``body.prescribed`` moves single regions along their own paths,
+per axis (displacement control, softsim.scene.PrescribedMotion), and reports their reactions.
 
 Outputs per sample: each pressure actuator's pressure ``<name>_pressure`` [Pa]
 and the volume its region encloses ``<name>_volume`` [m^3] (from the backend's
@@ -15,7 +16,8 @@ surface vertices); each cable's tension ``<name>_tension`` [N] and length
 through its via points ``<name>_length`` [m] (a stroke-controlled cable also gives its
 command ``<name>_command`` [m]; its tension follows from its length); each region force its
 force ``<name>_force`` [N] and its region's displacement along it ``<name>_displacement`` [m]
-(area-weighted centroid); and the body's extent (``max_z``,
+(area-weighted centroid); each prescribed region's reaction ``<region>_reaction_<axis>`` [N] and
+centroid motion ``<region>_displacement_<axis>`` [m] along its held axes; and the body's extent (``max_z``,
 ``min_z``, ``max_radius`` about the body's axis). Shapes with a ``tip`` (else
 ``top``) region also give the tip: that face's area-weighted centroid (``tip_x``,
 ``tip_y``, ``tip_z``) and its rotation from its rest orientation (``bend_angle``
@@ -33,14 +35,14 @@ from pydantic import Field, model_validator
 
 from softsim.actuation import (CableActuator, CableActuatorConfig, ForceActuator, ForceActuatorConfig,
                                PressureActuator, PressureActuatorConfig,
-                               cable_length, embed, enclosed_volume)
+                               cable_length, cable_rows, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
-from softsim.config.units import Length, Mass, Time
+from softsim.config.units import Angle, Length, Mass, Time
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution
 from softsim.scenarios.base import Scenario, ScenarioConfig
-from softsim.scene import MaterialZone, MountMotion, Pose, Scene, SoftBodySpec
+from softsim.scene import MaterialZone, MountMotion, MountSpin, Pose, PrescribedMotion, Scene, SoftBodySpec
 
 
 class MaterialZoneConfig(StrictModel):
@@ -60,6 +62,41 @@ class MaterialZoneConfig(StrictModel):
         return self
 
 
+class PrescribedRegionConfig(StrictModel):
+    """Displacement control of a region (softsim.scene.PrescribedMotion), e.g. the grip of a tension
+    test: ``path: [[time, [dx, dy, dz]], ...]`` from rest (the first waypoint is zero), minimum jerk
+    between waypoints, held after the last. An axis that is ``null`` in every waypoint is free (a
+    roller: ``[null, null, 0]`` holds a face in z only). Outputs ``<region>_reaction_<axis>`` [N],
+    the force the support exerts on the body, and ``<region>_displacement_<axis>`` [m], the region's
+    area-weighted centroid motion, for each held axis."""
+
+    region: str
+    path: list[tuple[Annotated[Time, Field(ge=0)], tuple[Length | None, Length | None, Length | None]]]
+
+    @model_validator(mode="after")
+    def _same_free_axes(self) -> "PrescribedRegionConfig":
+        held = {tuple(v is not None for v in p) for _, p in self.path}
+        if len(held) > 1:
+            raise ValueError(f"prescribed region {self.region!r}: an axis is null in some waypoints and not "
+                             "in others; an axis is free (null) or held for the whole path")
+        return self
+
+    @property
+    def axes(self) -> tuple[bool, bool, bool]:
+        return tuple(v is not None for v in self.path[0][1])
+
+
+class MountRotationConfig(StrictModel):
+    """The fixed regions turn about ``axis`` through ``center`` (softsim.scene.MountSpin): ``path`` is
+    ``[[time, angle], ...]`` from rest (the first angle is zero), minimum jerk between waypoints, held
+    after the last. Composes with ``mount_path``. Region forces and prescribed regions are refused (their
+    directions would turn with the mount's frame). Outputs ``mount_angle`` [rad]."""
+
+    axis: tuple[float, float, float]
+    center: tuple[Length, Length, Length] = (0.0, 0.0, 0.0)
+    path: list[tuple[Annotated[Time, Field(ge=0)], Angle]]
+
+
 class InflatedBodyConfig(StrictModel):
     name: str = "body"
     geometry: SoftShape
@@ -71,6 +108,8 @@ class InflatedBodyConfig(StrictModel):
     zones: list[MaterialZoneConfig] = []  # multi-material bodies
     # moving mount: the fixed regions follow this translation, [[time, [dx, dy, dz]], ...] from rest
     mount_path: list[tuple[Annotated[Time, Field(ge=0)], tuple[Length, Length, Length]]] = []
+    prescribed: list[PrescribedRegionConfig] = []  # regions moved along paths (displacement control)
+    mount_rotation: MountRotationConfig | None = None  # the fixed regions turn about an axis
 
 
 class InflationConfig(ScenarioConfig):
@@ -128,15 +167,34 @@ class InflationScenario(Scenario):
                 lo, hi = np.array(z.box[0]), np.array(z.box[1])
                 elements = np.nonzero(np.all((centroids >= lo) & (centroids <= hi), axis=1))[0]
             zones.append(MaterialZone(z.name, elements, self.load_material(z.material)))
+        prescribed = []
+        for p in cfg.prescribed:
+            if p.region not in regions:
+                raise ConfigError(f"body.prescribed: no region {p.region!r}; {type(cfg.geometry).__name__} has "
+                                  f"{sorted(regions)}")
+            try:
+                path = MountMotion(tuple(t for t, _ in p.path),
+                                   tuple(tuple(0.0 if v is None else v for v in x) for _, x in p.path))
+                prescribed.append(PrescribedMotion(p.region, np.unique(regions[p.region]), p.axes, path))
+            except ValueError as exc:
+                raise ConfigError(f"body.prescribed ({p.region}): {exc}") from None
         try:
             body = SoftBodySpec(name=cfg.name, mesh=mesh, material=self.load_material(cfg.material),
                                 pose=Pose(tuple(cfg.position)), mass=cfg.mass, pinned=tuple(pinned), regions=regions,
-                                zones=tuple(zones))
+                                zones=tuple(zones), prescribed=tuple(prescribed))
         except ValueError as exc:
-            raise ConfigError(f"body.zones: {exc}") from None
-        actuators = tuple(PressureActuator.from_config(a, cfg.name) if isinstance(a, PressureActuatorConfig)
-                          else ForceActuator.from_config(a, cfg.name) if isinstance(a, ForceActuatorConfig)
-                          else CableActuator.from_config(a, cfg.name, cfg.mesh.size) for a in self.config.actuators)
+            raise ConfigError(f"body: {exc}") from None
+        configs = []
+        for a in self.config.actuators:  # ``path: geometry``: the shape's own tendon path
+            if isinstance(a, CableActuatorConfig) and a.path == "geometry" and hasattr(cfg.geometry, "tendon_path"):
+                a = a.model_copy(update={"path": cfg.geometry.tendon_path()})
+            configs.append(a)
+        try:
+            actuators = tuple(PressureActuator.from_config(a, cfg.name) if isinstance(a, PressureActuatorConfig)
+                              else ForceActuator.from_config(a, cfg.name) if isinstance(a, ForceActuatorConfig)
+                              else CableActuator.from_config(a, cfg.name, cfg.mesh.size) for a in configs)
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from None
         self._cables, self._loaded = {}, {}
         for a in actuators:
             if isinstance(a, (PressureActuator, ForceActuator)) and a.region not in regions:
@@ -144,26 +202,40 @@ class InflationScenario(Scenario):
             if isinstance(a, ForceActuator):
                 self._loaded[a.name] = (_face_centre_normal(mesh.points, regions[a.region])[0], np.array(a.direction))
             if isinstance(a, CableActuator):
+                if a.anchor and a.anchor not in regions:
+                    raise ConfigError(f"actuator {a.name!r}: no anchor region {a.anchor!r}; have {sorted(regions)}")
                 try:
-                    elems, bary = embed(mesh.points, mesh.tets, np.array(a.via))
+                    nodes, bary = cable_rows(mesh.points, mesh.tets, np.array(a.via),
+                                             regions[a.anchor] if a.anchor else None)
                 except ValueError as exc:
                     raise ConfigError(f"actuator {a.name!r}: {exc}") from None
-                self._cables[a.name] = (mesh.tets[elems], bary, a, cable_length(mesh.points, mesh.tets[elems], bary))
+                self._cables[a.name] = (nodes, bary, a, cable_length(mesh.points, nodes, bary))
         self._regions = regions
+        self._prescribed = {p.region: (_face_centre_normal(mesh.points, regions[p.region])[0], p.axes)
+                            for p in prescribed}
         self._tip = next((r for r in ("tip", "top") if r in regions), None)
         if self._tip is not None:
             self._tip_normal = _face_centre_normal(mesh.points, regions[self._tip])[1]
         self._axis = np.asarray(cfg.position[:2], float)
+        self._spin = None
+        rotation = cfg.mount_rotation
         try:
             mount = MountMotion(tuple(t for t, _ in cfg.mount_path),
                                 tuple(tuple(p) for _, p in cfg.mount_path)) if cfg.mount_path else None
+            axis = np.asarray(rotation.axis, float) if rotation else None
+            if rotation and not np.linalg.norm(axis) > 0:
+                raise ValueError("mount_rotation: the axis must be non-zero")
+            spin = (MountSpin(tuple(axis / np.linalg.norm(axis)), tuple(rotation.center),
+                              tuple(t for t, _ in rotation.path), tuple(a for _, a in rotation.path))
+                    if rotation else None)
+            self._spin = spin
             return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,
                          ground=self.config.ground, metadata={"name": self.config.name or self.config.scenario},
-                         actuators=actuators, mount=mount)
+                         actuators=actuators, mount=mount, spin=spin)
         except ValueError as exc:
-            if not cfg.mount_path:
+            if not (cfg.mount_path or rotation):
                 raise
-            raise ConfigError(f"body.mount_path: {exc}") from None
+            raise ConfigError(f"body.mount_path / mount_rotation: {exc}") from None
 
     def metrics(self, state: SimState) -> dict[str, float]:
         cfg = self.config
@@ -187,6 +259,16 @@ class InflationScenario(Scenario):
                 continue
             out[f"{a.name}_pressure"] = float(state.controls.get(a.name, np.nan))
             out[f"{a.name}_volume"] = enclosed_volume(x, self._regions[a.region])
+        reactions = state.soft[cfg.body.name].reactions if self._prescribed else {}
+        for region, (centre0, axes) in self._prescribed.items():
+            moved = _face_centre_normal(x, self._regions[region])[0] - centre0
+            force = reactions.get(region, np.full(3, np.nan))
+            for k, axis in enumerate("xyz"):
+                if axes[k]:
+                    out[f"{region}_reaction_{axis}"] = float(force[k])
+                    out[f"{region}_displacement_{axis}"] = float(moved[k])
+        if self._spin is not None:
+            out["mount_angle"] = self._spin.angle(state.time)
         if self._tip is not None:
             tip, n = _face_centre_normal(x, self._regions[self._tip])
             out.update(tip_x=float(tip[0]), tip_y=float(tip[1]), tip_z=float(tip[2]),
@@ -212,6 +294,10 @@ class InflationScenario(Scenario):
             out[f"{a.name}_final_pressure"] = float(ts[f"{a.name}_pressure"].iloc[-1])
             out[f"{a.name}_final_volume"] = float(v[-1])
             out[f"{a.name}_volume_ratio"] = float(v[-1] / v[0])
+        for region, (_, axes) in self._prescribed.items():
+            for k, axis in enumerate("xyz"):
+                if axes[k]:
+                    out[f"{region}_final_reaction_{axis}"] = float(ts[f"{region}_reaction_{axis}"].iloc[-1])
         if "bend_angle" in ts:
             out["final_bend_angle"] = float(ts["bend_angle"].iloc[-1])
             out["final_tip_x"] = float(ts["tip_x"].iloc[-1])

@@ -13,6 +13,7 @@ from softsim.geometry.rigid import (
 from softsim.geometry.soft import (
     MeshSettings,
     SoftBox,
+    SoftCableFinger,
     SoftClosedTube,
     SoftCylinder,
     SoftHollowSphere,
@@ -31,6 +32,7 @@ __all__ = [
     "RigidCylinder",
     "RigidShape",
     "SoftBox",
+    "SoftCableFinger",
     "SoftClosedTube",
     "SoftCylinder",
     "SoftHollowSphere",

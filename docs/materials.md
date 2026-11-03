@@ -281,4 +281,7 @@ matches its 3-hour hold within 0.35%; without damping it is off by 1.4%.
 (E0 ≈ 150 kPa, g ≈ 0.7) relaxes to E∞ ≈ 44 kPa. The datasheet's 100% modulus
 (55 kPa) implies about 94 kPa. Every point that drop-only fit has evaluated
 misses the datasheet by 40–60%. `calibrations/ecoflex_00_10_drop_fem_joint.yaml`
-fits both together (a long 3D run, for the faster machine).
+fits both together. After 80 evaluations: E0 = 190 kPa, g = 0.60, τ = 0.58 ms,
+E∞ = 76 kPa, the datasheet term 20% off (from 40–60%), the 20 g first contact
+14% and the 50 g one 3%
+([experiments.md](experiments.md#joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02)).

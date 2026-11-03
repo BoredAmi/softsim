@@ -47,4 +47,6 @@ class Capability(str, Enum):
     CABLE_ACTUATION = "cable actuators routed through the body"
     REGION_FORCE = "forces spread over surface regions"
     MOVING_MOUNT = "a prescribed translation of the fixed vertices (moving mount)"
+    ROTATING_MOUNT = "a prescribed rotation of the fixed vertices about an axis (rotating mount)"
+    PRESCRIBED_MOTION = "prescribed displacement of surface regions, with their reaction forces"
     MULTI_MATERIAL = "soft bodies with zones of other materials"

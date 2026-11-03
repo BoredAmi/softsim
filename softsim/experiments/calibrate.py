@@ -52,8 +52,12 @@ keyed by what determines a simulation's result (dataset, tracks, cases,
 overrides, parameter names, and the values), so changing ``max_evaluations``,
 ``grid``, bounds or initial values keeps them; changing the rest starts over.
 The key does not cover softsim's own code: after changing simulation code,
-delete the log, or old results are replayed as if they were current. A simulation that crashes its worker
-process (e.g. a native segfault) costs the same as an unstable one.
+delete the log, or old results are replayed as if they were current. It does cover the **contents** of
+the tracks: each entry records a digest of the cases' track files, and entries made against other tracks
+(e.g. reference tracks regenerated from a new card, same path) are ignored with a note. Entries from
+before the digest existed carry none and are still trusted. A simulation that crashes its worker
+process (e.g. a native segfault) costs the same as an unstable one. Workers are spawned, not forked
+(``_process_pool``), so they work on a GPU after the parent has used JAX.
 """
 
 from __future__ import annotations
@@ -62,6 +66,7 @@ import hashlib
 import itertools
 import json
 import math
+import multiprocessing as mp
 import time
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -246,6 +251,27 @@ def _points_term(i: int, t: dict[str, Any], material_key: str) -> MaterialTestTe
                             (TestCurve(x[order], stress[order], None, "", mode, rate),), material_key)
 
 
+def _tracks_digest(tracks: str | Path, cases) -> str:
+    """Digest of the track files (``<case>.parquet`` and ``.yaml``) of ``cases``: what a log entry was fitted against."""
+    h = hashlib.sha256()
+    for case in sorted(cases):
+        for suffix in (".parquet", ".yaml"):
+            path = Path(tracks) / f"{case}{suffix}"
+            h.update(f"{case}{suffix}".encode() + (path.read_bytes() if path.is_file() else b""))
+    return h.hexdigest()[:16]
+
+
+def _process_pool(workers: int) -> ProcessPoolExecutor:
+    """Worker processes for the case simulations, started with ``spawn``.
+
+    A forked worker inherits the parent's JAX state. Material-test terms run in the
+    parent (``softsim.materials.homogeneous``, JAX), and once that has initialised
+    CUDA, a forked child cannot use it: every ``fem`` case crashed its worker on a
+    GPU machine. A spawned worker starts a fresh interpreter and its own context.
+    """
+    return ProcessPoolExecutor(workers, mp_context=mp.get_context("spawn"))
+
+
 def _evaluate_case(task: tuple) -> dict[str, float]:
     """Run one case (worker process) and return its comparison metrics.
 
@@ -309,6 +335,8 @@ class Calibration:
                                 | {"parameters": sorted(spec["parameters"])})
         self._legacy_hash = _hash(spec)  # logs written before the key was narrowed
         self._log = self.output / "evaluations.jsonl"
+        self._tracks_digest = _tracks_digest(self.tracks, self.cases)
+        self._stale = 0  # logged evaluations ignored: made against other tracks
         self._done = self._load_log()
         self._raw = {}
         for case in self.cases:
@@ -339,6 +367,9 @@ class Calibration:
             for line in self._log.read_text().splitlines():
                 entry = json.loads(line)
                 if entry.get("spec") in (self._spec_hash, self._legacy_hash):
+                    if entry.get("tracks") not in (None, self._tracks_digest):
+                        self._stale += 1
+                        continue
                     done[self._key(entry["values"])] = entry["results"]
         return done
 
@@ -350,10 +381,10 @@ class Calibration:
         except BrokenProcessPool:
             # a native crash killed a worker: find out which case(s), one fresh process each
             self._pool.shutdown(cancel_futures=True)
-            self._pool = ProcessPoolExecutor(self._workers)
+            self._pool = _process_pool(self._workers)
             results = []
             for t in tasks:
-                with ProcessPoolExecutor(1) as single:
+                with _process_pool(1) as single:
                     try:
                         results.append(single.submit(_evaluate_case, t).result())
                     except BrokenProcessPool:
@@ -369,7 +400,8 @@ class Calibration:
         if not replayed:
             self.output.mkdir(parents=True, exist_ok=True)
             with self._log.open("a") as f:
-                f.write(json.dumps({"spec": self._spec_hash, "values": values, "results": results}, default=float) + "\n")
+                f.write(json.dumps({"spec": self._spec_hash, "tracks": self._tracks_digest, "values": values,
+                                "results": results}, default=float) + "\n")
         names = [t[3] for t in tasks]
         weights = [self.cases[n] for n in names]
         if self.material_tests:
@@ -393,7 +425,9 @@ class Calibration:
         from scipy.optimize import minimize
 
         start = time.perf_counter()
-        self._pool = ProcessPoolExecutor(self._workers) if self._workers > 1 else None
+        if self._stale:
+            print(f"  note: {self._stale} logged evaluations were fitted against other tracks and are ignored", flush=True)
+        self._pool = _process_pool(self._workers) if self._workers > 1 else None
         try:
             def objective(u: np.ndarray) -> float:
                 return self.evaluate({p.key: p.from_unit(x) for p, x in zip(self.params, u)})

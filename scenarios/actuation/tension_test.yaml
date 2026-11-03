@@ -1,0 +1,34 @@
+# Tension test by displacement control: the verification case for prescribed region motion
+# (docs/actuation.md). A 10 x 10 x 20 mm bar on a roller (its base held in z only, free to
+# contract sideways) is pulled at its top face 2 mm (10%) in 200 ms, minimum jerk, then held.
+# The state is homogeneous uniaxial stress, which linear and quadratic tetrahedra both represent
+# exactly, so `top_reaction_z` / area is the material's nominal stress at stretch 1.1
+# (softsim.materials.homogeneous.curve), and `base_reaction_z` is its opposite. The ramp is
+# ~100 axial wave periods long: the run is quasi-static without damping.
+#   softsim run scenarios/actuation/tension_test.yaml
+#   softsim run scenarios/actuation/tension_test.yaml --backend fem --set simulation.timestep=5ms
+scenario: actuation
+description: Roller tension test, 10 x 10 x 20 mm bar pulled 10% (E = 100 kPa).
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 300 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: bar
+  geometry: {type: box, size: [10 mm, 10 mm, 20 mm]}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 100 kPa, poisson_ratio: 0.45}
+  mesh: {size: 2.5 mm, method: structured}
+  prescribed:
+    - {region: base, path: [[0 ms, [null, null, 0]], [300 ms, [null, null, 0]]]}
+    - {region: top, path: [[0 ms, [null, null, 0]], [200 ms, [null, null, 2 mm]]]}
+
+actuators: []

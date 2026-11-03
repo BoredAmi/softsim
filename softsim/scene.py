@@ -13,7 +13,7 @@ from typing import Annotated, Literal, Union
 import numpy as np
 from pydantic import Field
 
-from softsim.actuation import Actuator, CableActuator, ForceActuator, PressureActuator, embed
+from softsim.actuation import Actuator, CableActuator, ForceActuator, PressureActuator, cable_rows
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time
@@ -121,6 +121,24 @@ class MaterialZone:
 
 
 @dataclass(frozen=True)
+class PrescribedMotion:
+    """Displacement control of a surface region, e.g. a grip in a tension test: every vertex of
+    ``region`` translates by ``path.position(t)`` from rest along the ``axes`` it holds (x, y, z; the
+    others are free, a roller). ``path`` is a minimum-jerk waypoint path like a moving mount's; with a
+    moving mount it is relative to the mount. Backends report the force the region's support exerts on
+    the body, ``SoftState.reactions[region]`` [N] (inertia of the region's own mass included)."""
+
+    region: str
+    vertices: np.ndarray
+    axes: tuple[bool, bool, bool]
+    path: MountMotion
+
+    def __post_init__(self) -> None:
+        if not any(self.axes):
+            raise ValueError(f"prescribed region {self.region!r} holds no axis (all null): drop it or fix one")
+
+
+@dataclass(frozen=True)
 class SoftBodySpec:
     """A deformable body.
 
@@ -137,6 +155,8 @@ class SoftBodySpec:
             indices, outward normals (see softsim.geometry.soft).
         zones: Groups of elements with their own material (multi-material bodies);
             the other elements are made of ``material``.
+        prescribed: Regions moved along prescribed paths (displacement control); their
+            vertices are neither pinned nor in another prescribed region.
     """
 
     name: str
@@ -149,8 +169,16 @@ class SoftBodySpec:
     rgba: tuple[float, float, float, float] = (0.85, 0.92, 0.85, 1.0)
     regions: dict[str, np.ndarray] = field(default_factory=dict)
     zones: tuple[MaterialZone, ...] = ()
+    prescribed: tuple[PrescribedMotion, ...] = ()
 
     def __post_init__(self) -> None:
+        held = np.zeros(self.mesh.n_points, bool)
+        held[list(self.pinned)] = True
+        for p in self.prescribed:
+            if held[p.vertices].any():
+                raise ValueError(f"soft body {self.name!r}: prescribed region {p.region!r} shares vertices with "
+                                 "a fixed or another prescribed region")
+            held[p.vertices] = True
         seen = np.zeros(len(self.mesh.tets), bool)
         for z in self.zones:
             if len(z.elements) == 0:
@@ -158,9 +186,11 @@ class SoftBodySpec:
             if seen[z.elements].any():
                 raise ValueError(f"soft body {self.name!r}: zone {z.name!r} overlaps another zone")
             seen[z.elements] = True
-            if z.material.damping != self.material.damping:
-                raise ValueError(f"soft body {self.name!r}: zone {z.name!r} must have the body's damping "
-                                 f"({self.material.damping!r})")
+
+    def zone_damping_differs(self) -> list[str]:
+        """Names of the zones whose damping is not the body's (a backend that has one damping per body refuses
+        them)."""
+        return [z.name for z in self.zones if z.material.damping != self.material.damping]
 
     def material_groups(self) -> list[tuple[Material, np.ndarray]]:
         """(material, element indices) for the body's own material, then each zone."""
@@ -173,6 +203,12 @@ class SoftBodySpec:
         if name not in self.regions:
             raise KeyError(f"soft body {self.name!r} has no region {name!r}; have {sorted(self.regions)}")
         return self.regions[name]
+
+    def cable_rows(self, cable: CableActuator) -> tuple[np.ndarray, np.ndarray]:
+        """``cable``'s via points as (nodes, weights) on this body's mesh (see :func:`softsim.actuation.cable_rows`);
+        ``ValueError`` for a via point outside the body or a bad anchor."""
+        tris = self.region(cable.anchor) if cable.anchor else None
+        return cable_rows(self.mesh.points, self.mesh.tets, np.array(cable.via), tris)
 
     def _material_densities(self) -> np.ndarray:
         rho = np.full(len(self.mesh.tets), float(self.material.density))
@@ -216,6 +252,8 @@ class SoftBodySpec:
             req |= z.material.requires | {Capability.MULTI_MATERIAL}
         if self.pinned:
             req.add(Capability.PINNED_VERTICES)
+        if self.prescribed:
+            req.add(Capability.PRESCRIBED_MOTION)
         if self.self_collision:
             req.add(Capability.SELF_COLLISION)
         return frozenset(req)
@@ -294,6 +332,85 @@ class MountMotion:
 
 
 @dataclass(frozen=True)
+class MountSpin:
+    """Prescribed rotation of the mount about a fixed axis, e.g. a finger on a spinning arm: the fixed
+    vertices turn about ``axis`` (a unit vector) through the point ``center`` [m] (rest frame) by
+    ``angles[i]`` [rad] at ``times[i]`` [s] (the first is zero), minimum jerk between waypoints (at rest at
+    each, like :class:`MountMotion`, whose translation it composes with: ``x_world = R (x - c) + c + p``).
+
+    In the mount's frame a point feels, per unit mass, gravity ``R^T (g - p'')`` and the fictitious
+    accelerations ``-alpha x r - omega x (omega x r) - 2 omega x v`` (Euler, centrifugal, Coriolis), with
+    ``r = x - c`` (:class:`MountFrame`). The reference runs in the world instead, with the fixed
+    vertices driven along the rotation, so it has none of them."""
+
+    axis: tuple[float, float, float]
+    center: tuple[float, float, float]
+    times: tuple[float, ...]
+    angles: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if abs(np.linalg.norm(np.asarray(self.axis, float)) - 1.0) > 1e-9:
+            raise ValueError("mount rotation: the axis must be a unit vector")
+        object.__setattr__(self, "_path", MountMotion(tuple(self.times), tuple((a, 0.0, 0.0) for a in self.angles)))
+
+    def angle(self, t: float) -> float:
+        return float(self._path.position(t)[0])
+
+    def rate(self, t: float) -> float:
+        return float(self._path.velocity(t)[0])
+
+    def acceleration(self, t: float) -> float:
+        return float(self._path.acceleration(t)[0])
+
+    def rotation(self, t: float) -> np.ndarray:
+        """Rotation matrix mount -> world at ``t`` (Rodrigues)."""
+        n, a = np.asarray(self.axis, float), self.angle(t)
+        k = np.array([[0.0, -n[2], n[1]], [n[2], 0.0, -n[0]], [-n[1], n[0], 0.0]])
+        return np.eye(3) + math.sin(a) * k + (1.0 - math.cos(a)) * k @ k
+
+
+@dataclass(frozen=True)
+class MountFrame:
+    """The mount's frame at one instant: rotation ``R`` (mount -> world) about ``center``, origin
+    translation ``offset`` ``p`` with its velocity and acceleration, and the angular velocity ``omega`` and
+    acceleration ``alpha`` [rad/s, rad/s^2] in mount-frame components."""
+
+    rotation: np.ndarray
+    center: np.ndarray
+    offset: np.ndarray
+    velocity: np.ndarray
+    acceleration: np.ndarray
+    omega: np.ndarray
+    alpha: np.ndarray
+
+    def to_world(self, x: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """World positions and velocities of points at ``x``, ``v`` (N, 3) in the mount frame."""
+        r = x - self.center
+        return r @ self.rotation.T + self.center + self.offset, (v + np.cross(self.omega, r)) @ self.rotation.T + self.velocity
+
+    def gravity(self, g: np.ndarray) -> np.ndarray:
+        """Gravity in the mount frame: ``R^T (g - p'')`` (the translation's inertial force included)."""
+        return self.rotation.T @ (np.asarray(g, float) - self.acceleration)
+
+    def fictitious(self, x: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """Acceleration (N, 3) the rotation adds in the mount frame: ``-alpha x r - omega x (omega x r)
+        - 2 omega x v``."""
+        r = x - self.center
+        return -np.cross(self.alpha, r) - np.cross(self.omega, np.cross(self.omega, r)) - 2.0 * np.cross(self.omega, v)
+
+
+def mount_frame(mount: MountMotion | None, spin: MountSpin | None, t: float) -> MountFrame:
+    """The frame of a translating and/or rotating mount at ``t``."""
+    zero = np.zeros(3)
+    p, v, a = (mount.position(t), mount.velocity(t), mount.acceleration(t)) if mount is not None else (zero, zero, zero)
+    if spin is None:
+        return MountFrame(np.eye(3), zero, p, v, a, zero, zero)
+    n = np.asarray(spin.axis, float)
+    return MountFrame(spin.rotation(t), np.asarray(spin.center, float), p, v, a, n * spin.rate(t),
+                      n * spin.acceleration(t))
+
+
+@dataclass(frozen=True)
 class Scene:
     """Everything a backend needs to build a model."""
 
@@ -305,13 +422,14 @@ class Scene:
     metadata: dict[str, object] = field(default_factory=dict)
     actuators: tuple[Actuator, ...] = ()
     mount: MountMotion | None = None
+    spin: MountSpin | None = None
 
     def __post_init__(self) -> None:
-        if self.mount is not None:
+        if self.mount is not None or self.spin is not None:
             if self.rigid_bodies or self.ground.enabled or len(self.soft_bodies) != 1:
                 raise ValueError("a moving mount is simulated in the mount's frame: it needs one soft body and no "
                                  "ground or rigid bodies (they would have to move with it)")
-            if not self.soft_bodies[0].pinned:
+            if not self.soft_bodies[0].pinned and not self.soft_bodies[0].prescribed:
                 raise ValueError("a moving mount moves the body's fixed vertices: fix a region (body.fixed)")
         names = [a.name for a in self.actuators]
         if len(set(names)) != len(names):
@@ -322,9 +440,13 @@ class Scene:
                 body.region(a.region)
             elif isinstance(a, CableActuator):
                 try:
-                    embed(body.mesh.points, body.mesh.tets, np.array(a.via))
-                except ValueError as exc:
+                    body.cable_rows(a)
+                except (ValueError, KeyError) as exc:
                     raise ValueError(f"actuator {a.name!r}: {exc}") from None
+
+    def frame(self, t: float) -> MountFrame:
+        """The mount's frame at ``t`` (the identity without a moving or rotating mount)."""
+        return mount_frame(self.mount, self.spin, t)
 
     def actuator(self, name: str) -> Actuator:
         for a in self.actuators:
@@ -339,6 +461,8 @@ class Scene:
             req |= body.requires
         if self.mount is not None:
             req.add(Capability.MOVING_MOUNT)
+        if self.spin is not None:
+            req.add(Capability.ROTATING_MOUNT)
         if self.ground.enabled:
             req |= self.ground.friction.requires
             if self.ground.adhesion is not None and self.soft_bodies:
@@ -356,3 +480,15 @@ class Scene:
         self.soft(body_name)
         bodies = tuple(replace(b, material=material) if b.name == body_name else b for b in self.soft_bodies)
         return replace(self, soft_bodies=bodies)
+
+
+def rotating_mount_problems(scene: Scene) -> list[str]:
+    """What a rotating mount cannot be combined with (every backend refuses these): a region force's
+    direction is a world direction, so it would have to turn with the mount's frame, and a prescribed
+    region's path is a translation along the mount frame's axes."""
+    if scene.spin is None:
+        return []
+    out = [f"actuator {a.name!r}: a region force with a rotating mount (its direction would turn with the frame)"
+           for a in scene.actuators if isinstance(a, ForceActuator)]
+    out += [f"{b.name}: prescribed region {p.region!r} with a rotating mount" for b in scene.soft_bodies for p in b.prescribed]
+    return out

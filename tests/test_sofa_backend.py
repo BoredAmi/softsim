@@ -148,3 +148,48 @@ def test_blow_up_guard():
     assert not SofaBackend._blown_up(ok)
     assert SofaBackend._blown_up({**ok, "s": np.full((4, 3), 150.0)})
     assert SofaBackend._blown_up({**ok, "s": np.array([[0, 0, np.nan]])})
+
+
+def test_mass_proportional_damping_matches_free_fall_with_drag():
+    """Rayleigh alpha is a linear drag ``-alpha m v``: a body in free fall (nothing fixed, no ground, internal
+    forces zero) obeys v' = g - alpha v, so v -> g / alpha. SOFA's implicit Euler gives exactly
+    v_{k+1} = (v_k + g dt) / (1 + alpha dt) (matched to 1e-12); the continuous solution g/alpha (1 - e^{-alpha t})
+    is within 1% at every step (first order in dt) and 0.1% at the end. Without damping the same body falls at g t. Mutants: alpha ignored,
+    alpha applied as the stiffness coefficient."""
+    from pathlib import Path
+
+    from softsim.config.loader import load_yaml
+    from softsim.scenarios.inflation import InflationConfig, InflationScenario
+
+    _sofa()
+    path = Path(__file__).parents[1] / "scenarios" / "actuation" / "cable_cantilever.yaml"
+    g, dt, steps = 9.81, 1e-3, 200
+
+    def fall(alpha):
+        overrides = ["body.mesh.size=4mm", "body.fixed=[]", "actuators=[]", f"simulation.timestep={dt}",
+                     f"simulation.gravity=[0,0,{-g}]",
+                     "body.material.damping={model: rayleigh, alpha: %g, beta: 0.0}" % alpha]
+        scene = InflationScenario(validate(InflationConfig, apply_overrides(load_yaml(path), overrides)),
+                                  path.parent).build_scene()
+        backend = SofaBackend()
+        backend.build(scene)
+        v = []
+        for _ in range(steps):
+            backend.step(1)
+            v.append(backend.state().soft["beam"].velocities.mean(axis=0)[2])
+        backend.close()
+        return np.array(v)
+
+    t = dt * np.arange(1, steps + 1)
+    np.testing.assert_allclose(fall(0.0), -g * t, rtol=1e-12)
+    alpha = 20.0
+    v = np.array(fall(alpha))
+    exact = np.zeros(steps)
+    x = 0.0
+    for k in range(steps):
+        x = (x - g * dt) / (1 + alpha * dt)
+        exact[k] = x
+    np.testing.assert_allclose(v, exact, rtol=1e-12)
+    continuous = -g / alpha * (1 - np.exp(-alpha * t))
+    np.testing.assert_allclose(v, continuous, rtol=1.5e-2)
+    assert v[-1] == pytest.approx(continuous[-1], rel=1e-3)

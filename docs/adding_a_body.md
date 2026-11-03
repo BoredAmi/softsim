@@ -71,7 +71,7 @@ actuators: [{name: cavity, region: cavity}]
 `scenarios/actuation/pneunet_from_step.yaml` is this for the PneuNet finger.
 Its STEP file was written from the parametric shape by `softsim export
 scenarios/actuation/pneunet.yaml --cad scenarios/actuation/cad/pneunet.step`
-(`box`, `cylinder`, `closed_tube` and `pneunet` can be written, in metres,
+(`box`, `cylinder`, `closed_tube`, `pneunet` and `cable_finger` can be written, in metres,
 body frame). Use the same command to start a design in CAD from a parametric
 one. Read back, it is the same body: total, cavity and layer volumes, and the
 bonded base, agree exactly with the parametric mesh (`tests/test_mesh_files.py`).

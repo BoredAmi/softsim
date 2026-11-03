@@ -216,3 +216,103 @@ def test_closed_loop_controller_holds_a_tip_angle():
     assert late.cable_tension.mean() > 0.1 * (500e3 * 0.01**4 / 12) / (0.003 * 0.055)
     sim.apply_controls({"cable": float("nan")})  # back to the schedule
     assert sim.backend.control("cable", 0.2) == pytest.approx(0.35)
+
+
+def _anchored_beam(extra=()):
+    """The beam of ``cable_cantilever.yaml`` with the cable running to the top face (60 mm) and spread over it."""
+    return _beam(["actuators[0].path=[[3mm,0mm,0mm],[3mm,0mm,60mm]]", "actuators[0].anchor=top", *extra])
+
+
+def test_anchor_weights_are_the_statically_equivalent_traction():
+    """The weights have unit sum and centre of action at the anchor point (``sum w x = point``), so a force
+    on the cable end gives the region the same resultant and moment as at the point; a point off the face
+    is refused."""
+    from softsim.actuation import anchor_weights
+
+    scene = _anchored_beam().build_scene()
+    body = scene.soft_bodies[0]
+    tris = body.region("top")
+    point = np.array([0.003, 0.0, 0.06])
+    nodes, w = anchor_weights(body.mesh.points, tris, point)
+    x = body.mesh.points[nodes]
+    assert w.sum() == pytest.approx(1.0, abs=1e-12) and w.min() < 0  # 3 mm is outside the section's 1.7 mm core
+    assert w @ x == pytest.approx(point, abs=1e-12)
+    area = np.zeros(len(body.mesh.points))
+    t = body.mesh.points[tris]
+    np.add.at(area, tris.ravel(), np.repeat(0.5 * np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1) / 3, 3))
+    assert not np.allclose(w, area[nodes] / area.sum())  # not the plain area share: it carries the offset
+    # the nodal forces of a pull along the cable: resultant T and the moment of a point load at the anchor
+    f = 0.7 * w[:, None] * np.array([0.0, 0.0, -1.0])
+    assert f.sum(axis=0) == pytest.approx([0, 0, -0.7], abs=1e-12)
+    assert np.cross(x - point, f).sum(axis=0) == pytest.approx(np.zeros(3), abs=1e-12)
+    with pytest.raises(ValueError, match="off the anchor region"):
+        anchor_weights(body.mesh.points, tris, np.array([0.003, 0.0, 0.055]))
+    with pytest.raises(ValueError, match="off the anchor region"):
+        anchor_weights(body.mesh.points, tris, np.array([0.02, 0.0, 0.06]))
+
+
+def test_anchored_cable_is_wired_into_every_consumer():
+    """Mesh rows of the cable: the last via point is the anchor, the interior ones sit in their elements;
+    a cable anchored on a missing region is refused when the scene is built."""
+    scene = _anchored_beam().build_scene()
+    (cable,) = scene.actuators
+    nodes, w = scene.soft_bodies[0].cable_rows(cable)
+    assert cable.anchor == "top" and nodes.shape == w.shape and w.shape[1] > 4
+    assert np.allclose(w.sum(axis=1), 1.0)
+    p = scene.soft_bodies[0].mesh.points
+    last = np.einsum("j,ji->i", w[-1], p[nodes[-1]])
+    assert last == pytest.approx(cable.via[-1], abs=1e-12)
+    with pytest.raises(Exception, match="nope"):
+        _beam(["actuators[0].path=[[3mm,0mm,0mm],[3mm,0mm,60mm]]", "actuators[0].anchor=nope"]).build_scene()
+
+
+def test_anchored_cable_reference_matches_euler_bernoulli_at_the_tip():
+    """Reference, 2.5 mm quadratic tets, cable to the top face (L = 60 mm) spread over it: the end load is a
+    force T and a moment T d on the section, so the whole beam bends as theta = T d L / (E_t I) -- within
+    0.5% (measured +0.27% at 2.5 mm, -0.44% at 1.25 mm) -- where a point anchor on the face dents it (-2.6%)."""
+    pytest.importorskip("jax")
+    from softsim.backends.fem import FemBackend
+    from softsim.fem.solid3d import Solid3DSolver
+
+    e, b, length, d = 500e3, 0.01, 0.060, 0.003
+    thetas = {}
+    for label, scenario in (("anchored", _anchored_beam(["body.mesh.size=2.5mm"])),
+                            ("point", _beam(["body.mesh.size=2.5mm", "actuators[0].path=[[3mm,0mm,0mm],[3mm,0mm,60mm]]"]))):
+        backend = FemBackend()
+        backend.build(scenario.build_scene())
+        s = Solid3DSolver(backend._problem, dynamic=False)
+        tension = 0.7
+        s.tensions[:] = [tension]
+        assert s.advance(1.0)
+        x = s.p.mesh.nodes + s.y[:3 * s.n].reshape(-1, 3)
+        top = np.abs(s.p.mesh.nodes[:, 2] - 0.06) < 1e-9
+        thetas[label] = np.arctan(-np.polyfit(x[top, 0], x[top, 2], 1)[0])
+    e_t = e * (1 + 2 * 0.7 / (e * b * b))
+    theory = 0.7 * d * length / (e_t * b**4 / 12)
+    assert thetas["anchored"] == pytest.approx(theory, rel=0.005)
+    assert thetas["point"] < 0.98 * theory  # the point anchor's dent is what the spread removes
+
+
+def test_anchored_stroke_cable_needs_no_stiff_cap():
+    """Stroke-controlled cable spread over the top face of the plain beam (no stiff cap, L = 60 mm): the
+    tension and tip angle follow Euler-Bernoulli in series with the tendon within 1% (measured +0.3% and
+    +0.5% tension, +0.4% and +0.7% angle at 0.3 and 3 mm), where the same cable ending at a point in the
+    soft beam gives way and reads -19% / -20% (the cap of cable_cantilever_stroke.yaml works around that)."""
+    pytest.importorskip("jax")
+    from softsim.analytic import cable_beam_stroke
+    from softsim.backends.fem import FemBackend
+    from softsim.fem.solid3d import Solid3DSolver
+
+    backend = FemBackend()
+    backend.build(_stroke_beam(["body.mesh.size=2.5mm", "body.zones=[]", "actuators[0].anchor=top",
+                                "actuators[0].path=[[3mm,0mm,0mm],[3mm,0mm,60mm]]"]).build_scene())
+    s = Solid3DSolver(backend._problem, dynamic=False)
+    top = np.abs(s.p.mesh.nodes[:, 2] - 0.06) < 1e-9
+    for stroke in (0.0003, 0.003):
+        s.free_lengths[:] = s.rest_lengths - stroke
+        assert s.advance(1.0)
+        x = s.p.mesh.nodes + s.y[:3 * s.n].reshape(-1, 3)
+        theta = np.arctan(-np.polyfit(x[top, 0], x[top, 2], 1)[0])
+        tension, expected = cable_beam_stroke(stroke, 300.0, 0.003, 0.060, [5e5], [-0.005, 0.005], 0.01)
+        assert s.cable_tension(0) == pytest.approx(tension, rel=0.01)
+        assert theta == pytest.approx(expected, rel=0.01)

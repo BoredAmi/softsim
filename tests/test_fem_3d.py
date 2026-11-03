@@ -1,5 +1,6 @@
 """3D quadratic-tetrahedron reference solver (softsim.fem.solid3d) and the fem backend."""
 
+import dataclasses
 import math
 
 import numpy as np
@@ -122,6 +123,43 @@ def test_prony_relaxation_matches_homogeneous():
     np.testing.assert_allclose(forces, -h.stress.to_numpy()[1:] * 0.02**2, rtol=2e-3)
 
 
+@pytest.mark.parametrize("zone_card", [
+    {"model": "prony", "g": [0.3], "tau": [0.005]},   # a different series
+    None,                                              # an undamped zone (a stiff cap): no relaxation at all
+])
+def test_zone_prony_follows_its_own_series(zone_card):
+    """Two columns side by side under the same uniaxial compression keep the homogeneous state (the elastic
+    cards are equal and the material is near-incompressible, so the lateral stretch does not depend on the
+    relaxing shear modulus): the plate force is the area-weighted average of what each column's own series
+    gives, whose exact history is ``history`` (measured: within 0.1%). A global series would put the body's
+    relaxation on both columns."""
+    elastic = {"model": "neo_hookean", "shear_modulus": 10e3, "bulk_modulus": 10e6}
+    body_card = load_material({"density": 1000, "elastic": elastic,
+                               "damping": {"model": "prony", "g": [0.6], "tau": [0.02]}})
+    zone = load_material({"density": 1000, "elastic": elastic, **({"damping": zone_card} if zone_card else {})})
+    ramp, delta = 0.002, 0.002
+    motion = lambda t: np.array([0, 0, -delta * min(t / ramp, 1.0)])  # noqa: E731
+    prob = _box_problem(body_card, h=0.005, rigid=(RigidBody3D.ground(), _plate(motion)))
+    right = np.nonzero(prob.mesh.nodes[prob.mesh.tets[:, :4], 0].mean(axis=1) > 0.005)[0]  # the quadrant's outer half
+    assert 0 < len(right) < len(prob.mesh.tets)
+    law, kappa, zone_prony = from_material(zone)
+    prob = dataclasses.replace(prob, zones=((right, law, kappa),), zone_pronys=(zone_prony,))
+    s = Solid3DSolver(prob, dynamic=False, viscous=True)
+    t = np.r_[np.linspace(0, ramp, 11)[1:], ramp + np.geomspace(1e-3, 0.1, 12)]
+    forces = []
+    for t_next in t:
+        assert s.advance(t_next - s.t)
+        forces.append(s.contact_force(1)[2])
+    stretch = 1.0 + np.array([motion(x)[2] for x in t]) / 0.01
+    share = len(right) / len(prob.mesh.tets)  # the zone's share of the cross-section (equal-volume tets)
+    expected = [w * -history(card, "uniaxial", np.r_[0.0, t], np.r_[1.0, stretch]).stress.to_numpy()[1:] * 0.02**2
+                for w, card in ((1 - share, body_card), (share, zone))]
+    np.testing.assert_allclose(forces, expected[0] + expected[1], rtol=3e-3)
+    # the series differ enough for this to mean something: a global series is off by far more
+    glob = -history(body_card, "uniaxial", np.r_[0.0, t], np.r_[1.0, stretch]).stress.to_numpy()[1:] * 0.02**2
+    assert abs(glob[-1] - forces[-1]) > 0.08 * glob[-1]
+
+
 def test_free_flight_and_spin_are_exact():
     body = RigidBody3D("w", parts=(Part("cylinder", (0.01, 0.005, 0), (0, 0, 0.005)),), mass=0.05,
                        inertia=((1e-6, 0, 0), (0, 1e-6, 0), (0, 0, 2e-6)), com=(0, 0, 0.005), position=(0, 0, 0.1),
@@ -197,3 +235,72 @@ def test_closed_form_tangent_matches_autodiff(law):
         np.testing.assert_allclose(a4, jax.hessian(psi)(f), rtol=1e-8, atol=1e-8 * law.shear_modulus)
         np.testing.assert_allclose(cof3(f), jax.grad(jnp.linalg.det)(f), rtol=1e-12, atol=1e-12)
         np.testing.assert_allclose(d2det3(f), jax.hessian(jnp.linalg.det)(f), rtol=1e-10, atol=1e-12)
+
+
+_GPU_PROBE = """
+import time
+from softsim.fem import jax_setup
+jax, jnp = jax_setup()
+t = time.perf_counter()
+x = jnp.ones(125_000_000)  # 1 GB of float64, about a 5 mm drop case's working set
+print(jax.devices()[0].platform, float(x.sum()), time.perf_counter() - t, flush=True)
+time.sleep(8)  # hold the memory while the other processes allocate theirs
+"""
+
+
+def test_three_processes_share_one_gpu():
+    """A calibration runs a parent and a worker per case on one GPU, and each needs about 1 GB.
+    With JAX's default preallocation the first process reserves 75% of the card (9 GB of 12):
+    measured, the second then died with CUDA_ERROR_OUT_OF_MEMORY and the third waited 11 s for
+    the first to exit. With jax_setup's on-demand allocation all three get theirs at once."""
+    import os
+    import subprocess
+    import sys
+
+    import jax
+
+    if not any(d.platform == "gpu" for d in jax.devices()):
+        pytest.skip("needs a CUDA device")
+    env = {k: v for k, v in os.environ.items() if k != "XLA_PYTHON_CLIENT_PREALLOCATE"}  # jax_setup's default
+    procs = [subprocess.Popen([sys.executable, "-c", _GPU_PROBE], env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True) for _ in range(3)]
+    out = [p.communicate(timeout=120)[0].split() for p in procs]
+    assert [o[:1] for o in out] == [["gpu"]] * 3, out  # none died or fell back to the CPU
+    assert max(float(o[2]) for o in out) < 4.0, out  # and none waited for another to exit
+
+
+def test_chunked_kernels_equal_the_single_launch(monkeypatch):
+    import jax.numpy as jnp
+
+    """Evaluating the element kernels in chunks (so a fine mesh does not ask the GPU for the whole batch at once) gives
+    the same energy, gradient/Hessian and stress as one launch, with two material groups (a zone on a third of the elements); a one-element chunk
+    is the extreme. Mutant: the last, shorter chunk dropped."""
+    card = load_material({"density": 1000, "elastic": {"model": "neo_hookean", "shear_modulus": 10e3,
+                                                       "bulk_modulus": 1e6}})
+
+    def evaluate(chunk, h=0.005):
+        monkeypatch.setenv("SOFTSIM_FEM_CHUNK", str(chunk))
+        prob = _box_problem(card, h=h)
+        law, kappa, _ = from_material(card)
+        stiff = load_material({"density": 1000, "elastic": {"model": "neo_hookean", "shear_modulus": 40e3,
+                                                            "bulk_modulus": 1e6}})
+        slaw, skappa, _ = from_material(stiff)
+        zone = np.arange(0, len(prob.mesh.tets), 3)
+        prob = dataclasses.replace(prob, zones=((zone, slaw, skappa),), zone_pronys=(None,))
+        s = Solid3DSolver(prob, dynamic=False)
+        rng = np.random.default_rng(1)
+        s.y[:3 * s.n] = 1e-4 * rng.standard_normal(3 * s.n)
+        u = s.y[:3 * s.n].reshape(s.n, 3)[prob.mesh.tets].reshape(-1, 30)
+        ge, he = s._elem_grad_hess(jnp.asarray(u), s._dndx, s._wv, (1.0, 1.0), jnp.zeros((*s._wv.shape, 3, 3)))
+        e = s._elem_energy(jnp.asarray(u), (1.0, 1.0), jnp.zeros((*s._wv.shape, 3, 3)))
+        sig = s._iso_stress(jnp.asarray(u), s._dndx)
+        return np.asarray(ge), np.asarray(he), float(e), np.asarray(sig), len(prob.mesh.tets)
+
+    whole = evaluate(10**9)
+    n = whole[4]
+    for chunk in (7, n - 1, 1):
+        part = evaluate(chunk)
+        np.testing.assert_allclose(part[0], whole[0], rtol=1e-12, atol=1e-14)
+        np.testing.assert_allclose(part[1], whole[1], rtol=1e-12, atol=1e-12)
+        assert part[2] == pytest.approx(whole[2], rel=1e-12)
+        np.testing.assert_allclose(part[3], whole[3], rtol=1e-12, atol=1e-14)

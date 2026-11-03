@@ -275,6 +275,20 @@ def gmsh_pneunet(length: float, width: float, height: float, chambers: list[tupl
     return _gmsh_mesh(build, size, export)
 
 
+def gmsh_cable_finger(width: float, depth: float, length: float, slots: list[tuple[float, float]],
+                      slot_depth: float, size: float, export: str | None = None) -> TetMesh | None:
+    """Block ``[-width/2, width/2] x [-depth/2, depth/2] x [0, length]`` with transverse slots cut into
+    its ``+x`` face: ``slots[i] = (z0, z1)`` spans the full depth and reaches ``slot_depth`` into the block."""
+
+    def build(occ):
+        body = occ.addBox(-width / 2, -depth / 2, 0, width, depth, length)
+        tools = [(3, occ.addBox(width / 2 - slot_depth, -depth / 2, z0, slot_depth, depth, z1 - z0)) for z0, z1 in slots]
+        if tools:
+            occ.cut([(3, body)], tools)
+
+    return _gmsh_mesh(build, size, export)
+
+
 def gmsh_cylinder(radius: float, height: float, size: float, export: str | None = None) -> TetMesh | None:
     """Unstructured cylinder mesh via gmsh."""
     return _gmsh_mesh(lambda occ: occ.addCylinder(0, 0, 0, 0, 0, height, radius), size, export)

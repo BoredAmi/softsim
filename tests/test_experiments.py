@@ -172,18 +172,17 @@ def _bare_calibration(tmp_path, cases, jobs):
     cal.history, cal.output, cal._workers, cal.tracks = [], tmp_path, jobs, str(tmp_path)
     cal._spec_hash, cal._legacy_hash, cal._log, cal._done = "test", "legacy", tmp_path / "evaluations.jsonl", {}
     cal._pool = None
+    cal._tracks_digest, cal._stale = "", 0
     cal.material_tests = []
     return cal
 
 
 def test_calibration_survives_worker_crash_and_resumes(tmp_path, monkeypatch):
-    from concurrent.futures import ProcessPoolExecutor
-
     from softsim.experiments import calibrate
 
     monkeypatch.setattr(calibrate, "_evaluate_case", _fake_case)
     cal = _bare_calibration(tmp_path, ["w_ok", "w_crash"], 2)
-    cal._pool = ProcessPoolExecutor(2)
+    cal._pool = calibrate._process_pool(2)
     try:
         cost = cal.evaluate({"x": 1.0})
         assert cal.evaluate({"x": 2.0}) == cost  # the rebuilt pool keeps working
@@ -197,6 +196,70 @@ def test_calibration_survives_worker_crash_and_resumes(tmp_path, monkeypatch):
     again = _bare_calibration(tmp_path, ["w_ok", "w_crash"], 1)
     again._done = again._load_log()
     assert again.evaluate({"x": 1.0}) == cost and len(again._done) == 2
+
+
+def _inherited_jax_case(task):
+    """Stand-in for a case simulation: nrmse 1 if the worker inherited an initialised JAX backend."""
+    import sys
+
+    if "jax" not in sys.modules:
+        return {"rmse": 0.0, "nrmse": 0.0}
+    from jax._src import xla_bridge
+
+    return {"rmse": 0.0, "nrmse": float(bool(xla_bridge._backends))}
+
+
+def _jax_sum_case(task):
+    """Stand-in for a fem case: one JAX computation on the default device (the GPU if there is one)."""
+    import jax.numpy as jnp
+
+    return {"rmse": 0.0, "nrmse": abs(float(jnp.arange(4.0).sum()) - 6.0)}
+
+
+def test_calibration_workers_do_not_inherit_jax(tmp_path, monkeypatch):
+    """The parent has run JAX (material-test terms do); a worker must start without that state."""
+    pytest.importorskip("jax")
+    import jax.numpy as jnp
+
+    from softsim.experiments import calibrate
+
+    float(jnp.ones(3).sum())
+    monkeypatch.setattr(calibrate, "_evaluate_case", _inherited_jax_case)
+    cal = _bare_calibration(tmp_path, ["w_a", "w_b"], 2)
+    cal._pool = calibrate._process_pool(2)
+    try:
+        assert cal.evaluate({"x": 1.0}) == 0.0
+    finally:
+        cal._pool.shutdown()
+
+
+def test_calibration_workers_use_the_gpu_after_the_parent(tmp_path, monkeypatch):
+    """On a GPU, a forked worker of a parent that has used CUDA crashes (every fem case cost 10)."""
+    jax = pytest.importorskip("jax")
+    if not any(d.platform == "gpu" for d in jax.devices()):
+        pytest.skip("needs a CUDA device")
+    from softsim.experiments import calibrate
+
+    float(jax.numpy.ones(3).sum())  # the parent initialises CUDA
+    monkeypatch.setattr(calibrate, "_evaluate_case", _jax_sum_case)
+    cal = _bare_calibration(tmp_path, ["w_a", "w_b"], 2)
+    cal._pool = calibrate._process_pool(2)
+    try:
+        assert cal.evaluate({"x": 1.0}) == 0.0, cal.history[0]
+    finally:
+        cal._pool.shutdown()
+
+
+def test_calibration_plots_skip_cases_without_tracks(tmp_path):
+    """A transfer calibration's reference tracks cover only its fitted weights; plotting its before/after
+    overlays asked for every dataset weight and crashed both transfers after their fits had finished."""
+    from softsim.experiments.plots import tracked_cases
+
+    for case in ("w020", "w050"):
+        (tmp_path / f"{case}.parquet").write_bytes(b"")
+    cases = ["w020", "w050", "w100", "w200", "w500"]
+    assert tracked_cases(cases, tmp_path) == ["w020", "w050"]
+    assert tracked_cases(cases, tmp_path / "missing") == []
 
 
 def test_calibration_joint_cost_with_material_tests(tmp_path, monkeypatch):
@@ -297,3 +360,35 @@ def test_material_test_relaxation_term_recovers_its_own_history():
     assert term.evaluate({"m": card}, ".")["nrmse"] < 2e-3
     elastic = {**card, "damping": None}
     assert term.evaluate({"m": elastic}, ".")["nrmse"] > 0.01  # misses the ~4% relaxation
+
+
+def test_calibration_log_ignores_evaluations_made_against_other_tracks(tmp_path):
+    """Reference tracks regenerated from a new card keep their path: the log's key (path, cases, overrides,
+    parameters) did not change, and a transfer calibration replayed every evaluation fitted to the old tracks
+    in minutes. Each entry now records a digest of the track files; entries with another digest are ignored,
+    those without one (older logs) are trusted."""
+    import json
+
+    from softsim.experiments.calibrate import _tracks_digest
+
+    tracks = tmp_path / "tracks"
+    tracks.mkdir()
+    (tracks / "w1.parquet").write_bytes(b"first card")
+    (tracks / "w1.yaml").write_text("speed: 1")
+    old = _tracks_digest(tracks, ["w1"])
+    assert old == _tracks_digest(tracks, ["w1"]) and len(old) == 16
+    (tracks / "w1.parquet").write_bytes(b"new card")                    # the tracks are rewritten in place
+    new = _tracks_digest(tracks, ["w1"])
+    assert new != old
+    (tracks / "w1.yaml").write_text("speed: 2")                         # and so are the impact settings
+    assert _tracks_digest(tracks, ["w1"]) not in (old, new)
+    assert _tracks_digest(tracks, ["w1", "w2"]) != _tracks_digest(tracks, ["w1"])  # w2 is missing: still defined
+
+    cal = _bare_calibration(tmp_path, ["w1"], 1)
+    rows = [{"spec": "test", "tracks": old, "values": {"x": 1.0}, "results": [{"rmse": 1.0, "nrmse": 1.0}]},
+            {"spec": "test", "tracks": new, "values": {"x": 2.0}, "results": [{"rmse": 2.0, "nrmse": 2.0}]},
+            {"spec": "test", "values": {"x": 3.0}, "results": [{"rmse": 3.0, "nrmse": 3.0}]}]  # a log from before
+    cal._log.write_text("\n".join(json.dumps(r) for r in rows))
+    cal._tracks_digest = new
+    done = cal._load_log()
+    assert sorted(v[0]["rmse"] for v in done.values()) == [2.0, 3.0] and cal._stale == 1

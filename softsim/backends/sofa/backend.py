@@ -27,6 +27,11 @@ Notes and limits (see docs/backends/sofa.md):
     * pressure and cable actuators: explicit follower forces
       (``softsim.actuation.pressure_forces``, ``cable_forces``) in a
       ``ConstantForceField``, updated before every step, as on MuJoCo.
+    * rotating mount: simulated in the mount's frame, rotated gravity plus the Euler, centrifugal and
+      Coriolis forces (``MountFrame.fictitious``) in a ``ConstantForceField``, explicit, before every step.
+    * prescribed regions: ``PartialLinearMovementProjectiveConstraint`` (held axes only) with a key
+      per step, exact at every step's end; their reactions are reported one step back (see
+      ``SofaBackend._reactions``).
 """
 
 from __future__ import annotations
@@ -39,7 +44,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length, embed,
+from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, cable_forces, cable_length,
                                pressure_forces, region_force_weights)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
@@ -57,7 +62,7 @@ from softsim.materials.models import (
     StVenantKirchhoff,
 )
 from softsim.materials.viscoelastic import PronyOverstress, long_term_material, prony_of
-from softsim.scene import RigidBodySpec, Scene, SoftBodySpec
+from softsim.scene import RigidBodySpec, Scene, SoftBodySpec, rotating_mount_problems
 
 GROUND = "ground"
 GROUND_GROUP = 1  # collision group of the ground (models in the same group never collide)
@@ -199,6 +204,8 @@ class SofaBackend(Backend):
         Capability.CABLE_ACTUATION,
         Capability.REGION_FORCE,
         Capability.MOVING_MOUNT,
+        Capability.ROTATING_MOUNT,
+        Capability.PRESCRIBED_MOTION,
         Capability.MULTI_MATERIAL,
     })
 
@@ -210,13 +217,17 @@ class SofaBackend(Backend):
 
     @classmethod
     def extra_checks(cls, scene: Scene) -> list[str]:
-        problems = []
+        problems = rotating_mount_problems(scene)
         for body in scene.soft_bodies:
             for e in (body.material.elastic, *(z.material.elastic for z in body.zones)):
                 if isinstance(e, Ogden) and len(e.mu) > 1:
                     problems.append(f"{body.name}: SOFA's Ogden material has a single term ({len(e.mu)} given)")
             if body.zones and prony_of(body.material) is not None:
                 problems.append(f"{body.name}: material zones with Prony viscoelasticity")
+            if body.zone_damping_differs():
+                problems.append(f"{body.name}: zones {body.zone_damping_differs()} with their own damping (SOFA's "
+                                "Rayleigh damping belongs to the solver, one per body; the elastic force fields ignore "
+                                "their own rayleighStiffness)")
         return problems
 
     # -- build --------------------------------------------------------------
@@ -267,6 +278,7 @@ class SofaBackend(Backend):
         self.root = root
         self._sofa = Sofa
         self._prev = None  # no step taken yet: no contact forces to report
+        self._prev2 = None  # velocities a step before ``_prev`` (prescribed regions' reactions)
         self._diverged = False
 
     def _add_soft(self, root, body: SoftBodySpec, lift: float) -> dict:
@@ -300,6 +312,20 @@ class SofaBackend(Backend):
                 child.addObject(ff, **args)
         if body.pinned:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
+        prescribed = []  # (region, vertices, held-axis mask, path)
+        if body.prescribed:
+            # the constraint moves its vertices to the key that SOFA looks up at the step's *start*
+            # time, so each key holds the path at the step's end (measured: else they trail by one step)
+            dt = self._scene.simulation.timestep
+            end = max(self._scene.simulation.duration, *(p.path.times[-1] for p in body.prescribed)) + 2 * dt
+            times = np.arange(0.0, end, dt)
+            for p in body.prescribed:
+                mask = np.array(p.axes, float)
+                node.addObject("PartialLinearMovementProjectiveConstraint", name=f"prescribed_{p.region}",
+                               indices=p.vertices.tolist(), movedDirections=mask.astype(int).tolist(),
+                               keyTimes=times.tolist(),
+                               movements=[(p.path.position(t + dt) * mask).tolist() for t in times])
+                prescribed.append((p.region, np.asarray(p.vertices), mask, p.path))
         node.addObject("LinearSolverConstraintCorrection")
         adhesion = None
         if body.name in self._adhesion:
@@ -319,8 +345,7 @@ class SofaBackend(Backend):
                 tris = body.region(a.region)
                 loads.append((a.name, lambda x, v, tris=tris: pressure_forces(x, tris, v)))
             elif isinstance(a, CableActuator):
-                elems, bary = embed(body.mesh.points, body.mesh.tets, np.array(a.via))
-                nodes = body.mesh.tets[elems]
+                nodes, bary = body.cable_rows(a)
                 rest = cable_length(body.mesh.points, nodes, bary)
                 loads.append((a.name, lambda x, v, a=a, n=nodes, w=bary, rest=rest: cable_forces(
                     x, n, w, a.tension_at(cable_length(x, n, w) if a.stroke_controlled else 0.0, v, rest))))
@@ -329,18 +354,21 @@ class SofaBackend(Backend):
                 loads.append((a.name, lambda x, v, share=share: v * share))
         actuation = (node.addObject("ConstantForceField", name="actuation", indices=list(range(len(pts))),
                                     forces=np.zeros((len(pts), 3)).tolist()) if loads else None)
+        fictitious = (node.addObject("ConstantForceField", name="fictitious", indices=list(range(len(pts))),
+                                     forces=np.zeros((len(pts), 3)).tolist()) if self._scene.spin else None)
         coll = node.addChild("collision")
         coll.addObject("MeshTopology", position=pts.tolist(), triangles=body.mesh.surface_triangles().tolist())
         coll.addObject("MechanicalObject", position=pts.tolist())
         # pinned bodies don't collide with the ground: contact constraints on fixed vertices
         # (zero compliance) make the constraint solve singular (NaN); the pins hold them anyway
-        groups = {"group": GROUND_GROUP} if body.pinned else {}
+        groups = {"group": GROUND_GROUP} if body.pinned or body.prescribed else {}
         coll.addObject("TriangleCollisionModel", **groups)
         coll.addObject("PointCollisionModel", **groups)  # line-line tests omitted: ~3x faster, same result here
         coll.addObject("IdentityMapping")
         masses = body.vertex_masses()
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
-                "prony": overstress, "actuation": (actuation, loads)}
+                "prony": overstress, "actuation": (actuation, loads), "prescribed": prescribed,
+                "fictitious": fictitious, "body": body.name}
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -393,9 +421,9 @@ class SofaBackend(Backend):
         for _ in range(n):
             if self._diverged:
                 return
-            if self.scene.mount is not None:  # in the mount's frame (implicit Euler: forces at the step's end)
+            if self.scene.mount is not None or self.scene.spin is not None:  # in the mount's frame (implicit Euler: forces at the step's end)
                 self.root.gravity.value = self.mount_gravity(self.time + dt).tolist()
-            self._prev = self._velocities()
+            self._prev2, self._prev = self._prev, self._velocities()
             if self._blown_up(self._prev):
                 self._diverged = True
                 return
@@ -405,6 +433,12 @@ class SofaBackend(Backend):
                 if d["prony"] is not None:
                     overstress, field = d["prony"]
                     field.forces.value = overstress.forces(np.asarray(d["dofs"].position.value, float), dt).tolist()
+                if d["fictitious"] is not None:  # a rotating mount's Euler, centrifugal and Coriolis forces
+                    frame = self.scene.frame(self.time + dt)  # the step's end, like gravity (implicit Euler)
+                    x = np.asarray(d["dofs"].position.value, float) - [0.0, 0.0, d["offset"][2] - self.scene.soft(
+                        d["body"]).pose.position[2]]
+                    v = np.asarray(d["dofs"].velocity.value, float)
+                    d["fictitious"].forces.value = (d["masses"][:, None] * frame.fictitious(x, v)).tolist()
                 field, loads = d["actuation"]
                 if field is not None:
                     x = np.asarray(d["dofs"].position.value, float)
@@ -438,7 +472,7 @@ class SofaBackend(Backend):
             if d["prony"] is not None:
                 d["prony"][0].reset()
         self._sofa.Simulation.reset(self.root)
-        self._prev = None
+        self._prev = self._prev2 = None
         self._diverged = False
 
     @property
@@ -470,8 +504,22 @@ class SofaBackend(Backend):
         soft = {}
         for name, d in self._soft.items():
             pos = np.array(d["dofs"].position.value, float) - [0.0, 0.0, d["offset"][2] - self.scene.soft(name).pose.position[2]]
-            soft[name] = SoftState(pos, np.array(d["dofs"].velocity.value, float))
+            soft[name] = SoftState(pos, np.array(d["dofs"].velocity.value, float), self._reactions(name, d))
         return self._to_world(SimState(self.time, rigid, soft, self._contacts(), self.controls()))
+
+    def _reactions(self, name: str, d: dict) -> dict[str, np.ndarray]:
+        """Force each prescribed region's support exerts on the body, **one step back** (at the last
+        step's start, t - dt): SOFA's ``force`` holds the forces it evaluated there (elastic, damping,
+        gravity, loads), and implicit Euler balanced them with the step before:
+        ``R = sum m (v(t - dt) - v(t - 2 dt)) / dt - f`` over the region's vertices and held axes.
+        So the body's momentum change over that step equals the reactions plus the external forces,
+        to round-off; the end-of-step forces that would give R(t) are not exposed by SofaPython3."""
+        if not d["prescribed"] or self._prev2 is None:
+            return {region: np.zeros(3) for region, *_ in d["prescribed"]}
+        f = np.asarray(d["dofs"].force.value, float)
+        dv = (self._prev[name] - self._prev2[name]) / self.scene.simulation.timestep
+        return {region: mask * ((d["masses"][v, None] * dv[v]).sum(axis=0) - f[v].sum(axis=0))
+                for region, v, mask, _ in d["prescribed"]}
 
     def _contacts(self) -> list[ContactWrench]:
         """Net contact forces from momentum balance (implicit Euler: m dv/dt = f_ext + f_contact)."""

@@ -24,6 +24,7 @@ from softsim.errors import ConfigError
 from softsim.meshing import (
     TetMesh,
     gmsh_box,
+    gmsh_cable_finger,
     gmsh_closed_tube,
     gmsh_cylinder,
     gmsh_hollow_sphere,
@@ -279,6 +280,96 @@ class SoftPneuNet(StrictModel):
         return {"layer": np.nonzero(below)[0], "body": np.nonzero(~below)[0]}
 
 
+class SoftCableFinger(StrictModel):
+    """Tendon-driven finger: a block (``width`` x ``depth`` x ``length``, base at z = 0, centred on the z axis)
+    cut into ``segments`` links by ``segments - 1`` transverse slots, ``slot_width`` wide (along z) and
+    ``slot_depth`` deep (along -x) in its +x face. The tendon runs along z at x = ``width / 2 -
+    tendon_offset``, through the web the slots leave (``tendon_offset > slot_depth``), and pulls the +x
+    side shut: the finger curls towards +x, the slots closing. ``cable: path: geometry`` takes the tendon's
+    path (:meth:`tendon_path`) from here; add ``anchor: top`` to spread its end force over the tip face.
+    With one segment the finger is a plain beam. Meshed with gmsh.
+
+    Regions: ``base`` (z = 0), ``top`` (z = length), ``side`` (|y| = depth / 2), ``cable_side`` (the +x
+    face and the slots' walls)."""
+
+    type: Literal["cable_finger"] = "cable_finger"
+    length: PositiveLength
+    width: PositiveLength                     # x: the bending direction
+    depth: PositiveLength                     # y
+    segments: int = Field(default=1, ge=1)
+    slot_width: PositiveLength | None = None  # required with more than one segment
+    slot_depth: PositiveLength | None = None
+    tendon_offset: PositiveLength             # from the +x face to the tendon
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "SoftCableFinger":
+        if self.segments > 1:
+            if self.slot_width is None or self.slot_depth is None:
+                raise ValueError("cable_finger: more than one segment needs slot_width and slot_depth")
+            if self.slot_width >= self.length / self.segments:
+                raise ValueError("cable_finger: slot_width must be below the segment pitch length / segments")
+            if self.slot_depth >= self.tendon_offset:
+                raise ValueError("cable_finger: the tendon must run through the web: tendon_offset > slot_depth")
+        if self.tendon_offset >= self.width / 2:
+            raise ValueError("cable_finger: the tendon must lie on the +x side of the axis (tendon_offset < width / 2)")
+        return self
+
+    @property
+    def top_height(self) -> float:
+        return self.length
+
+    @property
+    def tendon_x(self) -> float:
+        return self.width / 2 - self.tendon_offset
+
+    def tendon_path(self) -> list[tuple[float, float, float]]:
+        """Corner points of the tendon from the base to the tip, body frame."""
+        return [(self.tendon_x, 0.0, 0.0), (self.tendon_x, 0.0, self.length)]
+
+    def slots(self) -> list[tuple[float, float]]:
+        """The slots' extents (z0, z1), centred on the segment boundaries."""
+        if self.segments == 1:
+            return []
+        pitch = self.length / self.segments
+        return [(i * pitch - self.slot_width / 2, i * pitch + self.slot_width / 2) for i in range(1, self.segments)]
+
+    @property
+    def min_feature(self) -> float:
+        return min(self.width - (self.slot_depth or 0.0), self.depth, *([self.slot_width] if self.segments > 1 else []))
+
+    def volume(self) -> float:
+        return self.length * self.width * self.depth - len(self.slots()) * (self.slot_width or 0.0) * (
+            self.slot_depth or 0.0) * self.depth
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        return self._gmsh(settings.size)
+
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame)."""
+        self._gmsh(1.0, export=path)
+
+    def _gmsh(self, size: float, export=None):
+        return gmsh_cable_finger(self.width, self.depth, self.length, self.slots(), self.slot_depth or 0.0, size,
+                                 export=export)
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        tol = _tol(mesh)
+        hx, hy = self.width / 2, self.depth / 2
+        depth = self.slot_depth or 0.0
+        slots = self.slots()
+
+        def cable_side(p):  # the +x face, or a slot's floor (x = hx - depth) / flank (a slot's z-limits)
+            on_face = p[:, 0] > hx - tol
+            on_floor = np.zeros(len(p), bool)
+            for z0, z1 in slots:
+                on_floor |= (np.abs(p[:, 0] - (hx - depth)) < tol) & (p[:, 2] > z0 - tol) & (p[:, 2] < z1 + tol)
+                on_floor |= ((np.abs(p[:, 2] - z0) < tol) | (np.abs(p[:, 2] - z1) < tol)) & (p[:, 0] > hx - depth - tol)
+            return on_face | on_floor
+
+        return _resolve(mesh, {"base": lambda p: p[:, 2] < tol, "top": lambda p: p[:, 2] > self.length - tol,
+                               "side": lambda p: np.abs(p[:, 1]) > hy - tol, "cable_side": cable_side})
+
+
 Box = tuple[tuple[Length, Length, Length], tuple[Length, Length, Length]]
 
 
@@ -420,7 +511,8 @@ def bind_files(model, base_dir) -> None:
             bind_files(item, base_dir)
 
 
-SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftMeshFile],
+SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftCableFinger,
+                            SoftMeshFile],
                       Field(discriminator="type")]
 
 

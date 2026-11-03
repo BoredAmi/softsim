@@ -37,8 +37,21 @@ def test_zone_validation():
     assert len(zone.elements) == len(body.mesh.tets) // 5  # one of five 2 mm columns across x
     groups = body.material_groups()
     assert sum(len(e) for _, e in groups) == len(body.mesh.tets) and groups[1][0].elastic.youngs_modulus == 5e6
-    with pytest.raises(ConfigError, match="damping"):
-        _beam(["body.zones[0].material.damping={model: rayleigh, alpha: 1.0, beta: 0.0}"]).build_scene()
+    # a zone may have its own damping: only the reference (a Prony series per zone) simulates it
+    from softsim.backends.fem import FemBackend
+    from softsim.backends.mujoco import MujocoBackend
+
+    prony = "body.zones[0].material.damping={model: prony, g: [0.5], tau: [5 ms]}"
+    rayleigh = "body.zones[0].material.damping={model: rayleigh, alpha: 0.0, beta: 1 ms}"
+    assert _beam([prony]).build_scene().soft_bodies[0].zone_damping_differs() == ["layer"]
+    assert _beam().build_scene().soft_bodies[0].zone_damping_differs() == []
+    FemBackend.check(_beam([prony]).build_scene())
+    for cls in (FemBackend, MujocoBackend):  # the reference has no Rayleigh at all; MuJoCo one coefficient per flex
+        with pytest.raises(UnsupportedFeatureError, match="damping"):
+            cls.check(_beam([rayleigh]).build_scene())
+    with pytest.raises(UnsupportedFeatureError, match="own damping"):
+        MujocoBackend.check(_beam([prony, "body.material.damping={model: prony, g: [0.2], tau: [1 ms]}"]
+                                  ).build_scene())
     with pytest.raises(ConfigError, match="no elements"):
         _beam(["body.zones[0].box=[[20 mm, 0, 0], [30 mm, 1 mm, 1 mm]]"]).build_scene()
 

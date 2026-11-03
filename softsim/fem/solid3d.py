@@ -35,6 +35,7 @@ the vertices of the linear mesh the quadratic one was built from.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -101,6 +102,7 @@ _A4, _B4 = 0.5854101966249685, 0.1381966011250105
 _XI4 = np.array([[_B4, _B4, _B4], [_A4, _B4, _B4], [_B4, _A4, _B4], [_B4, _B4, _A4]])
 _W4 = np.full(4, 1.0 / 24.0)
 _STIFFNESS_RULES = {8: (_W, _DN), 4: (_W4, tet10_shape(_XI4)[1])}
+ELEMENT_CHUNK = 25_000  # elements per kernel launch (see ``Solid3DSolver._chunked``)
 _XI_M, _W_M = tet_quadrature(3)      # mass: 27 points, exact to degree 5 (P2 x P2 is degree 4)
 _N_M, _DN_M = tet10_shape(_XI_M)
 
@@ -460,9 +462,10 @@ class Problem3D:
     volume they enclose: the exact follower load ``-p n`` for closed regions, and for regions closed
     by symmetry planes through the origin (where ``x . n = 0``).
 
-    Cable loads: ``cables[k] = (nodes, weights)``, (K, 10) each: via point ``i`` sits at
-    ``sum_j weights[i, j] x[nodes[i, j]]`` (the quadratic shape functions of its element, see
-    :func:`p2_weights`); the cable carries the tension ``Solver.tensions[k]`` as the potential
+    Cable loads: ``cables[k] = (nodes, weights)``, (K, W) each: via point ``i`` sits at
+    ``sum_j weights[i, j] x[nodes[i, j]]`` (the quadratic shape functions of its element, W = 10; or for a
+    cable anchored over a region its last row spreads over the region's corner nodes, W larger, short rows
+    padded with zero weights); the cable carries the tension ``Solver.tensions[k]`` as the potential
     ``T L(x)``, ``L`` the length of the polyline through the via points. A cable with
     ``cable_stiffness[k]`` = k > 0 is stroke-controlled instead: a tendon of stiffness k and free
     length ``Solver.free_lengths[k]`` (its rest length minus the motor's stroke), potential
@@ -483,6 +486,7 @@ class Problem3D:
     force_loads: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per region force: (faces (K, 6), direction (3,));
     #   ``Solid3DSolver.forces`` [N]: uniform traction, consistent (mid-edge nodes, a third of the face area each)
     zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
+    zone_pronys: tuple[Prony | None, ...] = ()  # each zone's own series (None: undamped); empty: the body's ``prony``
 
 
 class Solid3DSolver:
@@ -557,6 +561,9 @@ class Solid3DSolver:
         self.forces = np.zeros(len(problem.force_loads))
         self.gravity = np.asarray(problem.gravity, float)  # changeable between steps (a moving frame)
         self.fixed_motion = None  # optional t -> values of the fixed dofs (``self.fixed``): prescribed motion
+        # gradient of the last accepted step's incremental potential, all dofs: zero at free dofs, and at
+        # held ones the force their support exerts on the body (internal + inertial - external) [N]
+        self.residual = np.zeros(self.ndof)
         self._force_vecs = []  # per region force: its nodal loads for 1 N total
         for faces, direction in problem.force_loads:
             c = m.nodes[faces[:, :3]]
@@ -567,10 +574,10 @@ class Solid3DSolver:
         self._pdofs = [(3 * np.asarray(f, int)[:, :, None] + np.arange(3)).reshape(len(f), 18)
                        for f in problem.pressure_faces]
         self.tensions = np.zeros(len(problem.cables))
-        self._cables = []  # per cable: segment dofs (S, 60), signed segment weights (S, 20), rest positions
+        self._cables = []  # per cable: segment dofs (S, 6W), signed segment weights (S, 2W), rest positions
         for nodes, weights in problem.cables:
-            seg_nodes = np.concatenate([nodes[:-1], nodes[1:]], axis=1)                 # (S, 20)
-            seg_dofs = (3 * seg_nodes[:, :, None] + np.arange(3)).reshape(len(seg_nodes), 60)
+            seg_nodes = np.concatenate([nodes[:-1], nodes[1:]], axis=1)                 # (S, 2W)
+            seg_dofs = (3 * seg_nodes[:, :, None] + np.arange(3)).reshape(len(seg_nodes), -1)
             self._cables.append((seg_dofs, np.concatenate([-weights[:-1], weights[1:]], axis=1),
                                  m.nodes[seg_nodes]))
             groups.append(seg_dofs)
@@ -589,7 +596,8 @@ class Solid3DSolver:
         self._pattern = _UpperPattern(self.ndof, self.free, groups)
         self._epos = self._pattern.positions(np.repeat(self._edofs, 30, axis=1), np.tile(self._edofs, (1, 30)))
         self._ppos = [self._pattern.positions(np.repeat(d, 18, axis=1), np.tile(d, (1, 18))) for d in self._pdofs]
-        self._cpos = [self._pattern.positions(np.repeat(d, 60, axis=1), np.tile(d, (1, 60))) for d, *_ in self._cables]
+        self._cpos = [self._pattern.positions(np.repeat(d, d.shape[1], axis=1), np.tile(d, (1, d.shape[1])))
+                      for d, *_ in self._cables]
         self._cdense = {k: self._pattern.positions(np.repeat(d[None, :], len(d), axis=1),
                                                    np.tile(d[None, :], (1, len(d))))
                         for k, d in self._cable_dofs.items()}
@@ -610,9 +618,10 @@ class Solid3DSolver:
             self.alpha.append(np.zeros(3))
         self._inertia = [np.asarray(b.inertia, float) for b in problem.rigid]
 
-        n_terms = len(problem.prony.g) if problem.prony else 0
-        self._q = np.zeros((n_terms, *self._wv.shape, 3, 3))
-        self._s_prev = np.zeros((*self._wv.shape, 3, 3))
+        # viscous memory per material group (its elements, its Prony series): terms q_i and the last stress
+        self._visc = self._viscous_groups()
+        self._q = [np.zeros((len(pr.g) if pr else 0, len(idx), *self._wv.shape[1:], 3, 3)) for idx, pr in self._visc]
+        self._s_prev = [np.zeros((len(idx), *self._wv.shape[1:], 3, 3)) for idx, _ in self._visc]
 
         self.y = np.zeros(self.ndof)    # u, then rigid dofs (free: d, theta (theta = 0 between steps); slider: z)
         self.v = np.zeros(self.ndof)
@@ -629,6 +638,17 @@ class Solid3DSolver:
 
     # -- kernels (JAX) -----------------------------------------------------------------------------
 
+    def _viscous_groups(self) -> list[tuple[np.ndarray, Prony | None]]:
+        """(elements, Prony series) per material group, in the order of the element kernels: the body's own
+        elements, then each zone (its own series, or the body's when the problem gives none)."""
+        p = self.p
+        rest = np.ones(len(p.mesh.tets), bool)
+        for elements, _, _ in p.zones:
+            rest[elements] = False
+        series = p.zone_pronys or (p.prony,) * len(p.zones)
+        groups = [(np.nonzero(rest)[0], p.prony), *((np.asarray(e, int), s) for (e, _, _), s in zip(p.zones, series))]
+        return [g for g in groups if len(g[0])]
+
     def _build_kernels(self) -> None:
         """Element kernels per material group (the body's law, then each zone's), behind dispatchers
         that keep the single-material call signatures."""
@@ -638,20 +658,22 @@ class Solid3DSolver:
             rest[elements] = False
         groups = [(slice(None) if rest.all() else np.nonzero(rest)[0], p.law, p.bulk_modulus),
                   *((e, law, kappa) for e, law, kappa in p.zones)]
-        kernels = [(idx, self._group_kernels(law, kappa)) for idx, law, kappa in groups if np.size(rest[idx])]
+        kernels = [(idx, self._chunked(self._group_kernels(law, kappa))) for idx, law, kappa in groups
+                   if np.size(rest[idx])]
         n_elem = len(p.mesh.tets)
 
         def elem_grad_hess(u, dndx, wv, c, b):
             if len(kernels) == 1:
                 return kernels[0][1][1](u, dndx, wv, c, b)
             ge, he = np.zeros((n_elem, 30)), np.zeros((n_elem, 30, 30))
-            for idx, k in kernels:
-                g, h = k[1](u[idx], dndx[idx], wv[idx], c, b[idx])
+            for j, (idx, k) in enumerate(kernels):
+                g, h = k[1](u[idx], dndx[idx], wv[idx], c[j] if isinstance(c, tuple) else c, b[idx])
                 ge[idx], he[idx] = g, h
             return ge, he
 
         def elem_energy(u, c, b):
-            return sum(k[0](u[idx], self._dndx_j[idx], self._wv_j[idx], c, b[idx]) for idx, k in kernels)
+            return sum(k[0](u[idx], self._dndx_j[idx], self._wv_j[idx], c[j] if isinstance(c, tuple) else c, b[idx])
+                       for j, (idx, k) in enumerate(kernels))
 
         def iso_stress(u, dndx):
             if len(kernels) == 1:
@@ -664,6 +686,38 @@ class Solid3DSolver:
         self._dndx_j, self._wv_j = jnp.asarray(self._dndx), jnp.asarray(self._wv)
         self._elem_grad_hess, self._elem_energy, self._iso_stress = elem_grad_hess, elem_energy, iso_stress
         self._build_load_kernels()
+
+    @staticmethod
+    def _chunked(kernels):
+        """The three kernels of :meth:`_group_kernels` evaluated at most ``ELEMENT_CHUNK`` elements at a time
+        (env ``SOFTSIM_FEM_CHUNK``, default 25 000): the vmapped Hessians are 7 kB an element, so one
+        launch over 100 000 elements asks the GPU for 4.8 GB and a 12 GB card runs out at about 0.8 mm on
+        the PneuNet finger. Within the limit the call is unchanged."""
+        energy, grad_hess, stress = kernels
+        size = int(os.environ.get("SOFTSIM_FEM_CHUNK", ELEMENT_CHUNK))
+
+        def pieces(n):
+            return [slice(s, min(s + size, n)) for s in range(0, n, size)]
+
+        def chunked_energy(u, dndx, wv, c, b):
+            if len(u) <= size:
+                return energy(u, dndx, wv, c, b)
+            return sum(float(energy(u[s], dndx[s], wv[s], c, b[s])) for s in pieces(len(u)))
+
+        def chunked_grad_hess(u, dndx, wv, c, b):
+            if len(u) <= size:
+                return grad_hess(u, dndx, wv, c, b)
+            ge, he = np.empty((len(u), 30)), np.empty((len(u), 30, 30))
+            for s in pieces(len(u)):
+                ge[s], he[s] = (np.asarray(a) for a in grad_hess(u[s], dndx[s], wv[s], c, b[s]))
+            return ge, he
+
+        def chunked_stress(u, dndx):
+            if len(u) <= size:
+                return stress(u, dndx)
+            return np.concatenate([np.asarray(stress(u[s], dndx[s])) for s in pieces(len(u))])
+
+        return chunked_energy, chunked_grad_hess, chunked_stress
 
     @staticmethod
     def _group_kernels(law, kappa):
@@ -805,18 +859,22 @@ class Solid3DSolver:
         return np.concatenate([u, np.broadcast_to(r, (len(u), len(r)))], axis=1)
 
     def _viscous_terms(self, dt: float):
-        pr = self.p.prony
-        if pr is None or not self.viscous:
-            c = 1.0 if pr is None else 1.0 - sum(pr.g)
-            return c, np.zeros((*self._wv.shape, 3, 3))
-        c = 1.0
+        """(c, b) for the element kernels: the isochoric weight ``c`` (a float, or a tuple with one per material
+        group when there are zones) and the viscous stress history ``b`` (E, Q, 3, 3)."""
+        cs = []
         b = np.zeros((*self._wv.shape, 3, 3))
-        for i, (g, tau) in enumerate(zip(pr.g, pr.tau)):
-            x = dt / tau
-            a = -math.expm1(-x) / x
-            c -= g * (1.0 - a)
-            b += math.exp(-x) * self._q[i] - g * a * self._s_prev
-        return c, b
+        for (idx, pr), q, s_prev in zip(self._visc, self._q, self._s_prev):
+            if pr is None or not self.viscous:
+                cs.append(1.0 if pr is None else 1.0 - sum(pr.g))
+                continue
+            c = 1.0
+            for i, (g, tau) in enumerate(zip(pr.g, pr.tau)):
+                x = dt / tau
+                a = -math.expm1(-x) / x
+                c -= g * (1.0 - a)
+                b[idx] += math.exp(-x) * q[i] - g * a * s_prev
+            cs.append(c)
+        return (cs[0] if len(cs) == 1 else tuple(cs)), b
 
     def _context(self, dt: float) -> dict:
         c, b = self._viscous_terms(dt)
@@ -1018,6 +1076,7 @@ class Solid3DSolver:
                 break
         else:
             return False
+        self.residual = grad  # at the held dofs: the supports' forces on the body (within tol of the end state)
         self._accept(y, dt, ctx)
         return True
 
@@ -1062,16 +1121,19 @@ class Solid3DSolver:
         self._update_contact_state(ctx)
 
     def _update_history(self, dt: float) -> None:
-        pr = self.p.prony
-        if pr is None:
+        if all(pr is None for _, pr in self._visc):
             return
         u = self.y[:3 * self.n].reshape(self.n, 3)
-        s_new = np.asarray(self._iso_stress(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._dndx))
-        if self.viscous:
-            for i, (g, tau) in enumerate(zip(pr.g, pr.tau)):
-                x = dt / tau
-                self._q[i] = math.exp(-x) * self._q[i] + g * (-math.expm1(-x) / x) * (s_new - self._s_prev)
-        self._s_prev = s_new
+        s_all = np.asarray(self._iso_stress(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._dndx))
+        for k, (idx, pr) in enumerate(self._visc):
+            if pr is None:
+                continue
+            s_new = s_all[idx]
+            if self.viscous:
+                for i, (g, tau) in enumerate(zip(pr.g, pr.tau)):
+                    x = dt / tau
+                    self._q[k][i] = math.exp(-x) * self._q[k][i] + g * (-math.expm1(-x) / x) * (s_new - self._s_prev[k])
+            self._s_prev[k] = s_new
 
     def _update_contact_state(self, ctx) -> None:
         refs = self._rigid_refs(self.t)
@@ -1135,9 +1197,13 @@ class Solid3DSolver:
 
     def internal_forces(self) -> np.ndarray:
         """Nodal internal forces (N, 3) of the current stress, viscous memory included."""
-        pr = self.p.prony
-        c = 1.0 - sum(pr.g) if pr is not None else 1.0
-        b = self._q.sum(axis=0) if (pr is not None and self.viscous) else np.zeros((*self._wv.shape, 3, 3))
+        cs = tuple(1.0 - sum(pr.g) if pr is not None else 1.0 for _, pr in self._visc)
+        c = cs[0] if len(cs) == 1 else cs
+        b = np.zeros((*self._wv.shape, 3, 3))
+        if self.viscous:
+            for (idx, pr), q in zip(self._visc, self._q):
+                if pr is not None:
+                    b[idx] = q.sum(axis=0)
         ge, _ = self._elem_grad_hess(jnp.asarray(self.u[self.p.mesh.tets].reshape(-1, 30)), self._dndx, self._wv,
                                      c, jnp.asarray(b))
         f = np.zeros(3 * self.n)

@@ -2,7 +2,9 @@
 
 Three actuators so far: pressure on a surface region, cables routed through
 the body (by tension or by stroke), and forces on a surface region. The fixed
-regions can also follow a prescribed translation (a moving mount). See
+regions can also follow a prescribed translation (a moving mount), and any
+region can follow a prescribed path with its reaction reported (displacement
+control). See
 [roadmap.md](roadmap.md), M6. The scenario is `actuation` (`inflation`
 is the same scenario under its first name).
 
@@ -18,6 +20,7 @@ outward normals, found on the mesh from the shape's own geometry
 | `hollow_sphere` (`outer_diameter`, `inner_diameter`) | `cavity`, `outer` |
 | `closed_tube` (`outer_diameter`, `inner_diameter`, `height`, `cap`) | `cavity`, `base`, `top`, `side` |
 | `pneunet` (see [below](#a-pneunet-finger)) | `cavity`, `base`, `tip`, `bottom`, `top`, `side` |
+| `cable_finger` (see [below](#a-cable-finger)) | `base`, `top`, `side`, `cable_side` |
 | `mesh_file` (STEP, STL, OBJ, `.msh`, VTK; [adding_a_body.md](adding_a_body.md#soft-body-from-a-file-no-code)) | the file's named groups, `surface`, `cavity` (found by itself), boxes you name |
 
 The hollow shapes are meshed with gmsh (`pip install softsim[mesh]`). Regions
@@ -90,6 +93,36 @@ inner stretch matches the exact solution within **0.1%** up to `la` = 1.62
 (p = 0.8 mu), and the quasi-static solve fails above the limit pressure, as it
 must (`tests/test_actuation.py`). The symmetry planes pass through the centre,
 where `x . n = 0`, so `-p V` stays exact on the open octant.
+
+**Thick tube with closed ends (Lamé, free axial extension).** The sphere is
+the finite-strain case; this one checks the same load on a different geometry,
+and the axial part of the closed cavity (its end walls carry the pressure
+into the tube). For a tube of radii `a < b` at pressure `p`, `A = p a² / (b² − a²)`,
+`B = A b²`: `σ_r = A − B/r²`, `σ_θ = A + B/r²`, `σ_z = A`, so
+
+```text
+u_r = [(1 − 2ν) A r + (1 + ν) B / r] / E,    ε_z = (1 − 2ν) A / E
+```
+
+(plane strain would have `ε_z = 0`, and a `(1 + ν)` larger `A` term). A
+100 mm long tube of 10/20 mm (E = 100 kPa, ν = 0.3, 10 mm caps) at 200 Pa,
+reference on the closed `closed_tube` body, measured over its middle (±12 mm
+for the radial displacement, ±30 mm for the axial slope):
+
+| Mesh | u_r(a) | u_r(b) | ε_z |
+| --- | --- | --- | --- |
+| 4 mm | −10.2% | −10.1% | −6.4% |
+| 2.5 mm | −3.5% | −3.2% | |
+| 1.8 mm | −1.5% | −1.4% | +0.3% |
+| 1.3 mm | −0.5% | −0.4% | |
+
+Second-order convergence to the exact values (`tests/test_actuation.py::
+test_reference_matches_lame_closed_end_tube`, which runs 4 and 1.8 mm). The test
+is sensitive: loading only the tube's cylindrical wall (no end-wall pressure)
+gives an axial strain 79% too low and the outer wall 4.3% off. The four
+mid-height nodes pinned against rigid-body motion are where the symmetric solution is
+zero, so they do not disturb it. This replaces the open-lid plane-strain idea, which
+the `−pV` load cannot close.
 
 **Backends at the same card** (`python tools/compare_inflation.py`; 40/20 mm
 sphere, Neo-Hookean E = 30 kPa, nu = 0.45, 3 kPa held):
@@ -200,6 +233,7 @@ actuators:
     path: [[3 mm, 0, 0], [3 mm, 0, 55 mm]]     # body frame: from the exit to the motor, to the anchor
     schedule: [[0 ms, 0 N], [400 ms, 0.7 N]]    # tension; or `tension: 0.5 N`
     # spacing: 2 mm                             # via points at most this far apart (default: mesh size)
+    # anchor: top                               # spread the last point's load over this face (see below)
 ```
 
 A cable is a tendon of tension `T` through via points along `path`. The via
@@ -247,9 +281,44 @@ quasi-static, 2.5 mm; `tests/test_cable.py`). Two things the check taught:
 - **Without `E_t`, the error grows with the load** (−2.4% → −5.2% over the same
   range). It halves on a beam twice as long at the same tip angle, so it scales
   with strain, not rotation: material nonlinearity, as the formula says.
-- **Anchor the cable inside the body, not on the face where you measure.** A
-  point anchor on the top face dents it, and the face's tilt then reads 4–6%
-  low. Anchored 5 mm below, the top face rotates rigidly with the beam.
+- **Anchor the cable inside the body, not at a point on the face where you
+  measure.** A point anchor on the top face dents it, and the face's tilt then
+  reads 4–6% low. Anchored 5 mm below, the top face rotates rigidly with the
+  beam; or spread the anchor over the face, next.
+
+### Anchor spread over a face
+
+`anchor: <region>` makes the last path point (it must lie on that boundary
+region, e.g. `top`) not a point load but a traction over the region: the linear
+traction with the same resultant and moment, i.e. nodal weights `w_j` with
+`sum w_j = 1` and `sum w_j x_j = ` the anchor point (`softsim.actuation.anchor_weights`).
+A cable pulling the end by `F` loads the face with `w_j F`, so the end section
+carries a force `F` and a moment about the point just as the point load would,
+without the singularity. On a quadratic mesh the weights are the consistent
+nodal loads (mid-edge nodes included); on the linear meshes of MuJoCo and SOFA
+they are the corner nodes' shares. The cable length under stroke control then
+ends at the weighted point `sum w_j x_j`, which moves with the face.
+A cable 3 mm off the axis of a 10 mm section is outside the section's core
+(1.7 mm), so some weights are negative: tension on the far side, as beam theory
+has it.
+
+**Verification** (reference, 2.5 mm quadratic, cable to the top face at
+L = 60 mm, `scenarios/actuation/cable_cantilever_anchored.yaml`;
+`tests/test_cable.py`, run `python -m pytest tests/test_cable.py -k anchor`):
+
+| Case | Tip angle vs Euler–Bernoulli | Stroke 0.3 mm: tension / angle | Stroke 3 mm: tension / angle |
+| --- | --- | --- | --- |
+| **anchor: top** (0.7 N) | +0.27% (2.5 mm), −0.44% (1.25 mm) | +0.3% / +0.4% | +0.5% / +0.7% |
+| point anchor on the face | −2.6% (2.5 mm); Newton fails at 1.25 mm | −19% / −21% | −18% / −20% |
+
+On the linear-tet backends (2 mm, 0.7 N) the angle is far under Euler–Bernoulli
+because of locking, as in the tension table above (MuJoCo 0.205 rad, SOFA
+0.205 rad, 70% of 0.294), but the spread anchor raises it by the same 2.6%
+over a point anchor (0.200 rad) as on the reference (+2.9% at 2.5 mm):
+`scenarios/actuation/cable_cantilever_anchored.yaml --backend mujoco|sofa`.
+
+The stroke columns need no stiff cap now. Corner-node-only weights on the
+quadratic mesh (not the consistent load) read +2.7% in the first column.
 
 
 ![Cable-bent cantilever: tip angle against tension, and the deformed beam against the
@@ -314,7 +383,8 @@ take the stroke in m. A negative stroke pays the cable out.
 The scenario reports `<name>_command` (the stroke) and `<name>_tension`, which
 follows from the current length.
 
-**Anchor a stroke-controlled cable in something stiff.** A cable ending at a
+**Anchor a stroke-controlled cable in something stiff, or spread over a face
+(`anchor:`, above).** A cable ending at a
 point inside the soft body pulls that point into the material. A point load is
 singular, so how far it moves depends on the mesh, and under stroke control
 that local give counts as cable shortening: 10% less tension and tip angle
@@ -339,6 +409,74 @@ MuJoCo and SOFA agree to 0.01%. Their beam is too stiff (the locking of the
 tension-controlled table), so the same stroke takes more tension and bends it
 less. The stroke run's equilibrium is the tension run's at the tension it
 found (`tests/test_cable.py`).
+
+## A cable finger
+
+`geometry: {type: cable_finger, ...}` is a tendon-driven finger: a block
+(`width` × `depth` × `length`, base at z = 0, centred on the z axis) cut into
+`segments` links by `segments − 1` transverse slots (`slot_width` along z,
+`slot_depth` into the +x face). The tendon runs along z at `tendon_offset` from the +x
+face, through the web the slots leave (`tendon_offset > slot_depth` is checked), and
+pulls that side shut: the finger curls towards +x. `path: geometry` on the cable
+takes this path from the shape, and `anchor: top` spreads its end over the tip face
+(above). With `segments: 1` the finger is a plain beam. The shape writes CAD like the
+others (`softsim export ... --cad`). `scenarios/actuation/cable_finger.yaml`:
+
+```yaml
+body:
+  geometry: {type: cable_finger, length: 60 mm, width: 12 mm, depth: 10 mm, segments: 4,
+             slot_width: 3 mm, slot_depth: 3 mm, tendon_offset: 4.5 mm}
+  material: {preset: ecoflex_00_30, damping: null}   # E = 114 kPa
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+actuators:
+  - {name: cable, type: cable, path: geometry, anchor: top, schedule: [[0 ms, 0 N], [400 ms, 0.2 N]]}
+```
+
+**Verification** (reference, quasi-static, 0.2 N, tip-face rotation;
+`tests/test_cable_finger.py`):
+- **The mesh is the geometry:** the tetrahedra's volume is the block minus the slots, to
+  rounding (relative 1e-9); the slots sit at the segment boundaries; base, top, side
+  and cable-side regions are where they should be; the tendon runs through solid
+  along its whole length.
+- **One segment is Euler–Bernoulli:** `theta = T d L / (E_t I)` (`softsim.analytic.cable_beam_tip_angle`,
+  d = 1.5 mm) is 0.1065 rad; the reference gives 0.1055 (2.5 mm, −0.9%) and 0.1051 (1.5 mm, −1.4%).
+- **The slots add compliance, and the 1-D model understates it:** the four-link finger
+  rotates 0.2677 rad (2.5 mm) and 0.2664 rad (1.5 mm; the mesh changes it by 0.5%), 2.54 times the plain
+  beam. A beam with plane sections through each slot (the web's own centroid and
+  moment of inertia) predicts 1.55 times: the slots are short for their depth, and
+  the material beside them takes part. Treat that estimate as a lower bound, not a prediction.
+- **Direction and ordering:** a deeper slot (3.5 mm) rotates more; MuJoCo bends towards the tendon.
+
+Reproduce: `python -m pytest tests/test_cable_finger.py`, or
+`softsim run scenarios/actuation/cable_finger.yaml --backend fem --set simulation.timestep=2ms`.
+
+## A two-segment cable arm
+
+`scenarios/actuation/cable_arm.yaml` is a continuum arm made from features
+already described: a 12 × 12 × 120 mm Ecoflex 00-30 column with two stiff
+disks (50 MPa zones, 4 mm, at z = 38–42 and 78–82 mm) and two cables on opposite
+sides (x = ±4 mm). Cable A ends in the lower disk, cable B passes through it
+and ends in the upper one, as in a tendon-driven arm with spacer disks.
+
+The lower segment carries both moments, `(T_A − T_B) d`, under the axial force
+`T_A + T_B`; the upper one only B's, `−T_B d`; the disks are rigid and the tail
+above the second disk is unloaded. Euler–Bernoulli per soft length,
+`θ = Σ M L / (E_t I)` with `E_t = E (1 + 2N / (E A))`, predicts 0.2157 rad
+after the first segment and 0.1080 rad at the tip (T_A = 0.45 N, T_B = 0.15 N). The
+reference (2 mm quadratic, quasi-static) gives 0.2119 rad (−1.8%) and 0.1074 rad
+(−0.6%): the arm bends one way below the first disk and back above it (an S),
+the disks turn rigidly, and the tail stays straight. With cable B ending in the
+first disk instead, nothing bends the upper segment and the whole arm above the
+disk is straight (`tests/test_cable_arm.py`).
+
+MuJoCo (2 mm, 0.1 ms, 20 min for 0.5 s because the stiff disks make the flex
+ill-conditioned) ends at a tip rotation of 0.161 rad and a tip displacement of 17.9 mm,
+against the reference's 0.107 rad and 14.9 mm. This is an observation, not a
+comparison: the beam is undamped and still swinging at 500 ms (the tension
+ramp ends at 400 ms), and the tip rotation is the difference of two segment
+rotations, each affected by linear-tet locking, so a quasi-static run with the
+transferred modulus would be needed to say anything. Not done.
 
 ## Region forces
 
@@ -427,6 +565,179 @@ NaN hands an actuator back to its schedule (`Simulation.apply_controls`). In
 `tests/test_cable.py`, a PI loop on the cable tension holds the lightly damped
 beam at a 0.1 rad tip angle on MuJoCo, within 3%.
 
+## Rotating mount
+
+```yaml
+body:
+  fixed: [base]
+  mount_rotation:                      # composes with mount_path
+    axis: [0, 1, 0]                    # normalised
+    center: [0, 0, 0]                  # a point of the axis (rest frame)
+    path: [[0 ms, 0 deg], [300 ms, 90 deg], [800 ms, 0 deg]]   # angle from rest, minimum jerk
+```
+
+The fixed regions turn about an axis, such as a finger on a spinning arm or a
+gripper wrist. In the mount's frame every point feels, per unit mass, gravity
+`R^T (g - p'')` and the fictitious accelerations `-alpha x r - omega x (omega x
+r) - 2 omega x v` (Euler, centrifugal, Coriolis), with `r` measured from the
+centre (`softsim.scene.MountFrame`; `MountFrame.fictitious` and `.gravity` are
+used by every backend). Positions and velocities are reported in the world.
+
+| Backend | Frame | How |
+| --- | --- | --- |
+| MuJoCo | the mount's | gravity rotated each step, the three forces `m a` as explicit vertex forces at the step's middle |
+| SOFA | the mount's | the same, in a `ConstantForceField`, at the step's end like gravity |
+| fem (reference) | the **world** | the pinned nodes follow `R (X - c) + c + p` exactly: no fictitious forces to get wrong. Trapezoidal rule |
+
+Only waypoint paths are available (the rate is zero at every waypoint), so no
+constant-rpm spin yet. Region forces and prescribed regions are refused with a
+rotating mount: their directions are world directions and would have to turn
+with the frame.
+
+**Verification**, five independent checks (`tests/test_rotating_mount.py`,
+figure `docs/media/rotating_mount.png`, `python tools/plot_spin.py`):
+
+1. **The terms.** A free particle moves on a known world trajectory. The same
+   path in the mount's frame, differentiated numerically twice, gives the
+   acceleration `MountFrame` says it has. Any wrong sign or factor of Euler,
+   centrifugal, Coriolis or the rotated gravity fails it (5 mutants).
+2. **The plumbing.** From the state a backend reports, with a tilted axis through
+   an off-centre point, the force it applied to each vertex equals `m` times that
+   acceleration to 2e-4, on MuJoCo and SOFA (mutants: the skin offset, the
+   frame's time, the mass). A velocity left unrotated is an equivalent mutant:
+   an unrotated body's vertex axes are the world's.
+3. **Centrifugal stretch.** A beam spinning about an axis across it, at 60 rad/s
+   without angular acceleration, stretches by `rho w^2 L^3 / (3 E)` = 0.555 mm:
+
+   | Model | Stretch against that | Lateral deflection |
+   | --- | --- | --- |
+   | reference, 5 ms / 2.5 ms | +3.35% / +2.83% (+2.7% extrapolated, the 3D rod against the 1D formula) | 0.39 / 0.12 mm |
+   | MuJoCo | -1.6% | 0.01 mm |
+   | SOFA | -2.3% | 0.01 mm |
+   | reference, default Newmark (damping 0.25), 5 ms | **-32%** | **4.6 mm** |
+
+   The default scheme's numerical damping dissipates the rotation's centripetal
+   balance, so a rotating mount uses the trapezoidal rule (second order: the
+   lateral deflection falls 3.2x when the step is halved).
+4. **The Euler force.** From rest, the beam's tip is left behind: when a rigidly
+   turning tip would have moved 1 mm (3.3 ms, before the elastic signal from the
+   clamp arrives), it has moved 0.0% of that on the reference, 4.2% on MuJoCo
+   and 21.7% on SOFA (the cause is not investigated). Without the force it
+   moves 100%.
+5. **Spinning is invisible to a round beam.** A round beam bends alike in every
+   direction, so in the world its tip moves as without the spinning clamp, whatever
+   its stiffness: the rotated gravity, centrifugal and Coriolis forces must all be
+   right. The beam of `scenarios/actuation/spinning_cantilever.yaml` spins
+   twice in 0.5 s under horizontal gravity:
+
+   ![Tip trajectories with the mount spinning and not, and with a fictitious force removed](media/rotating_mount.png)
+
+   Largest tip difference from the not spinning run, as a fraction of the sag:
+
+   | Model | Difference |
+   | --- | --- |
+   | reference (world frame, 2.5 ms) | 6.4% |
+   | MuJoCo, 3 mm elements | 20.8% |
+   | SOFA, 3 mm elements | 16.9% |
+   | SOFA without the Coriolis force | 131% |
+   | SOFA without the centrifugal force | 48% |
+   | SOFA, Coriolis force reversed | 355% |
+   | SOFA, centrifugal force reversed | 70% |
+
+   The 17-21% of MuJoCo and SOFA is not the forces (check 2) but their
+   linear tetrahedra, in two parts. (a) At 3 mm the mesh is anisotropic: the
+   beam sags 4.2% differently along different directions (0.3% at 1.5 mm), and
+   a spinning beam at 0.7 of its bending frequency amplifies that. (b) Implicit
+   Euler damps a mode by an amount that depends on its frequency in the
+   integrated frame; the two whirl components have other frequencies in the
+   mount's frame than the still beam's, so they decay differently. On the 2 mm
+   mesh, SOFA's difference is 9.6, 7.3 and 6.3% at steps of 1, 0.5 and 0.25 ms.
+   Across meshes at 1 ms: 23.9% (4 mm), 16.9% (3 mm), 9.6% (2 mm), 11.1%
+   (1.5 mm).
+
+**The reference's step.** The undamped trapezoidal rule is only reliable for a
+small rotation per step. On this beam, at 2.5 ms (0.11 rad per step at the peak
+rate) the reference agrees with the still run (6.4%, the same bending frequency
+to four digits). At 5 ms (0.23 rad per step) a whirl grows: 6 mm lateral
+deflection, and the run-to-run scatter of the GPU's rounding gives anything from
+31% to 198% apart (three identical runs). The stability check warns above 0.15 rad per step
+(`spin-step`) and when the centrifugal strain `rho w^2 r^2 / 3E` of the
+farthest point exceeds 20% (`spin-centrifugal`: a soft beam spun fast enough has
+no equilibrium).
+
+## Prescribed region motion (displacement control)
+
+```yaml
+body:
+  prescribed:                    # any surface region, along its own path
+    - {region: base, path: [[0 ms, [null, null, 0]], [300 ms, [null, null, 0]]]}   # a roller: held in z only
+    - {region: top,  path: [[0 ms, [null, null, 0]], [200 ms, [null, null, 2 mm]]]}
+```
+
+Every vertex of a region moves along `path` (waypoints from rest, minimum
+jerk, held after the last; with a moving mount it is relative to the mount).
+`null` leaves an axis free in every waypoint. This is the grip of a tension
+test, a probe pressing in, or a servo-driven clamp. The reaction is what the
+motion needs, which a force actuator can't tell you. Outputs, per held axis:
+`<region>_reaction_<axis>` [N], the force the support exerts on the body, and
+`<region>_displacement_<axis>` [m], the region's centroid motion.
+
+| Backend | How | Reaction |
+| --- | --- | --- |
+| fem (reference) | the region's dofs (vertices and the mid-edge nodes between them) are fixed to the path at each step's end | the converged residual at those dofs: `sum(M a) - weight` for a free body, exact to Newton's tolerance |
+| MuJoCo | a joint equality per held axis of each vertex, `timeconst` 2 steps, the path's velocity fed forward | the sum of their constraint forces |
+| SOFA | `PartialLinearMovementProjectiveConstraint` with a key per step | `sum m dv/dt - f` over the region, **one step back**: approximate in fast motion |
+
+Details that were measured, not assumed:
+- A MuJoCo soft constraint trails a moving target by `2 timeconst v`
+  (0.75 um on a 200 um pull in 0.2 s, measured on a bar with direct joint
+  equalities). Feeding the velocity forward cancels it: 0.006 um. The tracking
+  test allows 0.04 um and fails without the feed-forward.
+- SOFA's constraint takes the key of the step's *start* time, so each key holds
+  the path at the step's end. Without the shift the region trails by a step
+  (9.4 um at 94 mm/s and 0.1 ms).
+- On a rotated body MuJoCo's vertices slide along the body's axes, so holding
+  only some world axes is refused.
+
+**Verification:** `scenarios/actuation/tension_test.yaml`, a 10 x 10 x 20 mm
+bar on a roller pulled 10% in 200 ms. The state is homogeneous uniaxial stress,
+which every element type represents exactly, so the reaction per area is the
+material's nominal stress at stretch 1.1
+(`softsim.materials.homogeneous.curve`, `tests/test_prescribed.py`):
+
+| Model | Pull at 10% | Against the exact 0.908919 N |
+| --- | --- | --- |
+| **fem reference** (neo-Hookean) | 0.908919 N | 1e-7; at 30% stretch 1e-5, with the sideways contraction 0.9582 on every vertex to 1e-8 m |
+| MuJoCo (stable neo-Hookean) | 0.917325 N | +0.92% |
+| SOFA (stable neo-Hookean) | 0.917381 N | +0.93% |
+
+MuJoCo and SOFA agree to 6e-5. Their stable neo-Hookean law is 0.9% stiffer
+than the split neo-Hookean of the reference at 10%, a difference in the law,
+not locking (a uniform stretch cannot lock). On every backend, a force
+actuator on the top face with the force the displacement run reported
+stretches the bar by the prescribed 2 mm to 0.2%: the reaction is the force
+the motion needs.
+
+![Reaction against stretch up to 30%, three backends and the exact curve](media/prescribed_tension.png)
+
+`tools/plot_tension.py` pulls the bar to 30% in 400 ms on each backend. The
+reference follows the exact curve to 1e-5 (the table's last row: 2.335002 against
+2.335007 N). MuJoCo and SOFA are 2.6% above it at 30%, the stable neo-Hookean
+law. SOFA's curve also sits below the others early in the pull (-5% at 0.5%
+stretch, -0.3% at 10%): its reaction is one step (1 ms) old, and against the
+current stretch that is stiffness x speed x 1 ms, a constant offset that is large
+only where the force is small. It is gone at the hold (the first table).
+
+A fast pull (1 mm in 20 ms, about 2.5 axial periods, under gravity, with a heavy
+top layer of 20 000 kg/m^3 so that the held face's own inertia is a third of
+the reaction) checks that the reaction carries the inertia: reaction + weight =
+rate of change of the body's momentum. Reference: 1.4e-6 of the peak reaction.
+MuJoCo: 1.6e-4. SOFA: 0.9%, one step back, because SofaPython3 does not expose
+implicit Euler's end-of-step forces. The quasi-static reactions are exact on all
+three. Without the held region's inertia SOFA's reaction is off by 41% here (a
+mutation test); on a uniform light bar the region is 2% of the mass, which
+SOFA's own error hides.
+
 ## Multi-material bodies
 
 ```yaml
@@ -451,12 +762,33 @@ vertex body, SOFA a per-element `massDensity`, the reference in its consistent
 mass matrix). Under gravity, a cantilever whose outer half is four times as
 dense sags 3.56 times as much as a uniform one. That is Euler–Bernoulli's ratio
 (3.562). The reference is within 0.15% of the theory's tip deflection
-(`tests/test_zones.py`). A zone must still have the body's damping, because the
-viscous history is that of one material.
+(`tests/test_zones.py`).
+
+**A zone may have its own damping, in the reference only.** Each zone then
+carries its own Prony series (or none: a stiff cap that does not relax) with its
+own viscous memory; a zone without a `damping:` entry of its own is undamped,
+not the body's. Rayleigh and Kelvin–Voigt damping are not in the reference at
+all, MuJoCo has one damping coefficient per flex, and SOFA's Rayleigh damping
+belongs to the solver (a force field's own `rayleighStiffness` is not used by
+its elastic force fields; measured: no effect on the decay), so a zone whose
+damping differs from the body's is refused there, naming the zone.
+`Scene` knows them as `SoftBodySpec.zone_damping_differs()`.
+
+**Verification** (`tests/test_fem_3d.py::test_zone_prony_follows_its_own_series`,
+quasi-static ramp and hold, 5 mm): a quarter of a box's cross-section is a zone
+with series B (g 0.3, τ 5 ms) in a body with series A (g 0.6, τ 20 ms), compressed
+uniformly. The elastic cards are equal and the material is near-incompressible,
+so the strain state stays homogeneous and the plate force must be the
+area-weighted sum of what each series gives alone (`softsim.materials.homogeneous.history`):
+0.75 F_A + 0.25 F_B. At 0.1 s the reference gives 1.457 N (F_A = 1.232 N,
+F_B = 2.135 N; the sum is 1.457 N); a global series would give 1.232 N. The
+same test with an undamped zone passes too. With the zone given the body's own
+series, or the whole body B, the reference reproduces the homogeneous history
+to 6e-5.
 
 | Backend | Zones |
 | --- | --- |
-| fem (reference) | any law per zone; Prony applies to each zone's own stress |
+| fem (reference) | any law per zone; each zone has its own Prony series (or none) |
 | SOFA | one force field per material, each in a child node on that material's elements |
 | MuJoCo | the body's elastic model (Stable Neo-Hookean or StVK, one per flex), any modulus and Poisson's ratio. MuJoCo precomputes 24 values per element: the material constants times the element's geometry, plus geometry alone. A zone's rows are copied from a model compiled with the zone's material, so they match it exactly (`tests/test_zones.py`). Scaling the rows is wrong, because it also scales the geometry-only value. |
 
@@ -550,8 +882,31 @@ the `tip` face's rotation from its rest orientation.
   V/V0 2.85 and 39° at 16 kPa, then the run diverges. These thin Ecoflex
   chambers approach their limit pressure, like the sphere. The reference,
   which is softer, gets there sooner, so this scenario stops at 8 kPa.
+- **How converged is the reference itself?** Quasi-static runs on the GPU,
+  same finger, 1.5 mm down to 0.7 mm (152k tetrahedra, 709k dofs; the largest
+  needed the element kernels chunked, below):
+
+  | Mesh | Tetrahedra | 4 kPa: tip angle | 8 kPa: tip angle | 8 kPa: V/V0 | Wall time (4 loads) |
+  | --- | --- | --- | --- | --- | --- |
+  | 1.5 mm | 17.9k | 5.316° | 13.496° | 1.5616 | 40 s |
+  | 1.2 mm | 34.1k | 5.377° | 13.628° | 1.5688 | 104 s |
+  | 1.0 mm | 52.1k | 5.511° | 13.921° | 1.5766 | 200 s |
+  | 0.8 mm | 101.7k | 5.519° | 13.943° | 1.5809 | 804 s |
+  | 0.7 mm | 152.7k | 5.544° | 13.997° | 1.5827 | 1506 s |
+
+  The tip angle rises monotonically and the steps shrink (0.4% from 0.8 to
+  0.7 mm at 8 kPa), but it is not yet flat: **the 1.5 mm reference used for
+  the transfers is 3.6% under-bent (volume change −3.6%) against 0.7 mm**, and
+  0.7 mm itself is probably still a fraction of a percent low. The earlier
+  steps are not a clean power law (0.13°, 0.29°, 0.02°, 0.05°), so I do not
+  extrapolate; the mesh sequence from the gmsh generator is not
+  uniformly refined. Consequence for the transfers: they reproduce the
+  1.5 mm reference, and carry its few-percent bias.
 - **Not yet compared with a real finger.** I found no open dataset of
   bending angle against pressure with full geometry and material. Measured
   data is M7 (PneuNet datasets with DOI and licence). Until then these numbers
   check the backends against each other and the reference, not against
-  reality.
+  reality. The candidates I found and why none is usable yet are in
+  [decisions.md](decisions.md) (entry 3); `softsim fit`
+  ([experiments.md](experiments.md)) is ready to fit a measured pressure–angle
+  table to the finger as soon as one with a known geometry and material is chosen.

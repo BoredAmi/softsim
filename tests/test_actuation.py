@@ -137,6 +137,58 @@ def test_reference_matches_exact_thick_sphere():
     assert not s.solve_step(1.0, max_iter=25)
 
 
+def _closed_tube_lame(size):
+    """Closed-end thick tube (E = 100 kPa, nu = 0.3, 10/20 mm, 100 mm long, 10 mm caps) at 200 Pa on the
+    reference: (u_r at the inner and outer wall, axial strain) over the tube's middle, with the Lame
+    closed-end values for the same quantities. Rigid-body modes are removed by pinning eight displacement
+    components of four mid-height nodes where the symmetric solution is zero."""
+    from softsim.fem.materials import NeoHookeanIso
+    from softsim.fem.solid3d import Problem3D, QuadraticTetMesh, Solid3DSolver
+    from softsim.geometry import MeshSettings, SoftClosedTube
+
+    young, nu, a, b, height, p = 100e3, 0.3, 0.005, 0.010, 0.100, 200.0
+    shape = SoftClosedTube(outer_diameter=2 * b, inner_diameter=2 * a, height=height, cap=0.010)
+    lin = shape.mesh(MeshSettings(size=size, method="gmsh"))
+    m = QuadraticTetMesh.from_linear(lin.points, lin.tets)
+    fixed = []
+    for target, components in (((b, 0, height / 2), (1, 2)), ((0, b, height / 2), (0, 2)),
+                               ((-b, 0, height / 2), (1, 2)), ((0, -b, height / 2), (0, 2))):
+        node = int(np.argmin(np.linalg.norm(m.nodes - np.array(target), axis=1)))
+        fixed += [3 * node + c for c in components]
+    s = Solid3DSolver(Problem3D(m, NeoHookeanIso(young / (2 * (1 + nu))), young / (3 * (1 - 2 * nu)), 1000.0,
+                                gravity=(0, 0, 0), fixed_dofs=np.array(fixed),
+                                pressure_faces=(m.faces_of(shape.regions(lin)["cavity"]),)), dynamic=False)
+    s.pressures[:] = [p]
+    assert s.advance(1.0)
+    u = s.y[:3 * s.n].reshape(-1, 3)
+    x = m.nodes
+    r = np.hypot(x[:, 0], x[:, 1])
+    ur = (u[:, 0] * x[:, 0] + u[:, 1] * x[:, 1]) / np.maximum(r, 1e-12)
+    middle = np.abs(x[:, 2] - height / 2) < 0.012
+    lam, gam = p * a * a / (b * b - a * a), p * a * a * b * b / (b * b - a * a)  # sigma_r = lam - gam / r^2
+    exact = lambda rr: ((1 - 2 * nu) * lam * rr + (1 + nu) * gam / rr) / young  # noqa: E731
+    walls = [(ur[middle & (np.abs(r - rr) < 1e-7)].mean(), exact(rr)) for rr in (a, b)]
+    band = (np.abs(r - b) < 1e-7) & (np.abs(x[:, 2] - height / 2) < 0.03)
+    return walls, np.polyfit(x[band, 2], u[band, 2], 1)[0], (1 - 2 * nu) * lam / young
+
+
+def test_reference_matches_lame_closed_end_tube():
+    """Thick tube with closed ends under internal pressure, free to extend. The closed cavity carries the
+    axial load through its end walls, so sigma_z = p a^2 / (b^2 - a^2) and (Lame) u_r = [(1 - 2 nu) A r +
+    (1 + nu) B / r] / E with A = p a^2 / (b^2 - a^2), B = A b^2, and the middle of the tube stretches by
+    eps_z = (1 - 2 nu) A / E (plane strain would give 0 and a (1 + nu) larger A term). The quadratic
+    reference converges at second order: the radial displacement is -10%, -3.5%, -1.5%, -0.5% off at 4,
+    2.5, 1.8, 1.3 mm (inner and outer wall alike); the axial strain is -6.4% off at 4 mm, +0.3% at 1.8 mm."""
+    pytest.importorskip("jax")
+    coarse, _, _ = _closed_tube_lame(0.004)
+    fine, strain, expected = _closed_tube_lame(0.0018)
+    for (sim, exact) in fine:
+        assert sim == pytest.approx(exact, rel=0.025)
+    err = lambda walls: max(abs(sim / exact - 1) for sim, exact in walls)  # noqa: E731
+    assert err(coarse) > 4 * err(fine)  # second-order convergence, not a lucky match
+    assert strain == pytest.approx(expected, rel=0.05)
+
+
 def test_transfer_recovers_the_identity(tmp_path):
     """Transfer MuJoCo against MuJoCo run with E = 30 kPa, starting from 20 kPa: recovers 30 kPa."""
     pytest.importorskip("mujoco")

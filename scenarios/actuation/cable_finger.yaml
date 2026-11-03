@@ -1,0 +1,40 @@
+# Tendon-driven finger (docs/actuation.md): a 60 x 12 x 10 mm Ecoflex 00-30 block cut into four links
+# by three 3 mm slots, 3 mm deep, in its +x face (geometry `cable_finger`). The tendon runs through
+# the web the slots leave, 4.5 mm from the +x face (`path: geometry` takes it from the shape)
+# and ends spread over the tip face (`anchor: top`). Pulling it closes the slots: the finger curls
+# towards +x. Smooth ramp to 0.2 N over 400 ms, then held; no gravity. Outputs: tip_x/z,
+# bend_angle (tip face rotation), cable_tension/length.
+#   softsim run scenarios/actuation/cable_finger.yaml
+#   softsim run scenarios/actuation/cable_finger.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Cable finger (four links, Ecoflex 00-30), tendon spread over the tip, 0-0.2 N.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+  iterations: 300           # MuJoCo: the thin webs make the flex stiff
+
+ground:
+  enabled: false
+
+body:
+  name: finger
+  geometry: {type: cable_finger, length: 60 mm, width: 12 mm, depth: 10 mm, segments: 4,
+             slot_width: 3 mm, slot_depth: 3 mm, tendon_offset: 4.5 mm}
+  material: {preset: ecoflex_00_30, damping: null}
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+
+actuators:
+  - name: cable
+    type: cable
+    path: geometry
+    anchor: top
+    schedule: [[0 ms, 0 N], [25 ms, 0.0005 N], [50 ms, 0.0032 N], [75 ms, 0.0097 N], [100 ms, 0.0207 N],
+               [125 ms, 0.0360 N], [150 ms, 0.0550 N], [175 ms, 0.0768 N], [200 ms, 0.1000 N],
+               [225 ms, 0.1232 N], [250 ms, 0.1450 N], [275 ms, 0.1640 N], [300 ms, 0.1793 N],
+               [325 ms, 0.1903 N], [350 ms, 0.1968 N], [375 ms, 0.1995 N], [400 ms, 0.2000 N],
+               [500 ms, 0.2000 N]]

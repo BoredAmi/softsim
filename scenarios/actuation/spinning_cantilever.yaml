@@ -1,0 +1,39 @@
+# Rotating mount: a round 12 x 60 mm beam (the stiffness of cable_cantilever.yaml's), clamped to a mount
+# that spins 12 rad (about two turns) about the beam's own axis in 0.5 s (minimum jerk, peak 45 rad/s, about
+# three quarters of the beam's first bending frequency), under horizontal gravity.
+#
+# The check: a beam with a round cross-section bends the same in every direction, so in the world
+# frame the spinning clamp changes nothing and the tip moves exactly as without the mount rotation
+# (the same run with `--set body.mount_rotation=null`). The mesh is unstructured (gmsh): a structured
+# one is not isotropic on linear tetrahedra (its lateral deflection is 55% of the sag with no
+# rotation at all). In the mount's frame the equivalence takes the rotated
+# gravity, the centrifugal force that softens the beam and the Coriolis force that couples its two
+# bending directions: with one of them missing the tip's amplitude is off by 47% (no Coriolis), 14%
+# (no centrifugal) or 180% (the wrong sign), whatever the beam's stiffness. The reference runs in the
+# world frame with its base nodes driven along the rotation.
+#   softsim run scenarios/actuation/spinning_cantilever.yaml
+#   softsim run scenarios/actuation/spinning_cantilever.yaml --set body.mount_rotation=null    # the same, no spin
+scenario: actuation
+description: Cantilever on a mount spinning about its own axis under horizontal gravity (12 x 60 mm round).
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [9.81, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: beam
+  geometry: {type: cylinder, diameter: 12 mm, height: 60 mm}
+  material:
+    density: 1070 kg/m^3
+    elastic: {model: stable_neo_hookean, youngs_modulus: 500 kPa, poisson_ratio: 0.45}
+  mesh: {size: 3 mm, method: gmsh}
+  fixed: [base]
+  mount_rotation: {axis: [0, 0, 1], center: [0, 0, 0], path: [[0 ms, 0 rad], [500 ms, 12 rad]]}
+
+actuators: []

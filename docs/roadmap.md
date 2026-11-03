@@ -238,36 +238,99 @@ Done so far ([actuation.md](actuation.md)):
   translation), simulated in the mount's frame on every backend. Check: the
   reference agrees with a world-frame run with prescribed base motion to 0.03%
   (second order in the step).
+- **Prescribed region motion** (`body.prescribed`: any surface region follows a
+  minimum-jerk path per axis, so a roller or a grip; the reaction force is an
+  output on every backend). Check: a roller tension test. The reference
+  gives the exact homogeneous stress (1e-7 at 10%, 1e-5 at 30% stretch), and
+  force control with the reported reaction stretches the bar by the prescribed
+  amount on all three backends; a fast pull checks the reaction against the
+  body's momentum.
+- **Rotating mount** (`body.mount_rotation`: the fixed regions turn about an axis,
+  minimum-jerk waypoints, composing with the translation). MuJoCo and SOFA
+  simulate in the mount's frame with rotated gravity and the Euler, centrifugal
+  and Coriolis forces; the reference runs in the world with the base nodes
+  driven along the rotation (trapezoidal rule). Checks: the terms against
+  numerical differentiation of a free particle, the applied forces against
+  `m a`, the rotating rod's centrifugal stretch (reference +2.8%, MuJoCo -1.6%,
+  SOFA -2.3%), the Euler lag at the start, and a spinning round beam that must
+  move as a still one (reference 6.4%; the linear-tet backends 17-21%, from the
+  mesh's anisotropy and implicit Euler, with each broken force 48-355%).
+- **Cable anchor spread over a face** (`anchor: <region>`: the end force becomes the
+  linear traction with the same resultant and moment, on all backends). Check:
+  the reference is within 0.5% of Euler-Bernoulli at the tip (a point anchor
+  2.6% low), and under stroke control within 0.7% with no stiff cap (a point
+  anchor -19%).
+- **Zones with their own damping** (reference only: a Prony series, or none, per
+  zone; MuJoCo and SOFA have one damping per body and refuse). Check: the plate
+  force of a body with a quarter-section zone of another series is the
+  area-weighted sum of each series' exact history.
+- **Cable finger** (`cable_finger` shape: segments cut by slots, a tendon through
+  the web, `path: geometry`). Check: exact mesh volume, one segment is
+  Euler-Bernoulli (-0.9%), four segments bend 2.54 times as far, mesh
+  converged to 0.5%; a plane-section beam model (1.55 times) is a lower bound.
+- **Analytic checks:** the closed-end thick tube (Lame, free extension) on the
+  reference converges at second order (radial -10% to -0.5% from 4 to 1.3 mm;
+  axial strain +0.3% at 1.8 mm); SOFA's Rayleigh alpha against a free fall with
+  linear drag (the implicit-Euler recurrence to 1e-12).
 - **Closed-loop control from Python:** `Simulation.run(controller=...)`
   (a PI loop holding a cable beam's tip angle is a test).
 
 Still to do:
-- **Geometry:** parametric cable-finger body; zones with their own damping.
-- **More actuators:** a rotating mount, prescribed displacement of any region
-  (not only the fixed ones). A cable anchor spread over a face
-  (today a point, which under stroke control gives way locally; use a stiff
-  tip zone).
-- **Backend mappings (optional, for speed or stability):** SoftRobots
-  `CableConstraint` and `SurfacePressureConstraint` on SOFA, spatial tendons on
-  MuJoCo, as implicit alternatives to the explicit forces.
-- **Damping debt:** Rayleigh α on SOFA. (The compliant support and
-  post-contact observables are done; see above.)
-- **Analytic checks:** the pressurised thick-walled cylinder (Lamé), as a
-  closed-end tube with axial extension: a plane-strain slice needs an open lid
-  that the reference's `-p V` load can't close.
+- **More actuators:** a constant-rate rotating mount (today every waypoint is at
+  rest).
+- **Backend mappings (optional, for speed or stability):** tried and not shipped.
+  SoftRobots' `CableConstraint` (plugin present in the SOFA v26.06 install; load
+  it with `RequiredPlugin SoftRobots`, via points as a `BarycentricMapping`
+  child, `pullPoint` a little behind the first point) in `valueType="force"`
+  reproduces the explicit cable exactly: the cable cantilever's tip angle at
+  0.7 N (a step, 2 mm, 1 ms) agreed to 1e-14 at steps 50, 100, 200 and 500
+  (0.2837, 0.1523, 0.2471, 0.2861 rad). The solver's λ is an impulse, so the
+  value must be force × dt (a force of 0.01 N without the factor gave 6 m/s).
+  A force-type constraint is still an applied tension at the step's start,
+  so it has no stability advantage over `ConstantForceField`; the one that
+  would is the displacement type (a rigid tendon, `stiffness → ∞`), which is a
+  different model from the finite-stiffness tendon here, and SOFA-only. Not
+  pursued: it needs a rigid-tendon option in the config first.
+  `SurfacePressureConstraint` was not tried. MuJoCo spatial tendons attach to
+  sites on bodies, not to barycentric points inside flex elements, so the
+  cable's via points would have to be vertices.
 
-## M7: pneumatic finger
+## M7: pneumatic finger (in progress; blocked on a data decision)
 
 PneuNet scenario (pressure → bending angle, tip force, cavity volume), public
 datasets registered with DOI and licence, and a **generic experiment API** so
 calibration and plots work for any scenario. Yeoh in SOFA (custom force field)
 or refused.
 
+Done:
+- **PneuNet scenario**, backends compared and MuJoCo transferred (above).
+- **Generic experiment API:** `softsim fit` (any observable column of any
+  scenario against a registered measured table, curve or series;
+  `docs/experiments.md`). Checked by a twin experiment: it recovers a hidden
+  modulus to 0.4% (clean) and 3.5% (1% noise); four code mutants are caught.
+- **Yeoh in SOFA: refused**, with the `softsim material project` hint.
+- **Finer meshes on the GPU:** the element kernels run in chunks (a 100k-element
+  launch asked the 12 GB card for 4.8 GB and failed); the reference PneuNet now
+  runs to 0.7 mm (152k tetrahedra, 25 min for four loads) and converges to
+  within about 0.4% per step; the 1.5 mm reference is 3.6% under-bent
+  (`docs/actuation.md`).
+
+Open: real data. No public pressure–angle dataset with a geometry and
+material I can read was usable; the options and my recommendation are in
+[decisions.md](decisions.md), entry 3.
+
 ## M8: cable finger, soft arm and rods
 
-Cable-finger scenario and a multi-segment cable arm. A rod (Cosserat) backend
-for slender bodies: SOFA BeamAdapter, PyElastica or our own. Rod vs FEM
-cross-check.
+Done on the reference: the cable-finger shape and scenario (`cable_finger`,
+`docs/actuation.md`) and a two-segment cable arm with stiff disks
+(`cable_arm.yaml`, within 2% of piecewise Euler–Bernoulli). Not done: a rod
+(Cosserat) backend for slender bodies (SOFA BeamAdapter, PyElastica or our
+own) and the rod vs FEM cross-check. Library chosen by the recommendation
+([decisions.md](decisions.md), entry 4): SOFA BeamAdapter. First step done:
+`softsim/backends/sofa/rod.py` runs a clamped rectangular rod under a tip load
+and matches Euler–Bernoulli to 0.2% (`tests/test_rod_sofa.py`, 5 tests; a 10%
+section error fails 4 of them). Still to do: read a `Scene` (a `rod` body type),
+cables on rods, and the comparison with the 3D reference on the cable arm.
 
 ## M9: soft gripper and grasping
 

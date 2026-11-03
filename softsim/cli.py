@@ -417,6 +417,14 @@ def _cmd_transfer(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_fit(args: argparse.Namespace) -> int:
+    from softsim.experiments.fit import Fit
+
+    report = Fit(args.fit).run()
+    print(json.dumps(report, indent=2, default=float))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="softsim", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -536,6 +544,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("transfer", help="fit a fast backend's effective card to the reference (docs/actuation.md)")
     p.add_argument("transfer", help="transfer YAML, e.g. calibrations/transfer_inflation_mujoco.yaml")
     p.set_defaults(func=_cmd_transfer)
+
+    p = sub.add_parser("fit", help="fit a scenario's parameters to a measured table (softsim.experiments.fit)")
+    p.add_argument("fit", help="fit YAML with a `data:` section, e.g. calibrations/pneunet_fit.yaml")
+    p.set_defaults(func=_cmd_fit)
 
     p = sub.add_parser("view", help="interactive MuJoCo viewer (loops the scenario)")
     _add_config_args(p)

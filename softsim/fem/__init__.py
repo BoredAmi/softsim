@@ -9,7 +9,17 @@ from softsim.errors import SoftSimError
 
 
 def jax_setup():
-    """Import JAX with float64 enabled; raise a clear error if it is missing."""
+    """Import JAX with float64 enabled; raise a clear error if it is missing.
+
+    On a GPU, JAX would by default reserve 75% of its memory per process at the first
+    computation. A calibration runs a parent (material-test terms) and one worker per
+    case, so the second process found no memory and fell back to the CPU, and a third
+    would fail outright. Allocation is therefore on demand
+    (``XLA_PYTHON_CLIENT_PREALLOCATE=false``) unless the environment already sets it.
+    """
+    import os
+
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
     try:
         import jax
         import jax.numpy as jnp

@@ -141,6 +141,42 @@ to the datasheet's 100% modulus (55 kPa).
 - **50 g after first contact isn't modelled.** In reality the weight tumbles
   off after the first contact, so later times shouldn't be compared.
 
+## Fitting any scenario to a measured table (`softsim fit`)
+
+`softsim calibrate` is built around the drop test's tracked videos. `softsim fit`
+is the scenario-neutral version: any observable column of any scenario against
+a measured table, registered with its source. A fit file is a transfer file
+(`config`, `backend`, `overrides`, `parameters`, `checks`, `max_evaluations`,
+`output`, see `softsim/transfer.py`) whose `reference:` is replaced by `data:`
+(`softsim/experiments/fit.py` has the full description):
+
+```yaml
+data:
+  source: {name: ..., doi: 10.xxxx/..., licence: CC-BY-4.0, file: ../data/processed/x/table.csv}
+  kind: curve                      # y against a simulated x (a quasi-static ramp), or series: y(t)
+  filter: {tilt: 0}                # rows with these column values
+  x: {column: p_kPa, scale: 1000, sim: cavity_pressure}
+  y: {column: theta_deg, scale: 0.0174533, sim: bend_angle}
+  relative_to: first               # compare changes from the first sample (zero offsets in the data)
+```
+
+`source` must give `name`, `doi`, `licence` and `file`, so a number in a
+report can be traced. The error is the NRMSE of the transfer (RMS difference
+over the largest measured change); the report adds the data's own noise floor
+(the scatter at repeated x over the same range), because a fit cannot be
+better than that. The fitted card is `kind: physical` on the reference
+(`--backend fem`), `effective` on the linear-tet backends, and it names the
+measurement in its provenance.
+
+**Check (a twin experiment, `tests/test_fit.py`):** the "measurement" is the
+sphere's pressure-volume curve at a hidden E = 45 kPa. Fitting from 25 kPa
+gives back 45.18 kPa from the clean curve (0.4%), and 46.6 kPa from the same curve with 1% noise (3.5%, a cost of
+0.018, about the noise). A wrong modulus costs more than 10 times the right
+one on a time series, and four mutants of the code (dropped unit scale, dropped
+baseline, whole run instead of the loading branch, ignored filter) are caught.
+This tests the machinery against a known answer; it says nothing about a real
+actuator. That needs a measurement with a known geometry and material.
+
 ## Backends and material models (M4)
 
 Same cases, cost and procedure on the SOFA backend, which offers more material
@@ -306,6 +342,14 @@ plus the 3D reference's first contacts.
   seated.
 - They diverge where their strong relaxation lets heavy weights crush the
   specimen: MuJoCo from 100 g, SOFA at 500 g.
+
+(Those numbers are for the transfers of the earlier physical card, 143 kPa /
+0.69 / 2 ms, run on 2026-10-31. With the joint card below (2026-11-02), the
+table's first-contact NRMSE against the recordings is 13% (MuJoCo) and 4% (SOFA)
+at 20 g and 6% and 5% at 50 g; the 3D reference itself gives 14% and 3%. The
+weight now rises 72 (MuJoCo) and 64 mm (SOFA) at 20 g, still with no tack. MuJoCo
+diverges only at 500 g, like SOFA: its 200 g run completes. The run was done
+with the MuJoCo timing fix of that day, see below.)
 
 `python tools/make_comparison_media.py` writes `docs/media/compare_wXXX.gif`:
 for each weight, the recording next to the MuJoCo tack-and-support model,
@@ -532,3 +576,63 @@ These are the axisymmetric fit's values. Nothing was refitted for 3D.
   3.86 vs 3.74 mm and 4.31 vs 4.31 mm). The 3D fit confirms the card: E0 and
   g move by 3% or less, τ by 12%, all within the spread between the two
   weights. The card and its transfers keep the values above.
+
+### Joint fit: the drop and the datasheet (GPU box, 2026-11-02)
+
+The drop-only card relaxes to E∞ = E0 (1 − g) = 44 kPa, about half the ~94 kPa
+that the datasheet's 100% modulus (55 kPa) implies: impacts alone cannot say how
+much of the stiffness relaxes within milliseconds. `calibrations/ecoflex_00_10_drop_fem_joint.yaml`
+fits the 20 and 50 g drops and that datasheet point together (weight 0.5; the
+datasheet moduli are approximate: Roels et al. measured 93 kPa against a
+datasheet 69 kPa for Ecoflex 00-30). The first 40 evaluations ran on the
+laptop; the next 40 resumed from their log here.
+
+| Card | E0 | g | τ | E∞ | 20 g / 50 g NRMSE | Datasheet term | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Drop only (40 evaluations) | 147 kPa | 0.70 | 2.24 ms | 44 kPa | 9.5% / 6.4% | 40–60% off | 0.080 |
+| Joint, after 40 evaluations | 143 kPa | 0.53 | 1.23 ms | 68 kPa | 13.3% / 5.2% | 28% | 0.130 |
+| **Joint, after 80 evaluations** | **190 kPa** | **0.60** | **0.58 ms** | **76 kPa** | 14.3% / 2.9% | 20% | **0.108** |
+
+- **The datasheet pulls the relaxed modulus up from 44 to 76 kPa** (94 kPa
+  implied) at the price of the 20 g first contact (9.5% to 14.3%); the 50 g one
+  improves (peak 4.310 vs 4.314 mm recorded). The card turns stiffer and relaxes
+  faster: 190 kPa for 0.6 ms.
+- **Forty evaluations were not enough.** At 40 the best point was still the last
+  one and τ was drifting down; the cost fell from 0.130 to 0.108 over the next
+  40. It is nearly flat at the end (0.1099 at evaluation 70, 0.1080 at 80), but
+  not proven converged.
+- **Speed.** A 20 g or 50 g evaluation takes 58–69 s on the GPU and 73–83 s on the CPU of
+  this box (the laptop's was ~8 min). Replaying the first logged evaluation
+  reproduces the laptop's numbers to 5e-8 (20 g) and 7e-13 (50 g).
+
+The reference runs of this card (`tools/make_reference_tracks.py`) are the
+target of the backend transfers (5 mm mesh, 2 min on MuJoCo, 20 min on SOFA):
+
+| Card | E0 | g | τ | Error vs reference (20 / 50 g) |
+| --- | --- | --- | --- | --- |
+| Joint physical card (3D reference) | 190 kPa | 0.60 | 0.58 ms | – |
+| SOFA, 5 mm, ν = 0.45 | 86.1 kPa | 0.70 | 2.47 ms | 8.5% / 1.6% |
+| MuJoCo, 5 mm, ν = 0.45 | 64.9 kPa | 0.68 | 7.82 ms | 8.6% / 3.3% |
+
+The transfers again soften the material by 55–66% (linear tetrahedra lock) and
+change the relaxation. Their peaks: 3.40 and 3.37 mm at 20 g against the
+reference's 3.85, and 4.34 and 4.50 mm at 50 g against 4.31.
+
+**Two things that bit on this run, both fixed.**
+- **Stale replays.** A calibration's log was keyed by the *path* of its tracks,
+  not their contents. After the reference tracks were regenerated from the new
+  card, both transfers replayed every evaluation fitted to the old tracks and
+  finished in minutes with a result for the wrong reference. Log entries now
+  record a digest of the track files and are ignored when it differs
+  (`tests/test_experiments.py`). Logs from before the digest are still trusted.
+- **Calibration on a GPU.** `--jobs 2` forked its workers after the parent had
+  used CUDA, so every 3D case crashed its worker; JAX also reserved 75% of the
+  GPU per process. Workers are now spawned and memory is allocated on demand.
+
+The MuJoCo numbers above were made after a timing fix in the MuJoCo backend:
+`mj_step` computes positions before it integrates, so softsim reported
+positions one step late and evaluated its explicit forces from them. On the
+adhesion fit's best point, the fix moves the first-contact NRMSE by 1.5–3%
+(20 g 0.1822 to 0.1795, 50 g 0.0835 to 0.0808) and the 50 g time of the peak by
+one step (3.78 to 3.57 ms). The MuJoCo rows of the earlier tables (tack and
+support, rigid) were fitted with the old timing.

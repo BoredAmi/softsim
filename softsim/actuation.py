@@ -95,11 +95,16 @@ class CableActuatorConfig(StrictModel):
     coordinates), from the exit towards the motor to the anchor; ``schedule`` is
     ``[[time, tension], ...]``, or with ``control: stroke`` ``[[time, stroke], ...]`` (lengths; the
     cable then needs its tendon ``stiffness``). Via points are placed along the path at most
-    ``spacing`` apart (default: the body's mesh size)."""
+    ``spacing`` apart (default: the body's mesh size). ``path: geometry`` takes the path the body's shape
+    defines (a ``cable_finger``'s tendon). With ``anchor: <region>`` the last path point,
+    which must lie on that boundary region (a face), is not a point load: the cable's end force is
+    spread over the region as the linear traction with the same resultant and moment
+    (:func:`anchor_weights`), so the face does not dent under it."""
 
     name: str = "cable"
     type: Literal["cable"] = "cable"
-    path: list[tuple[Length, Length, Length]] = Field(min_length=2)
+    path: Annotated[list[tuple[Length, Length, Length]], Field(min_length=2)] | Literal["geometry"]
+    anchor: str | None = None
     control: Literal["tension", "stroke"] = "tension"
     tension: Annotated[Force, Field(ge=0)] = 0.0
     stroke: Length = 0.0
@@ -141,13 +146,17 @@ class CableActuator:
     tension: float = 0.0            # the constant value: a tension, or the stroke if stroke-controlled
     schedule: tuple[tuple[float, float], ...] = ()
     stiffness: float | None = None  # set: stroke-controlled tendon of this stiffness [N/m]
+    anchor: str | None = None       # set: region the last via point's load is spread over
 
     @classmethod
     def from_config(cls, cfg: CableActuatorConfig, body: str, spacing: float) -> "CableActuator":
         stroke = cfg.control == "stroke"
+        if cfg.path == "geometry":
+            raise ValueError(f"cable {cfg.name!r}: path: geometry needs a shape that defines the tendon "
+                             "(geometry type cable_finger)")
         return cls(cfg.name, body, tuple(map(tuple, resample(np.array(cfg.path, float), cfg.spacing or spacing))),
                    cfg.stroke if stroke else cfg.tension, tuple(map(tuple, cfg.schedule)),
-                   cfg.stiffness if stroke else None)
+                   cfg.stiffness if stroke else None, cfg.anchor)
 
     @property
     def stroke_controlled(self) -> bool:
@@ -257,6 +266,79 @@ def embed(points: np.ndarray, tets: np.ndarray, via: np.ndarray, tol: float = 1e
         elems.append(e)
         bary.append(w / w.sum())
     return np.array(elems), np.array(bary)
+
+
+# degree-4 rule on the unit-area triangle (Dunavant, 6 points): barycentric points and weights (sum 1)
+_TA, _TB = 0.445948490915965, 0.091576213509771
+_TRI_Q = np.array([[_TA, _TA, 1 - 2 * _TA], [_TA, 1 - 2 * _TA, _TA], [1 - 2 * _TA, _TA, _TA],
+                   [_TB, _TB, 1 - 2 * _TB], [_TB, 1 - 2 * _TB, _TB], [1 - 2 * _TB, _TB, _TB]])
+_TRI_W = np.array([0.223381589678011] * 3 + [0.109951743655322] * 3)
+
+
+def anchor_weights(points: np.ndarray, faces: np.ndarray, point: np.ndarray,
+                   tol: float = 1e-6) -> tuple[np.ndarray, np.ndarray]:
+    """Nodes (M,) of the region ``faces`` and their weights (M,): the linear traction over the region with
+    unit resultant whose centre of action is ``point``. ``faces`` are triangles (K, 3) of a linear mesh, or
+    (K, 6) quadratic ones (corners, then the mid-edge nodes of edges 01, 12, 20) with their consistent
+    nodal loads. The traction is ``(1 + g . (x - c)) / A`` with ``c`` the area centroid and ``g`` fixed by
+    ``sum w_j x_j = point``: a force ``F`` on the cable's end then loads the region with the resultant ``F``
+    and the moment ``F`` about ``point`` would have (statically equivalent, exact for a beam end by
+    St-Venant). Weights go negative on the far side when ``point`` is outside the region's core (a cable
+    3 mm off the axis of a 10 mm square section: tension there, as beam theory has it). Raises ``ValueError``
+    when ``point`` is off the region (outside its bounding box, or by more than ``tol`` times its size from
+    the plane the traction can reach)."""
+    faces = np.asarray(faces, int)
+    corner = faces[:, :3]
+    tri = points[corner]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    q = _TRI_Q
+    shape = q if faces.shape[1] == 3 else np.column_stack(
+        [q * (2 * q - 1), 4 * q[:, 0] * q[:, 1], 4 * q[:, 1] * q[:, 2], 4 * q[:, 2] * q[:, 0]])
+    a = area[:, None] * _TRI_W[None, :] / area.sum()                      # (K, Q) share of the region's area
+    x = np.einsum("qc,kci->kqi", q, tri)                                  # quadrature points (K, Q, 3)
+    c = np.einsum("kq,kqi->i", a, x)
+    d = x - c
+    moment = np.einsum("kq,kqi,kqj->ij", a, d, d)
+    nodes, inverse = np.unique(faces, return_inverse=True)
+    inverse = inverse.reshape(faces.shape)
+    w0 = np.zeros(len(nodes))
+    w1 = np.zeros((len(nodes), 3))
+    for j in range(faces.shape[1]):
+        np.add.at(w0, inverse[:, j], a @ shape[:, j])
+        np.add.at(w1, inverse[:, j], np.einsum("kq,q,kqi->ki", a, shape[:, j], d))
+    g = np.linalg.lstsq(moment, np.asarray(point, float) - c, rcond=1e-9)[0]
+    w = w0 + w1 @ g
+    xn = points[nodes]
+    size = float(np.linalg.norm(xn.max(axis=0) - xn.min(axis=0)))
+    outside = np.maximum(np.maximum(xn.min(axis=0) - point, point - xn.max(axis=0)), 0.0)  # beyond the bounding box
+    miss = max(float(np.linalg.norm(w @ xn - point)), float(np.linalg.norm(outside)))
+    if miss > max(tol * size, 1e-9):
+        raise ValueError(f"cable anchor point {np.round(np.asarray(point) * 1e3, 3).tolist()} mm is "
+                         f"{miss * 1e3:.3g} mm off the anchor region")
+    return nodes, w
+
+
+def pad_rows(rows: list[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarray, np.ndarray]:
+    """Via-point rows ``(nodes, weights)`` of different widths as arrays (K, W): short rows are filled
+    with their own first node at weight 0 (no force, and no new coupling)."""
+    width = max(len(n) for n, _ in rows)
+    nodes = np.array([np.concatenate([n, np.full(width - len(n), n[0])]) for n, _ in rows], int)
+    weights = np.array([np.concatenate([w, np.zeros(width - len(w))]) for _, w in rows], float)
+    return nodes, weights
+
+
+def cable_rows(points: np.ndarray, tets: np.ndarray, via: np.ndarray,
+               anchor_tris: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Via points of a cable on the linear mesh as ``(nodes, weights)``, (K, W) each: via point ``k`` sits at
+    ``sum_j weights[k, j] points[nodes[k, j]]``. Interior points are embedded in their tetrahedron; with
+    ``anchor_tris`` the last one is the traction of :func:`anchor_weights` over those triangles."""
+    via = np.asarray(via, float)
+    n = len(via) - (anchor_tris is not None)
+    elems, bary = embed(points, tets, via[:n])
+    rows = list(zip(tets[elems], bary))
+    if anchor_tris is not None:
+        rows.append(anchor_weights(points, anchor_tris, via[-1]))
+    return pad_rows(rows)
 
 
 def cable_length(points: np.ndarray, nodes: np.ndarray, weights: np.ndarray) -> float:
