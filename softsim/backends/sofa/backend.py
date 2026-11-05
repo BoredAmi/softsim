@@ -206,6 +206,7 @@ class SofaBackend(Backend):
         Capability.MOVING_MOUNT,
         Capability.ROTATING_MOUNT,
         Capability.PRESCRIBED_MOTION,
+        Capability.PLANE_STRAIN,
         Capability.MULTI_MATERIAL,
     })
 
@@ -312,6 +313,10 @@ class SofaBackend(Backend):
                 child.addObject(ff, **args)
         if body.pinned:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
+        if body.plane_strain is not None:  # no vertex moves along the axis (the other axes stay free)
+            node.addObject("PartialFixedProjectiveConstraint", name="plane_strain",
+                           indices=list(range(body.mesh.n_points)),
+                           fixedDirections=[int(k == body.plane_strain) for k in range(3)])
         prescribed = []  # (region, vertices, held-axis mask, path)
         if body.prescribed:
             # the constraint moves its vertices to the key that SOFA looks up at the step's *start*

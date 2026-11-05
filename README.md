@@ -81,6 +81,14 @@ angle, which a linear beam cannot reproduce. The rod follows the exact arc
 (allowing for axial shortening) and the cable arm's tilt profile matches the
 reference. `python tools/plot_rod.py`; details in [docs/backends/rod.md](docs/backends/rod.md).*
 
+![Cast finger against measured angles](docs/media/wang_finger.png)
+
+*A cast silicone finger (seven chambers, toothed constraint layer; geometry and Yeoh material from Wang et al.,
+Actuators 2026, CC BY 4.0) against the angles the authors measured and their Abaqus result. The reference solver
+is within 0.76° RMS of the measurements (paper's FE: 0.56°), including the peak near 35 kPa.
+`softsim run scenarios/actuation/ribbed_finger.yaml --backend fem`, then `python tools/compare_wang_finger.py`;
+details in [docs/actuation.md](docs/actuation.md).*
+
 ![Cable-bent cantilever vs Euler-Bernoulli](docs/media/cable_cantilever.png)
 
 *A cable-bent cantilever against the Euler-Bernoulli solution: tip angle over the tension ramp, and the deformed beam.

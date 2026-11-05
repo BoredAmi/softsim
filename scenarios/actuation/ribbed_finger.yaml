@@ -1,0 +1,44 @@
+# Cast pneumatic finger with a ribbed roof and a toothed constraint layer (Posilicone Shore A20), 0-40 kPa.
+# The geometry is that of the Abaqus mesh in the supplement of Wang et al., Actuators 15(9), 488 (2026),
+# doi:10.3390/act15090488 (CC BY 4.0): 103 x 24 x 16 mm, seven 5 mm chambers over one manifold, 2 mm side
+# walls, a 2 mm floor with 19 teeth, a 10 mm tip slab; its solid volume (19,568 mm^3) matches the paper's mesh.
+# The material is the paper's own third-order Yeoh fit. The base face (x = 0) is clamped; the roof stretches,
+# the floor resists, the finger curls towards -z. The paper reports the root-to-tip angle (``chord_angle``).
+# ``plane_strain: y`` is the paper's ``AllNodesPlanar`` (U3 = 0 on every node): without it the finger bends
+# four times too much; without the teeth (floor 2 mm instead of an effective 2.6 mm) it stalls at 22 deg
+# (docs/decisions.md, decision 3). Smooth quasi-static ramp over 1 s; no gravity (the paper's FE has none either;
+# the real finger hangs vertically, so gravity loads it axially). Teeth need a mesh of 1.5 mm or finer.
+#   softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set body.mesh.size=1.5mm \
+#       --set simulation.timestep=10ms
+#   python tools/compare_wang_finger.py runs/<the run folder> --plot
+scenario: actuation
+description: Ribbed cast pneumatic finger (Wang et al. 2026), Posilicone Shore A20 Yeoh, 0-40 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 1200 ms
+  output_rate: 200 Hz
+  gravity: [0, 0, 0]
+  iterations: 300
+
+ground:
+  enabled: false
+
+body:
+  name: finger
+  geometry: {type: ribbed_finger}
+  material: {preset: posilicone_a20_wang2026, damping: null}
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+  plane_strain: y
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0.000 kPa], [50 ms, 0.046 kPa], [100 ms, 0.342 kPa], [150 ms, 1.064 kPa],
+               [200 ms, 2.317 kPa], [250 ms, 4.141 kPa], [300 ms, 6.523 kPa], [350 ms, 9.407 kPa],
+               [400 ms, 12.698 kPa], [450 ms, 16.275 kPa], [500 ms, 20.000 kPa], [550 ms, 23.725 kPa],
+               [600 ms, 27.302 kPa], [650 ms, 30.593 kPa], [700 ms, 33.477 kPa], [750 ms, 35.859 kPa],
+               [800 ms, 37.683 kPa], [850 ms, 38.936 kPa], [900 ms, 39.658 kPa], [950 ms, 39.954 kPa],
+               [1000 ms, 40.000 kPa], [1200 ms, 40.000 kPa]]

@@ -95,6 +95,7 @@ class FemBackend(Backend):
         Capability.ROTATING_MOUNT,
         Capability.PRESCRIBED_MOTION,
         Capability.MULTI_MATERIAL,
+        Capability.PLANE_STRAIN,
     })
 
     def __init__(self) -> None:
@@ -109,6 +110,9 @@ class FemBackend(Backend):
             out.append(f"exactly one soft body (got {len(scene.soft_bodies)})")
         if any(b.self_collision for b in scene.soft_bodies):
             out.append("soft-body self-collision")
+        if any(b.plane_strain is not None and np.abs(np.asarray(b.pose.quaternion) - (1, 0, 0, 0)).max() > 1e-12
+               for b in scene.soft_bodies):
+            out.append("plane strain on a rotated body (the axis is a body axis; the reference holds world dofs)")
         for a in scene.actuators:
             if not isinstance(a, PressureActuator):
                 continue
@@ -170,6 +174,8 @@ class FemBackend(Backend):
                                                 if p.axes[k] else np.zeros(0, int) for k in range(3)])
                             for p in body.prescribed]
         held = np.concatenate([d for *_, dofs in self._prescribed for d in dofs] or [np.zeros(0, int)])
+        if body.plane_strain is not None:  # every node (corner and mid-edge) keeps its coordinate along the axis
+            held = np.union1d(held, 3 * np.arange(len(mesh.nodes)) + body.plane_strain)
         self._pressure = [a for a in scene.actuators if isinstance(a, PressureActuator)]
         self._cables = [a for a in scene.actuators if isinstance(a, CableActuator)]
         self._forces = [a for a in scene.actuators if isinstance(a, ForceActuator)]

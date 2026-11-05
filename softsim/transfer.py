@@ -188,7 +188,7 @@ class Transfer:
         for name, case in self.checks.items():
             checks[name] = {"raw_card": self.errors(case, initial)["cost"],
                             "transferred": self.errors(case, values)["cost"]}
-        raw0 = self._raw([])
+        raw0 = apply_overrides(self._raw([]), [f"backend={self.backend}", *self.backend_overrides])  # the backend's own card
         report = {"backend": self.backend, "best": values, "cost": best["cost"],
                   "raw_card_cost": next(r["cost"] for r in self.history
                                         if all(np.isclose(r.get(k, np.nan), v) for k, v in initial.items())),

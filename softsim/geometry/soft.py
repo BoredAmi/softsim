@@ -26,6 +26,7 @@ from softsim.meshing import (
     gmsh_box,
     gmsh_cable_finger,
     gmsh_closed_tube,
+    gmsh_box_union,
     gmsh_cylinder,
     gmsh_hollow_sphere,
     gmsh_pneunet,
@@ -280,6 +281,139 @@ class SoftPneuNet(StrictModel):
         return {"layer": np.nonzero(below)[0], "body": np.nonzero(~below)[0]}
 
 
+class SoftRibbedFinger(StrictModel):
+    """Cast pneumatic finger with a ribbed roof (Wang et al., Actuators 15(9), 488, 2026: the geometry of
+    its Abaqus mesh). A block along +x, base face at x = 0, width along y, height along z, built from
+    boxes, so the shape is exact:
+
+    - one cavity: a manifold ``manifold_height`` high above a ``floor`` slab, ``wall`` in from the
+      two ends and ``side_wall`` in from the sides, with a pocket ``chamber_height`` higher over each
+      of the ``chambers`` chambers (``chamber_length`` long, ``chamber_spacing`` apart);
+    - a bump over every chamber (its pocket plus ``wall`` on both sides, ``top_wall`` over the pocket) and
+      a ``roof`` over the manifold between them;
+    - ``teeth`` under the floor, ``tooth_height`` high and ``tooth_width`` wide every ``tooth_pitch``
+      (``tooth_height`` 0 omits them: a plain floor, much cheaper to mesh);
+    - a ``tip_length`` slab, ``tip_thickness`` thick on top of the teeth's level, past the last wall: the
+      distal reserve of the cast, with no cavity.
+
+    The pressurised roof stretches while the floor resists, so the finger curls towards -z. The bottom
+    of the floor slab is z = ``tooth_height``; the body's lowest point is z = 0.
+
+    Regions: ``cavity``, ``base`` (x = 0), ``tip`` (x = length), ``bottom``, ``top``, ``side``."""
+
+    type: Literal["ribbed_finger"] = "ribbed_finger"
+    chambers: int = Field(default=7, ge=1)
+    chamber_length: PositiveLength = 0.005       # along x
+    chamber_spacing: PositiveLength = 0.009      # between chambers (the manifold's roof span)
+    wall: PositiveLength = 0.002                 # at both ends and beside every chamber (x)
+    side_wall: PositiveLength = 0.002            # y
+    width: PositiveLength = 0.024                # y
+    floor: PositiveLength = 0.002                # the constraint slab under the manifold
+    manifold_height: PositiveLength = 0.005
+    chamber_height: PositiveLength = 0.005       # pocket height above the manifold
+    roof: PositiveLength = 0.003                 # over the manifold between the chambers
+    top_wall: PositiveLength = 0.003             # over the chambers
+    tooth_height: Length = 0.001
+    tooth_width: PositiveLength = 0.003
+    tooth_pitch: PositiveLength = 0.005
+    tip_length: PositiveLength = 0.010
+    tip_thickness: PositiveLength = 0.003
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "SoftRibbedFinger":
+        if 2 * self.side_wall >= self.width:
+            raise ValueError("ribbed_finger: side walls thinner than half the width")
+        if self.tooth_height > 0 and self.tooth_width >= self.tooth_pitch:
+            raise ValueError("ribbed_finger: tooth_width must be below tooth_pitch")
+        return self
+
+    @property
+    def body_length(self) -> float:
+        """The cast part, up to the tip slab."""
+        return 2 * self.wall + self.chambers * self.chamber_length + (self.chambers - 1) * self.chamber_spacing
+
+    @property
+    def length(self) -> float:
+        return self.body_length + self.tip_length
+
+    @property
+    def top_height(self) -> float:
+        return self.tooth_height + self.floor + self.manifold_height + self.chamber_height + self.top_wall
+
+    @property
+    def min_feature(self) -> float:
+        return min(self.wall, self.side_wall, self.floor, self.roof, self.top_wall, self.tip_thickness)
+
+    def _pockets(self) -> list[tuple[float, float]]:
+        pitch = self.chamber_length + self.chamber_spacing
+        return [(self.wall + i * pitch, self.wall + i * pitch + self.chamber_length) for i in range(self.chambers)]
+
+    @property
+    def n_teeth(self) -> int:
+        return int((self.body_length - self.tooth_width) / self.tooth_pitch + 1e-9) + 1 if self.tooth_height > 0 else 0
+
+    def _levels(self) -> tuple[float, float, float, float, float]:
+        """z of the floor's bottom, the manifold's floor and roof, the pocket's roof, the bump's top."""
+        z0 = self.tooth_height
+        z1 = z0 + self.floor
+        z2 = z1 + self.manifold_height
+        z3 = z2 + self.chamber_height
+        return z0, z1, z2, z3, z3 + self.top_wall
+
+    def _boxes(self) -> tuple[list, list]:
+        hw = self.width / 2
+        z0, z1, z2, z3, z4 = self._levels()
+        valley_top = z2 + self.roof
+        solids = [(0.0, -hw, z0, self.body_length, hw, valley_top),
+                  (self.body_length, -hw, z0, self.length, hw, z0 + self.tip_thickness)]
+        solids += [(a - self.wall, -hw, valley_top, b + self.wall, hw, z4) for a, b in self._pockets()]
+        solids += [(i * self.tooth_pitch, -hw, 0.0, i * self.tooth_pitch + self.tooth_width, hw, z0)
+                   for i in range(self.n_teeth)]
+        cy = hw - self.side_wall
+        cavities = [(self.wall, -cy, z1, self.body_length - self.wall, cy, z2)]
+        cavities += [(a, -cy, z2, b, cy, z3) for a, b in self._pockets()]
+        return solids, cavities
+
+    def volume(self) -> float:
+        z0, _, z2, _, z4 = self._levels()
+        valley_top = z2 + self.roof
+        cy = self.width - 2 * self.side_wall
+        body = (self.body_length * self.width * (valley_top - z0) + self.tip_length * self.width * self.tip_thickness
+                + self.chambers * (self.chamber_length + 2 * self.wall) * self.width * (z4 - valley_top)
+                + self.n_teeth * self.tooth_width * self.width * z0)
+        cavity = ((self.body_length - 2 * self.wall) * cy * self.manifold_height
+                  + self.chambers * self.chamber_length * cy * self.chamber_height)
+        return body - cavity
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        return self._gmsh(settings.size)
+
+    def export(self, path) -> None:
+        """Write the shape as CAD (``.step``, ``.brep``...; metres, body frame)."""
+        self._gmsh(1.0, export=path)
+
+    def _gmsh(self, size: float, export=None):
+        solids, cavities = self._boxes()
+        return gmsh_box_union(solids, cavities, size, export=export)
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        tol = _tol(mesh)
+        _, cavities = self._boxes()
+
+        def cavity(p):  # the cavity's walls are at least ``wall`` from every outer face
+            inside = np.zeros(len(p), bool)
+            for x0, y0, z0, x1, y1, z1 in cavities:
+                inside |= ((p[:, 0] > x0 - tol) & (p[:, 0] < x1 + tol) & (p[:, 1] > y0 - tol) & (p[:, 1] < y1 + tol)
+                           & (p[:, 2] > z0 - tol) & (p[:, 2] < z1 + tol))
+            return inside
+
+        hw = self.width / 2
+        return _resolve(mesh, {"cavity": cavity, "base": lambda p: p[:, 0] < tol,
+                               "tip": lambda p: p[:, 0] > self.length - tol, "bottom": lambda p: p[:, 2] < self.tooth_height + tol,
+                               "top": lambda p: p[:, 2] > self.top_height - tol,
+                               "side": lambda p: np.abs(p[:, 1]) > hw - tol})
+
+
 class SoftCableFinger(StrictModel):
     """Tendon-driven finger: a block (``width`` x ``depth`` x ``length``, base at z = 0, centred on the z axis)
     cut into ``segments`` links by ``segments - 1`` transverse slots, ``slot_width`` wide (along z) and
@@ -511,7 +645,7 @@ def bind_files(model, base_dir) -> None:
             bind_files(item, base_dir)
 
 
-SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftCableFinger,
+SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftRibbedFinger, SoftCableFinger,
                             SoftMeshFile],
                       Field(discriminator="type")]
 

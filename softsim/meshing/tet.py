@@ -275,6 +275,23 @@ def gmsh_pneunet(length: float, width: float, height: float, chambers: list[tupl
     return _gmsh_mesh(build, size, export)
 
 
+def gmsh_box_union(solids: list[tuple[float, float, float, float, float, float]],
+                       cavities: list[tuple[float, float, float, float, float, float]], size: float,
+                       export: str | None = None) -> TetMesh | None:
+    """Union of axis-aligned boxes ``solids`` minus the union of ``cavities``; each box is
+    ``(x0, y0, z0, x1, y1, z1)`` [m]. A cast finger is such a union (a slab, a bump over every chamber,
+    the teeth of the constraint layer, the tip slab), so the shape is exact rather than approximated."""
+
+    def build(occ):
+        def box(b):
+            return (3, occ.addBox(b[0], b[1], b[2], b[3] - b[0], b[4] - b[1], b[5] - b[2]))
+
+        body, _ = occ.fuse([box(solids[0])], [box(b) for b in solids[1:]])
+        occ.cut(body, [box(c) for c in cavities])
+
+    return _gmsh_mesh(build, size, export)
+
+
 def gmsh_cable_finger(width: float, depth: float, length: float, slots: list[tuple[float, float]],
                       slot_depth: float, size: float, export: str | None = None) -> TetMesh | None:
     """Block ``[-width/2, width/2] x [-depth/2, depth/2] x [0, length]`` with transverse slots cut into

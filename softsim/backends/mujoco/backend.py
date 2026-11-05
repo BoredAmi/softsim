@@ -64,6 +64,7 @@ class MujocoBackend(Backend):
         Capability.MOVING_MOUNT,
         Capability.ROTATING_MOUNT,
         Capability.PRESCRIBED_MOTION,
+        Capability.PLANE_STRAIN,
         Capability.MULTI_MATERIAL,
     })
 
@@ -114,6 +115,7 @@ class MujocoBackend(Backend):
 
     def build(self, scene: Scene) -> None:
         self.check(scene)
+        scene = scene.lowered()  # plane strain: a zero prescribed motion along the axis
         self._scene = scene
         self._clear_controls()
         native = native_scene(scene)  # Prony cards: the long-term law; overstresses are added each step

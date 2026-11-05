@@ -908,11 +908,39 @@ the `tip` face's rotation from its rest orientation.
   extrapolate; the mesh sequence from the gmsh generator is not
   uniformly refined. Consequence for the transfers: they reproduce the
   1.5 mm reference, and carry its few-percent bias.
-- **Not yet compared with a real finger.** I found no open dataset of
-  bending angle against pressure with full geometry and material. Measured
-  data is M7 (PneuNet datasets with DOI and licence). Until then these numbers
-  check the backends against each other and the reference, not against
-  reality. The candidates I found and why none is usable yet are in
-  [decisions.md](decisions.md) (entry 3); `softsim fit`
-  ([experiments.md](experiments.md)) is ready to fit a measured pressure–angle
-  table to the finger as soon as one with a known geometry and material is chosen.
+- **Real data is a different finger.** These PneuNet numbers check the backends against each other and the
+  reference, not against reality. The reference is compared with measured angles on the cast finger of the next
+  section ("A cast finger against measured angles"), not on this PneuNet.
+
+
+## A cast finger against measured angles
+
+`scenarios/actuation/ribbed_finger.yaml` is the finger of Wang et al., *Actuators* 15(9), 488 (2026),
+doi:10.3390/act15090488 (CC BY 4.0): 103 x 24 x 16 mm, seven 5 mm chambers on one manifold, a 2 mm floor with 19
+teeth (shape `ribbed_finger`; solid 19,568 mm^3 and cavity 12,400 mm^3 equal the paper's mesh, tests/test_ribbed_finger.py),
+Posilicone Shore A20 as the paper's own third-order Yeoh fit (`posilicone_a20_wang2026`), base clamped, 0-40 kPa.
+The measured angle is the **chord angle** (change in direction of the root-to-tip line, metric `chord_angle`), which
+is not the tip face's rotation (tested). Data: `datasets/wang2026_finger.yaml` (measured and the paper's FE).
+
+Two details decide the result (found by elimination, docs/decisions.md decision 3):
+
+| model | chord at 5 / 10 / 40 kPa [deg] |
+|---|---|
+| free width, no teeth | 10 / 37 / (limit point at 16 kPa) |
+| width held (`plane_strain: y`), no teeth | 5.0 / 10.1 / 4.5 (stalls at 21.7 deg) |
+| width held, teeth (the committed scenario) | 5.0 / 10.7 / 34.4 |
+| measured | 5.0 / 10.3 / 35.0 |
+
+The paper's Abaqus model holds `U3 = 0` on every node (`AllNodesPlanar`): `body.plane_strain: y` does that (reference
+only; a plane-strain beam deflects 1/(1-nu^2) less, tests/test_plane_strain.py). The teeth thicken the floor, the strain-limiting
+layer, to an effective 2.6 mm.
+
+Result of the committed scenario on the reference (1.5 mm mesh, dynamic 1 s ramp): RMS error against the measurements
+0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static
+5.04). Reproduce:
+
+    softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set simulation.timestep=10ms --out runs/wang/fem_1p5mm
+    python tools/compare_wang_finger.py runs/wang/fem_1p5mm --plot      # table and docs/media/wang_finger.png
+
+Not done: a mesh-convergence run at 1 mm; MuJoCo and SOFA (they refuse Yeoh: `softsim material project`, then
+`softsim transfer`). The interactive slider viewer of recorded runs is `tools/make_viewer.py` (docs/viewer/*.html).

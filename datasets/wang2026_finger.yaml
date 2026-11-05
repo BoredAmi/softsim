@@ -1,0 +1,27 @@
+# Pressure -> bending angle of one cast pneumatic finger, measured and as computed by the authors' FE.
+# Wang L., Zhang Y., Cai M., Tong X., Wei F., "Design, Experimental Validation, and Pressure-Control Simulation
+# of a Modular Pneumatic Soft-Finger Gripper", Actuators 15(9), 488 (2026), doi:10.3390/act15090488, CC BY 4.0.
+# The supplement (https://www.mdpi.com/article/10.3390/act15090488/s1, not redistributed here: data/raw/) holds the
+# Abaqus input files whose geometry scenarios/actuation/ribbed_finger.yaml reproduces, the raw tensile data and
+# the Yeoh fit of materials/presets/posilicone_a20_wang2026.yaml.
+#
+# What was measured (Section 2.2 and 3.3 of the paper): ONE finger, ONE ascending pressure sequence, held
+# until the pressure at the M1 sensor was stable (0.4 kPa accuracy), photographed from the side against
+# coordinate paper (the finger hangs vertically, root up). The chord angle is the change in direction of the line
+# from the root centre to the fingertip. No repeats, no unloading, no uncertainty stated by the authors; the
+# reading of the tip on the grid is probably good to a degree or so (our estimate, not theirs).
+name: wang2026_finger
+doi: 10.3390/act15090488
+licence: CC-BY-4.0
+quantity: chord_angle
+unit: deg
+pressure_unit: kPa
+table:   # pressure, measured chord angle (Table 5), the authors' FE chord angle (Table 5), FE max displacement [mm] (Table 4)
+  - [5, 5.00, 5.12, 9.32]
+  - [10, 10.30, 10.92, 20.05]
+  - [15, 16.90, 17.34, 32.12]
+  - [20, 23.20, 24.09, 45.07]
+  - [25, 30.10, 30.45, 57.77]
+  - [30, 34.40, 35.25, 68.55]
+  - [35, 36.80, 37.16, 76.05]
+  - [40, 35.00, 35.38, 81.78]

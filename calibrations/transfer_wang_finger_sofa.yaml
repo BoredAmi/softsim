@@ -1,0 +1,21 @@
+# Transfer of the cast finger (Wang et al. 2026, Yeoh card, plane strain, teeth, 1.5 mm reference) to SOFA at
+# 1.5 mm: does SOFA's linear tet FEM reproduce the finger, as MuJoCo did not at 2 mm (see docs/decisions.md)?
+# The backend gets the Yeoh card projected to stable Neo-Hookean over 0-100% strain (posilicone_a20_wang2026_nh:
+# nrmse 2.1%), with nu = 0.45 instead of 0.495 (linear tets lock near incompressibility) and the shear modulus kept
+# (E = 268 kPa); the fit then moves E. Plane strain runs on MuJoCo as a zero prescribed motion of every vertex
+# along the width (tests/test_plane_strain.py). Fitted jointly on the 0-40 kPa chord angle and cavity volume
+# histories; checked on a finger with five chambers (never seen).
+#   softsim transfer calibrations/transfer_wang_finger_sofa.yaml      (SOFA_ROOT exported; reference is cached)
+config: ../scenarios/actuation/ribbed_finger.yaml
+backend: sofa
+overrides: [output.save_model=false]
+backend_overrides: [body.mesh.size=1.5mm, simulation.timestep=2ms, body.material.preset=posilicone_a20_wang2026_nh,
+                    body.material.elastic.poisson_ratio=0.45]
+reference: {backend: fem, overrides: [simulation.timestep=10ms, simulation.output_rate=100Hz]}
+observables: {chord_angle: 1.0, cavity_volume: 1.0}
+parameters:
+  body.material.elastic.youngs_modulus: {initial: 268 kPa, bounds: [40 kPa, 1 MPa], log: true}
+checks:
+  chambers_5: [body.geometry.chambers=5]
+max_evaluations: 6
+output: ../runs/transfer/wang_finger_sofa_1p5mm

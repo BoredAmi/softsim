@@ -50,3 +50,4 @@ class Capability(str, Enum):
     ROTATING_MOUNT = "a prescribed rotation of the fixed vertices about an axis (rotating mount)"
     PRESCRIBED_MOTION = "prescribed displacement of surface regions, with their reaction forces"
     MULTI_MATERIAL = "soft bodies with zones of other materials"
+    PLANE_STRAIN = "plane strain: no displacement along one body axis (a wide strip held between plates)"

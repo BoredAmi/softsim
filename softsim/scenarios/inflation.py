@@ -21,7 +21,9 @@ centroid motion ``<region>_displacement_<axis>`` [m] along its held axes; and th
 ``min_z``, ``max_radius`` about the body's axis). Shapes with a ``tip`` (else
 ``top``) region also give the tip: that face's area-weighted centroid (``tip_x``,
 ``tip_y``, ``tip_z``) and its rotation from its rest orientation (``bend_angle``
-[rad], from the area-weighted normal), i.e. how far a bending actuator curls. The summary gives the final and peak values, the volume
+[rad], from the area-weighted normal), i.e. how far a bending actuator curls, and, with a ``base`` region,
+the angle between the root-to-tip line and its rest direction (``chord_angle`` [rad], what a camera
+measures on a finger photographed from the side). The summary gives the final and peak values, the volume
 change of each cavity and the stroke (shortening) of each cable.
 """
 
@@ -105,6 +107,7 @@ class InflatedBodyConfig(StrictModel):
     mesh: MeshSettings = MeshSettings(method="gmsh")
     position: tuple[Length, Length, Length] = (0.0, 0.0, 0.0)
     fixed: list[str] = []  # regions whose vertices are pinned (e.g. ["base"])
+    plane_strain: Literal["x", "y", "z"] | None = None  # body axis no vertex moves along (a wide strip, U3 = 0)
     zones: list[MaterialZoneConfig] = []  # multi-material bodies
     # moving mount: the fixed regions follow this translation, [[time, [dx, dy, dz]], ...] from rest
     mount_path: list[tuple[Annotated[Time, Field(ge=0)], tuple[Length, Length, Length]]] = []
@@ -181,7 +184,8 @@ class InflationScenario(Scenario):
         try:
             body = SoftBodySpec(name=cfg.name, mesh=mesh, material=self.load_material(cfg.material),
                                 pose=Pose(tuple(cfg.position)), mass=cfg.mass, pinned=tuple(pinned), regions=regions,
-                                zones=tuple(zones), prescribed=tuple(prescribed))
+                                zones=tuple(zones), prescribed=tuple(prescribed),
+                                plane_strain=None if cfg.plane_strain is None else "xyz".index(cfg.plane_strain))
         except ValueError as exc:
             raise ConfigError(f"body: {exc}") from None
         configs = []
@@ -216,6 +220,8 @@ class InflationScenario(Scenario):
         self._tip = next((r for r in ("tip", "top") if r in regions), None)
         if self._tip is not None:
             self._tip_normal = _face_centre_normal(mesh.points, regions[self._tip])[1]
+            self._chord0 = (_face_centre_normal(mesh.points, regions[self._tip])[0]
+                            - _face_centre_normal(mesh.points, regions["base"])[0]) if "base" in regions else None
         self._axis = np.asarray(cfg.position[:2], float)
         self._spin = None
         rotation = cfg.mount_rotation
@@ -273,6 +279,9 @@ class InflationScenario(Scenario):
             tip, n = _face_centre_normal(x, self._regions[self._tip])
             out.update(tip_x=float(tip[0]), tip_y=float(tip[1]), tip_z=float(tip[2]),
                        bend_angle=float(np.arctan2(np.linalg.norm(np.cross(n, self._tip_normal)), n @ self._tip_normal)))
+            if self._chord0 is not None:  # the angle a camera sees: the root-to-tip line against its rest direction
+                chord = tip - _face_centre_normal(x, self._regions["base"])[0]
+                out["chord_angle"] = float(np.arctan2(np.linalg.norm(np.cross(self._chord0, chord)), self._chord0 @ chord))
         out["max_z"] = float(x[:, 2].max())
         out["min_z"] = float(x[:, 2].min())
         out["max_radius"] = float(np.hypot(*(x[:, :2] - self._axis).T).max())

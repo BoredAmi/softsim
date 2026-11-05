@@ -1,0 +1,22 @@
+name: posilicone_a20_wang2026
+description: Posilicone Shore A20 mold silicone, third-order Yeoh fit of the authors of a pneumatic
+  soft finger (Wang et al., 2026), identified from their own uniaxial tests.
+source: >
+  Wang L., Zhang Y., Cai M., Tong X., Wei F., Design, Experimental Validation, and Pressure-Control
+  Simulation of a Modular Pneumatic Soft-Finger Gripper, Actuators 15(9), 488 (2026),
+  doi:10.3390/act15090488, CC BY 4.0: Table 2 and the supplement's Abaqus input (C10 0.044163 MPa,
+  C20 5.3071e-4 MPa, C30 1.6251e-5 MPa, D1 0.226434 1/MPa, so K = 2/D1 = 8.83 MPa, nu0 = 0.495; density
+  1.1e-9 t/mm^3 in the input file). Three dumbbells (gauge 40 x 12 x 4 mm) of the finger's own silicone
+  batch, one monotonic loading at about 30 mm/min: no hysteresis, relaxation or rate dependence. Taken
+  as published (not refitted by softsim). Valid for the loading the paper used (finger strains up to
+  about 1.1 logarithmic).
+kind: physical
+density: 1100.0
+elastic:
+  model: yeoh
+  bulk_modulus: 8.8326e+6
+  c10: 44163.0
+  c20: 530.71
+  c30: 16.251
+friction:
+  sliding: 1.0

@@ -157,6 +157,8 @@ class SoftBodySpec:
             the other elements are made of ``material``.
         prescribed: Regions moved along prescribed paths (displacement control); their
             vertices are neither pinned nor in another prescribed region.
+        plane_strain: Body axis (0, 1, 2) along which no vertex moves (plane strain: a wide strip, as in
+            a 2D-like Abaqus model with ``U3 = 0``), or None.
     """
 
     name: str
@@ -170,6 +172,7 @@ class SoftBodySpec:
     regions: dict[str, np.ndarray] = field(default_factory=dict)
     zones: tuple[MaterialZone, ...] = ()
     prescribed: tuple[PrescribedMotion, ...] = ()
+    plane_strain: int | None = None
 
     def __post_init__(self) -> None:
         held = np.zeros(self.mesh.n_points, bool)
@@ -186,6 +189,21 @@ class SoftBodySpec:
             if seen[z.elements].any():
                 raise ValueError(f"soft body {self.name!r}: zone {z.name!r} overlaps another zone")
             seen[z.elements] = True
+
+    def lowered(self) -> "SoftBodySpec":
+        """The body with ``plane_strain`` expressed as a prescribed motion, for backends that have displacement
+        control but no plane-strain option: every vertex that is not already held keeps its coordinate along the
+        axis (a zero path; the region ``plane_strain`` holds only that axis, so the others move freely)."""
+        if self.plane_strain is None:
+            return self
+        held = np.zeros(self.mesh.n_points, bool)
+        held[list(self.pinned)] = True
+        for p in self.prescribed:
+            held[p.vertices] = True
+        axes = tuple(k == self.plane_strain for k in range(3))
+        hold = PrescribedMotion("plane_strain", np.nonzero(~held)[0], axes,
+                                MountMotion((0.0, 1.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))))
+        return replace(self, plane_strain=None, prescribed=(*self.prescribed, hold))
 
     def zone_damping_differs(self) -> list[str]:
         """Names of the zones whose damping is not the body's (a backend that has one damping per body refuses
@@ -256,6 +274,8 @@ class SoftBodySpec:
             req.add(Capability.PRESCRIBED_MOTION)
         if self.self_collision:
             req.add(Capability.SELF_COLLISION)
+        if self.plane_strain is not None:
+            req.add(Capability.PLANE_STRAIN)
         return frozenset(req)
 
 
@@ -474,6 +494,10 @@ class Scene:
             if body.name == name:
                 return body
         raise KeyError(f"no soft body named {name!r}; have {[b.name for b in self.soft_bodies]}")
+
+    def lowered(self) -> "Scene":
+        """The scene with every body's ``plane_strain`` lowered to a prescribed motion (:meth:`SoftBodySpec.lowered`)."""
+        return replace(self, soft_bodies=tuple(b.lowered() for b in self.soft_bodies))
 
     def with_material(self, body_name: str, material: Material) -> "Scene":
         """Copy of the scene with one soft body's material replaced."""
