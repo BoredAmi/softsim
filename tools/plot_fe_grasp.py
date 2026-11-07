@@ -18,6 +18,7 @@ import numpy as np
 
 from softsim.reduced import ReducedFinger, ReducedGripper
 from softsim.reduced.mjcf import OBJECTS
+from softsim.scenarios.grasp import is_held
 
 HALF_X, HALF_Z = 0.016, 0.03  # m, the box
 TOUCH = 3e-4  # m
@@ -39,7 +40,7 @@ def fe(path: Path) -> dict:
     off = int(np.argmax((height > settled + OFF_TABLE) & (d["t"] > 0.1)))
     before = int(np.argmax(d["t"] >= 0.7))
     return dict(d=d, height=height, palm=d["palm"], lift_off=d["palm"][off], rise=height[-1] - settled, grip_before=d["grip"][before],
-                grip_hold=d["grip"][-20:].mean(), steady=np.ptp(height[-20:]))
+                grip_hold=d["grip"][-20:].mean(), steady=np.ptp(height[-20:]), held=float(is_held(d["t"], height - settled)))
 
 
 def fast(f: ReducedFinger) -> dict:
@@ -55,7 +56,7 @@ def fast(f: ReducedFinger) -> dict:
         height.append(g.object_height - z0)
     palm, height = np.array(palm), np.array(height)
     return dict(palm=palm, height=height, lift_off=palm[int(np.argmax(height > OFF_TABLE))], rise=height[-1], grip_before=grip,
-                grip_hold=g.grip_force(), steady=np.ptp(height[-200:]))
+                grip_hold=g.grip_force(), steady=np.ptp(height[-200:]), held=float(is_held(np.arange(2000) * g.model.opt.timestep, height)))
 
 
 def draw(a: dict, b: dict, out: Path) -> None:
@@ -96,7 +97,8 @@ def main() -> None:
     a, b = fe(args.run), fast(ReducedFinger.from_json(args.finger))
     print(f"{'':28}{'FE':>9}{'fast':>9}")
     for label, key, scale in (("palm rise at lift-off, mm", "lift_off", 1e3), ("final rise, mm", "rise", 1e3), ("grip before the lift, N", "grip_before", 1),
-                              ("grip while holding, N", "grip_hold", 1), ("height wobble at the end, mm", "steady", 1e3)):
+                              ("grip while holding, N", "grip_hold", 1), ("height wobble at the end, mm", "steady", 1e3),
+                              ("held (1 = up and staying)", "held", 1)):
         print(f"{label:28}{a[key] * scale:9.3f}{b[key] * scale:9.3f}")
     draw(a, b, args.out)
     print(args.out)

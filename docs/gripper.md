@@ -50,7 +50,11 @@ python tools/fit_reduced_finger.py --ramp runs/media/wang/fem.npz --probes runs/
 
 ![Grasp map for the box](media/gripper_map.png)
 
-`tools/grasp_map.py` runs 504 grasps: three objects, three frictions, eight masses, seven pressures. The finger is very
+`tools/grasp_map.py` runs 504 grasps: three objects, three frictions, eight masses, seven pressures; 154 hold. Held means
+the object ended at least 10 mm above where it started and sank less than 1 mm over the last 0.2 s
+(`softsim.scenarios.grasp.is_held`, shared with the finite-element grasps). It is not a share of the lift, because soft
+fingers can lose much of the lift before the object leaves the table. An earlier rule of 80% of the lift held 126: all
+126 still hold, and 23 of the 28 added are the bottle. The finger is very
 soft (0.2 N moves its tip about 90 mm), so this is a light gripper: the box grips at 0.16 N per finger at 35 kPa, and at
 friction 0.8 two fingers can carry about 26 g. The map holds 20 g and drops 30 g, as that limit says it should.
 
@@ -81,10 +85,10 @@ it is not the validated finger; the 1.5 mm finger with teeth is the one to trust
 | Final rise of the box | 17.2 mm | 27.1 mm |
 | Grip before the lift | 0.170 N | 0.107 N |
 | Grip while holding | 0.100 N | 0.092 N |
-| `held` (rise at least 80% of the lift) | 0 | 1 |
+| `held` (left the table and stayed up) | 1 | 1 |
 
-Both carry the box and hold it steady, so the two agree that this grasp works, but the `held` metric disagrees because
-the reference loses more of the lift. They disagree on how it works. In the reference the fingertips first press the box
+Both carry the box and hold it steady, so the two agree that this grasp works. They disagree on how it works. In the
+reference the fingertips first press the box
 down on the table, then peel away as the palm rises, and the box is picked up by a new contact near its top corners. A
 chain of links cannot peel or re-grip like that. So the fast model's lift height and its grip before the lift are not
 predictions, and its holding limit (about 26 g) rests on the grip while holding, which agrees within 8% in this one case.

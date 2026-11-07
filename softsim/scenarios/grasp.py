@@ -8,8 +8,9 @@ object) and, with ``base_right`` and ``base_left`` prescribed, ``grip_force`` [N
 fingers on the object (at equilibrium a finger's x reaction at the palm is the x force the object exerts on it;
 a net contact force cannot say this: one body, the two fingers cancel). ``palm_lift`` [m] is the palm's rise.
 
-Summary: ``held`` (1 if the object rose by at least ``held_fraction`` of the palm's rise and stayed there),
-``slip`` [m] (palm rise minus object rise at the end), ``peak_grip_force`` [N].
+Summary: ``held`` (1 if the object left the table and stayed up, :func:`is_held`; soft fingers can lose much of the
+lift first, so the share of the palm's rise says nothing about holding), ``slip`` [m] (palm rise minus object rise at the
+end), ``peak_grip_force`` [N].
 """
 
 from __future__ import annotations
@@ -31,6 +32,17 @@ from softsim.scenarios.inflation import InflationConfig, InflationScenario
 from softsim.scene import Pose, RigidBodySpec, Scene
 
 PositiveLength = Annotated[Length, Field(gt=0)]
+HELD_CLEARANCE = 0.01  # m above where it started
+HELD_SINK = 1e-3  # m lost over HELD_WINDOW: more is an object sliding out
+HELD_WINDOW = 0.2  # s
+
+
+def is_held(t: np.ndarray, rise: np.ndarray, clearance: float = HELD_CLEARANCE, sink: float = HELD_SINK) -> bool:
+    """Did the object leave the table and stay up? ``rise`` [m] above where it started, at times ``t`` [s]: it ends at
+    least ``clearance`` up and lost no more than ``sink`` over the last :data:`HELD_WINDOW`."""
+    t, rise = np.asarray(t, float), np.asarray(rise, float)
+    last = rise[t >= t[-1] - HELD_WINDOW]
+    return bool(rise[-1] >= clearance and last.max() - rise[-1] <= sink)
 
 
 class GraspObjectConfig(StrictModel):
@@ -48,7 +60,8 @@ class GraspObjectConfig(StrictModel):
 class GraspConfig(InflationConfig):
     scenario: Literal["grasp"] = "grasp"
     object: GraspObjectConfig = GraspObjectConfig()
-    held_fraction: Annotated[float, Field(gt=0, le=1)] = 0.8
+    held_clearance: PositiveLength = HELD_CLEARANCE
+    held_sink: PositiveLength = HELD_SINK
 
 
 class GraspScenario(InflationScenario):
@@ -83,7 +96,7 @@ class GraspScenario(InflationScenario):
         out = super().summarize(ts)
         palm, lift = float(ts["palm_lift"].iloc[-1]), float(ts["object_lift"].iloc[-1])
         out["final_palm_lift"], out["final_object_lift"], out["slip"] = palm, lift, palm - lift
-        out["held"] = float(palm > 0 and lift >= self.config.held_fraction * palm)
+        out["held"] = float(is_held(ts["t"], ts["object_lift"], self.config.held_clearance, self.config.held_sink))
         if "grip_force" in ts:
             out["peak_grip_force"] = float(ts["grip_force"].max())
         return out

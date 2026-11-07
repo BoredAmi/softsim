@@ -416,7 +416,7 @@ function drawMap() {
     const held = M.grid[pick.shape][pick.mu], grip = M.grip[pick.shape][pick.mu];
     const total = held.flat().reduce((a, b) => a + b, 0);
     $("map-title").textContent = `${pick.shape[0].toUpperCase() + pick.shape.slice(1)} at friction ${pick.mu}: ${total} of ${held.flat().length} grasps held`;
-    $("map-note").textContent = `Two fingers, ${M.count} fast-model grasps in all. Held means the object rose with the gripper.`;
+    $("map-note").textContent = `Two fingers, ${M.count} fast-model grasps in all. Held means the object left the table and stayed up.`;
     let h = `<tr><th>mass \\ kPa</th>${M.pressures.map(p => `<th>${p / 1e3}</th>`).join("")}</tr>`;
     M.masses.forEach((m, i) => {
       h += `<tr><th>${m * 1e3} g</th>` + M.pressures.map((p, j) => `<td><button data-i="${i}" data-j="${j}" data-held="${held[i][j]}" title="${m * 1e3} g at ${p / 1e3} kPa: ${held[i][j] ? "held" : "dropped"}, grip ${grip[i][j].toFixed(2)} N per finger">${held[i][j] ? grip[i][j].toFixed(2) : "\u2013"}</button></td>`).join("") + "</tr>";

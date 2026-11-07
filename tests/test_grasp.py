@@ -8,7 +8,7 @@ import pytest
 from softsim.geometry import SoftGripper, SoftRibbedFinger
 from softsim.geometry.soft import MeshSettings
 from softsim.runner import Simulation
-from softsim.scenarios.grasp import GraspConfig, GraspScenario
+from softsim.scenarios.grasp import GraspConfig, GraspScenario, is_held
 
 FINGER = SoftRibbedFinger(tooth_height=0)  # teeth need a finer, slower mesh; the placement is the same
 SETTINGS = MeshSettings(size=0.003, method="gmsh")
@@ -60,14 +60,14 @@ def test_a_gripper_that_would_hit_the_table_is_refused():
 
 def _summary(palm, lift):
     s = GraspScenario.__new__(GraspScenario)
-    s.config = GraspConfig.model_construct(actuators=[], held_fraction=0.8, _prescribed={})
+    s.config = GraspConfig.model_construct(actuators=[], held_clearance=0.01, held_sink=1e-3, _prescribed={})
     s._prescribed = {}
-    ts = pd.DataFrame({"palm_lift": [0.0, palm], "object_lift": [0.0, lift], "max_z": [0.1, 0.1], "max_radius": [0.1, 0.1]})
+    ts = pd.DataFrame({"t": [0.0, 1.0], "palm_lift": [0.0, palm], "object_lift": [0.0, lift], "max_z": [0.1, 0.1], "max_radius": [0.1, 0.1]})
     return s.summarize(ts)
 
 
 @pytest.mark.parametrize("palm, lift, held, slip", [(0.03, 0.029, 1.0, 0.001), (0.03, 0.0, 0.0, 0.03),
-                                                    (0.03, 0.02, 0.0, 0.01), (0.0, 0.0, 0.0, 0.0)])
+                                                    (0.03, 0.017, 1.0, 0.013), (0.03, 0.009, 0.0, 0.021), (0.0, 0.0, 0.0, 0.0)])
 def test_held_and_slip(palm, lift, held, slip):
     out = _summary(palm, lift)
     assert out["held"] == held and out["slip"] == pytest.approx(slip)
@@ -80,3 +80,14 @@ def test_object_stands_on_the_table():
     sim.close()
     assert box.floor == pytest.approx(0.03)
     assert box.pose.position[2] == pytest.approx(0.031)
+
+
+def test_held_means_off_the_table_and_staying_there():
+    """Up and steady is held however much of the lift the soft fingers lost; an object sliding out is not, even while
+    it is still high; one that came back to the table is not."""
+    t = np.linspace(0, 1, 101)
+    rise = 0.017 * np.clip((t - 0.5) / 0.2, 0, 1)
+    assert is_held(t, rise)
+    assert not is_held(t, rise - 0.03 * np.clip(t - 0.8, 0, None))       # 6 mm lost in the last 0.2 s, still 11 mm up
+    assert not is_held(t, np.where(t < 0.5, 0.03, 0.0))                  # steady again, on the table
+    assert is_held(t, rise - 0.002 * np.clip(t - 0.75, 0, None))         # settling by 0.4 mm is not sliding out
