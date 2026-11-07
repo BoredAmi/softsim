@@ -85,9 +85,24 @@ reference. `python tools/plot_rod.py`; details in [docs/backends/rod.md](docs/ba
 
 *A cast silicone finger (seven chambers, toothed constraint layer; geometry and Yeoh material from Wang et al.,
 Actuators 2026, CC BY 4.0) against the angles the authors measured and their Abaqus result. The reference solver
-is within 0.76° RMS of the measurements (paper's FE: 0.56°), including the peak near 35 kPa.
+is within 0.76° RMS of the measurements (paper's FE: 0.56°), including the peak near 35 kPa; a 1 mm mesh gives 0.95°, so
+read it as agreement within about 1° of discretisation error. MuJoCo and SOFA do not reproduce this finger at 1–2 mm (8–16° RMS).
+Slider viewers for the finger, PneuNet and arm: `docs/viewer/*.html`.
 `softsim run scenarios/actuation/ribbed_finger.yaml --backend fem`, then `python tools/compare_wang_finger.py`;
 details in [docs/actuation.md](docs/actuation.md).*
+
+![Live soft gripper holding a box](docs/media/gripper_play.png)
+
+*Play with it: `xdg-open docs/viewer/gripper.html`, or double-click the file. It needs no server. A gripper built from
+that finger runs live in your browser: pressure, mass and friction sliders, and a map of what it can hold. The live
+finger is a chain of links fitted to the reference, within 5–7% on a tip load left out of the fit (9–27% on a load
+spread along the pads). Its grasps are not yet checked against finite-element grasps.
+Details and commands in [docs/gripper.md](docs/gripper.md).*
+
+![Live drop bench against the high-speed film](docs/media/drop_play.png)
+
+*Drop things in slow motion: `xdg-open docs/viewer/drop.html`. A live solver with the reference's Ecoflex card, nothing
+fitted, beside the film's trace: filmed peaks within 12%, rebound too slow. Details in [docs/drop.md](docs/drop.md).*
 
 ![Cable-bent cantilever vs Euler-Bernoulli](docs/media/cable_cantilever.png)
 
@@ -215,6 +230,7 @@ softsim/            core library (no ROS)
   scene.py          backend-neutral scene description
   backends/         Backend interface, MuJoCo flex, SOFA, fem (3D reference solver)
   fem/              locking-free reference solvers: axisymmetric and 3D quadratic tetrahedra (JAX)
+  reduced/          fast fingers: a chain of links with tables taken from the reference, as a MuJoCo model
   scenarios/        Scenario base class + drop_test
   checks/           pre-run physics checks
   experiments/      datasets (drop recordings, material tests), video tracking (incl. tilt),
@@ -247,6 +263,8 @@ tests/
 - [Experiments: video tracking and calibration](docs/experiments.md)
 - [Validation: predictions on data the model never saw](docs/validation.md)
 - [Actuation: pressure and cable actuators, verified against the exact thick sphere and a cable-bent cantilever](docs/actuation.md)
+- [Soft gripper: the live demo, the fast finger and what it can hold](docs/gripper.md)
+- [Soft drop bench: drop things on the Ecoflex cylinder, beside the film](docs/drop.md)
 - [Moving to a faster machine: setup, data to copy, long jobs](docs/new_machine.md)
 
 ## Data and citation

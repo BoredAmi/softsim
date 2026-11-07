@@ -9,7 +9,8 @@ from softsim.scenarios.base import Scenario
 
 _BUILTIN = {"drop_test": "softsim.scenarios.drop_test:DropTestScenario",
             "inflation": "softsim.scenarios.inflation:InflationScenario",
-            "actuation": "softsim.scenarios.inflation:InflationScenario"}
+            "actuation": "softsim.scenarios.inflation:InflationScenario",
+            "grasp": "softsim.scenarios.grasp:GraspScenario"}
 
 
 def available_scenarios() -> dict[str, str]:

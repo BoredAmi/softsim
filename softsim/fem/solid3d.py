@@ -102,6 +102,7 @@ _A4, _B4 = 0.5854101966249685, 0.1381966011250105
 _XI4 = np.array([[_B4, _B4, _B4], [_A4, _B4, _B4], [_B4, _A4, _B4], [_B4, _B4, _A4]])
 _W4 = np.full(4, 1.0 / 24.0)
 _STIFFNESS_RULES = {8: (_W, _DN), 4: (_W4, tet10_shape(_XI4)[1])}
+FLOOR_STIFFNESS = 1e5  # N/m: the table under a body with a ``RigidBody3D.floor``; 1 N sinks it 10 um
 ELEMENT_CHUNK = 25_000  # elements per kernel launch (see ``Solid3DSolver._chunked``)
 _XI_M, _W_M = tet_quadrature(3)      # mass: 27 points, exact to degree 5 (P2 x P2 is degree 4)
 _N_M, _DN_M = tet10_shape(_XI_M)
@@ -370,6 +371,7 @@ class RigidBody3D:
     motion: Callable[[float], np.ndarray] | None = None
     edge_radius: float = 2e-4
     contact: ContactSettings = field(default_factory=ContactSettings)
+    floor: float | None = None  # lowest height of a free body's centre of mass [m]: a one-way frictionless table
 
     def __post_init__(self) -> None:
         if self.mount not in ("free", "slider_z", "fixed", "prescribed"):
@@ -380,6 +382,8 @@ class RigidBody3D:
             raise ValueError(f"{self.name}: a {self.mount} body needs a positive mass")
         if self.mount == "prescribed" and self.motion is None:
             raise ValueError(f"{self.name}: a prescribed body needs motion(t)")
+        if self.floor is not None and self.mount != "free":
+            raise ValueError(f"{self.name}: only a free body stands on a floor")
 
     @classmethod
     def ground(cls, contact: ContactSettings | None = None) -> "RigidBody3D":
@@ -921,10 +925,13 @@ class Solid3DSolver:
                 h_quad += pat.scatter(pos, np.concatenate(vals)[sel] / (beta * dt * dt))
         return {"c": c, "b": jnp.asarray(b), "beta_dt2": beta * dt * dt, "dt": dt, "y_tilde": y_tilde,
                 "y_n": self.y.copy(), "inertia": inertia, "f_ext": f_ext, "spring": spring, "damper": damper,
-                "h_quad": h_quad, "refs": self._rigid_refs(self.t + dt)}
+                "h_quad": h_quad, "refs": self._rigid_refs(self.t + dt),
+                "floors": [(int(self._rdof[i][2]), body.floor - self._c0[i][2]) for i, body in enumerate(self.p.rigid)
+                           if body.floor is not None]}
 
     def _quadratic(self, y: np.ndarray, ctx) -> tuple[float, np.ndarray]:
-        """Gravity, inertia, springs and dampers: energy and gradient (Hessian: ``ctx["h_quad"]``)."""
+        """Gravity, inertia, springs, dampers and floors: energy and gradient (Hessian: ``ctx["h_quad"]``, and
+        ``_grad_hess`` for the floors, which act one way)."""
         e = -float(ctx["f_ext"] @ y)
         grad = -ctx["f_ext"].copy()
         e += 0.5 * float(np.sum(ctx["spring"] * y * y))
@@ -936,6 +943,10 @@ class Solid3DSolver:
             md = ctx["inertia"] @ d
             e += 0.5 * float(d @ md) / ctx["beta_dt2"]
             grad += md / ctx["beta_dt2"]
+        for dof, lowest in ctx["floors"]:
+            sunk = min(y[dof] - lowest, 0.0)
+            e += 0.5 * FLOOR_STIFFNESS * sunk * sunk
+            grad[dof] += FLOOR_STIFFNESS * sunk
         return e, grad
 
     def energy(self, y: np.ndarray, ctx) -> float:
@@ -996,6 +1007,9 @@ class Solid3DSolver:
         pat = self._pattern
         grad = np.bincount(self._edofs.ravel(), weights=ge.ravel(), minlength=self.ndof)
         hess = pat.scatter(self._epos, he.reshape(-1)) + ctx["h_quad"]
+        for dof, lowest in ctx["floors"]:
+            if y[dof] < lowest:
+                hess[pat.diag[np.flatnonzero(self.free == dof)[0]]] += FLOOR_STIFFNESS
         for k, pressure in enumerate(self.pressures):
             if not pressure:
                 continue
@@ -1047,12 +1061,16 @@ class Solid3DSolver:
         """One implicit step; returns False (state unchanged) if Newton does not converge."""
         ctx = self._context(dt)
         y = self.y + dt * self.v + 0.5 * dt * dt * self.a if self.dynamic else self.y.copy()
-        y[self.fixed] = self.y[self.fixed] if self.fixed_motion is None else self.fixed_motion(self.t + dt)
+        held = self.y[self.fixed] if self.fixed_motion is None else self.fixed_motion(self.t + dt)
+        y[self.fixed] = held
         scale = max(float(np.ptp(self.p.mesh.nodes, axis=0).max()), 1e-3)
         e_old = self.energy(y, ctx)
-        if not np.isfinite(e_old):
+        if not np.isfinite(e_old):  # no predictor; a prescribed path must still be followed, or the step fails and splits
             y = self.y.copy()
+            y[self.fixed] = held
             e_old = self.energy(y, ctx)
+            if not np.isfinite(e_old):
+                return False
         for _ in range(max_iter):
             converged = False
             for project in (False, True):

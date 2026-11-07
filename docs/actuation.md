@@ -936,7 +936,7 @@ only; a plane-strain beam deflects 1/(1-nu^2) less, tests/test_plane_strain.py).
 layer, to an effective 2.6 mm.
 
 Result of the committed scenario on the reference (1.5 mm mesh, dynamic 1 s ramp): RMS error against the measurements
-0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static
+0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static A 1 mm mesh gives 0.95 deg and differs from 1.5 mm by 0.5 deg RMS: read the result as agreement within about 1 deg of discretisation error. MuJoCo (2 mm: 16.4 deg, 1.5 mm: 8.1) and SOFA (1.5 mm: 10.2) do not reproduce the finger; see docs/decisions.md.
 5.04). Reproduce:
 
     softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set simulation.timestep=10ms --out runs/wang/fem_1p5mm

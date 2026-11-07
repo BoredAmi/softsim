@@ -1,0 +1,484 @@
+<title>Soft Gripper Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a test bench. The rig fills the page; one narrow instrument column reads and drives it. */
+:root {
+  --bg: #e4e9ec; --panel: #f3f6f7; --ink: #17262e; --muted: #566a75; --line: #c3ced4;
+  --silicone: #1c8c8a; --air: #c8571f; --held: #1a7f4e; --drop: #b3362b; --stage: #d3dce1;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10181d; --panel: #18232a; --ink: #e5edf0; --muted: #93a7b2; --line: #2d3c45;
+  --silicone: #3fbdb8; --air: #ee8450; --held: #4cc48a; --drop: #ef7a6c; --stage: #141e24; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10181d; --panel: #18232a; --ink: #e5edf0; --muted: #93a7b2; --line: #2d3c45;
+  --silicone: #3fbdb8; --air: #ee8450; --held: #4cc48a; --drop: #ef7a6c; --stage: #141e24; color-scheme: dark }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 24px; padding-block: 12px 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { margin: 0; font: 700 22px/1.1 var(--display); letter-spacing: -.01em; }
+nav { display: flex; gap: 4px; margin-left: auto; }
+nav button { font: 600 14px var(--body); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; padding: 4px 10px; cursor: pointer; }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--air); }
+main { flex: 1; min-height: 0; display: flex; }
+.view { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+.stage { position: relative; background: var(--stage); min-height: 340px; overflow: hidden; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.badge { position: absolute; left: 14px; top: 12px; font: 600 14px var(--body); padding: 3px 10px; color: var(--bg); background: var(--muted); }
+.badge[data-state="held"] { background: var(--held); }
+.badge[data-state="dropped"] { background: var(--drop); }
+.hint { position: absolute; left: 14px; bottom: 10px; color: var(--muted); font-size: 13px; }
+.note { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; }
+aside { background: var(--panel); border-left: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-width: 0; }
+.field label { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 500; }
+.field output, .read b { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--air); margin: 4px 0 0; }
+.seg { display: flex; border: 1px solid var(--line); }
+.seg button { flex: 1; font: 500 13.5px var(--body); color: var(--ink); background: none; border: 0; padding: 6px 2px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.act { display: flex; gap: 8px; }
+.act button { flex: 1; font: 600 14px var(--body); padding: 9px 4px; cursor: pointer; border: 1px solid var(--ink); background: none; color: var(--ink); }
+.act button.go { background: var(--air); border-color: var(--air); color: #fff; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--silicone); outline-offset: 2px; }
+.read { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13.5px; border-top: 1px solid var(--line); padding-top: 10px; }
+.read span { color: var(--muted); }
+.fine { font-size: 12.5px; color: var(--muted); margin: 0; }
+.bar { flex: none; height: 8px; background: var(--line); position: relative; margin-top: 4px; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--silicone); }
+.bar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+#map { overflow: auto; padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.mapbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 14px; }
+.mapbar .seg { min-width: 220px; }
+#map h2 { font: 700 20px/1.2 var(--display); margin: 0 0 4px; text-wrap: balance; }
+#map table { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+#map th { font: 500 13px var(--mono); color: var(--muted); padding: 2px 8px; text-align: right; }
+#map td button { width: 64px; height: 38px; border: 0; cursor: pointer; font: 500 13px var(--mono); color: var(--muted); background: var(--panel); }
+#map td button[data-held="1"] { background: var(--held); color: var(--bg); }
+#map td button:hover { outline: 2px solid var(--ink); }
+.wide { overflow-x: auto; }
+@media (max-width: 760px) {
+  html, body { height: auto; } main { display: block; }
+  .view { display: flex; flex-direction: column; } .stage { height: 56vh; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<header>
+  <h1>Soft Gripper Bench</h1>
+  <nav role="tablist">
+    <button id="tab-play" role="tab" aria-selected="true" data-view="play">Play</button>
+    <button id="tab-truth" role="tab" aria-selected="false" data-view="truth" hidden>Truth</button>
+    <button id="tab-map" role="tab" aria-selected="false" data-view="map" hidden>Grasp map</button>
+  </nav>
+</header>
+<main>
+  <section class="view" id="play">
+    <div class="stage" id="stage">
+      <canvas id="gl"></canvas>
+      <div class="badge" id="badge" data-state="idle">Starting physics</div>
+      <div class="hint">Drag the object to push it. Drag elsewhere to turn the view.</div>
+      <div class="note" id="fail" hidden></div>
+    </div>
+    <aside>
+      <div class="field">
+        <label for="pressure">Finger pressure <output id="pressure-o"></output></label>
+        <input id="pressure" type="range" min="0" max="40" step="0.5" value="0">
+      </div>
+      <div class="act">
+        <button id="grasp" class="go">Grasp and lift</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div>
+        <div class="field"><label>Object</label></div>
+        <div class="seg" id="shape">
+          <button data-v="box" aria-pressed="true">Box</button>
+          <button data-v="cylinder" aria-pressed="false">Cylinder</button>
+          <button data-v="bottle" aria-pressed="false">Bottle</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="mass">Mass <output id="mass-o"></output></label>
+        <input id="mass" type="range" min="2" max="60" step="1" value="10">
+      </div>
+      <div class="field">
+        <label for="mu">Friction <output id="mu-o"></output></label>
+        <input id="mu" type="range" min="0.2" max="1.5" step="0.05" value="0.8">
+      </div>
+      <div>
+        <div class="field"><label>Fingers</label></div>
+        <div class="seg" id="fingers">
+          <button data-v="2" aria-pressed="true">2</button>
+          <button data-v="3" aria-pressed="false">3</button>
+          <button data-v="4" aria-pressed="false">4</button>
+        </div>
+      </div>
+      <div class="read">
+        <span>Grip per finger</span><b id="r-grip">0.00 N</b>
+        <span>Friction can carry</span><b id="r-cap">0.00 N</b>
+        <span>Object weighs</span><b id="r-w">0.00 N</b>
+        <span>Object height</span><b id="r-z">0 mm</b>
+        <span>Speed</span><b id="r-rt">-</b>
+      </div>
+      <div class="bar" aria-hidden="true"><i id="b-cap"></i><u id="b-w"></u></div>
+      <p class="fine" id="caveat"></p>
+    </aside>
+  </section>
+  <section class="view" id="truth" hidden></section>
+  <section id="map" hidden style="flex:1">
+    <h2 id="map-title"></h2>
+    <p class="fine" id="map-note"></p>
+    <div class="mapbar">
+      <div class="seg" id="map-shape"></div>
+      <div class="seg" id="map-mu"></div>
+    </div>
+    <div class="wide"><table id="map-grid"></table></div>
+    <p class="fine">Held cells show the grip per finger in newtons. Rows are object mass, columns are pressure. Select a cell to try that grasp in Play.</p>
+  </section>
+</main>
+
+<script>/*@THREE@*/</script>
+<script>window.GRIPPER = /*@DATA@*/null;</script>
+<script type="module">
+/*@MUJOCO@*/
+const $ = id => document.getElementById(id);
+const G = window.GRIPPER;
+const SIZES = G.objects;
+const state = { shape: "box", fingers: 2, pressure: 0, mass: 0.01, mu: 0.8, auto: null, lift: 0, liftTarget: 0, t: 0, dropAt: null };
+let mj, model, data, L, three, drag = null;
+
+// ---- the same tables and control law as softsim/reduced (ReducedFinger.at, ReducedGripper.step) ----
+const P = G.finger.pressures, N = G.finger.angles[0].length;
+function lookup(table, p) {
+  if (p <= P[0]) return table[0];
+  if (p >= P[P.length - 1]) return table[P.length - 1];
+  let i = 1; while (P[i] < p) i++;
+  const w = (p - P[i - 1]) / (P[i] - P[i - 1]), a = table[i - 1], b = table[i];
+  return Array.isArray(a) ? a.map((v, j) => v + w * (b[j] - v)) : a + w * (b - a);
+}
+function control(p, lift) {
+  const a = lookup(G.finger.angles, p), l = lookup(G.finger.lengths, p), k = lookup(G.finger.stiffness, p);
+  const c = data.ctrl, q = data.qpos, l0 = G.finger.lengths[0];
+  for (let f = 0; f < state.fingers; f++) for (let i = 0; i < N; i++) c[f * N + i] = k * (-a[i] - q[L.hinge[f][i]]);
+  for (let f = 0; f < state.fingers; f++) for (let i = 0; i < N - 1; i++) c[L.nh + f * (N - 1) + i] = l[i] - l0[i];
+  c[L.nh + L.ns] = lift;
+  return l[N - 1];
+}
+
+function setObject() {  // mass and friction live, without rebuilding: inertia scales with mass
+  const b = L.object, scale = state.mass / model.body_mass[b];
+  model.body_mass[b] *= scale;
+  for (let i = 0; i < 3; i++) model.body_inertia[3 * b + i] *= scale;
+  for (let g = 0; g < model.ngeom; g++) model.geom_friction[3 * g] = state.mu;
+  mj.mj_setConst(model, data);
+}
+function build() {
+  if (data) { data.delete(); model.delete(); }
+  const entry = G.models[`${state.shape}${state.fingers}`];
+  L = entry.layout;
+  model = mj.mj_compile(mj.parseXMLString(entry.xml));
+  data = new mj.MjData(model);
+  state.t = 0; state.lift = 0; state.liftTarget = 0; state.auto = null; state.dropAt = null;
+  setObject();
+  mj.mj_forward(model, data);
+  if (three) three.rebuild();
+}
+
+function gripForce() {  // ReducedGripper.grip_force, plus the friction it can carry
+  let total = 0;
+  const own = new Set(L.objectGeoms), con = data.contact, force = data.efc_force;
+  for (let i = 0; i < data.ncon; i++) {
+    const c = con.get(i);
+    if ((own.has(c.geom1) || own.has(c.geom2)) && c.geom1 !== 0 && c.geom2 !== 0 && c.efc_address >= 0) total += force[c.efc_address];
+    c.delete?.();
+  }
+  return total / state.fingers;
+}
+
+function objectHeight() { return data.xpos[3 * L.object + 2]; }
+
+// ---- a scripted grasp: close, wait, lift ----
+function startGrasp() {
+  const target = state.pressure > 0 ? state.pressure : 30;
+  state.auto = { target, t0: state.t };
+  $("pressure").value = target; state.pressure = target; show();
+}
+function advance(dt) {
+  if (state.auto) {
+    const s = (state.t - state.auto.t0) / 0.6;
+    if (s > 1.5) { state.liftTarget = G.lift; state.auto = null; }
+  }
+  const rate = G.lift / 0.5;
+  state.lift += Math.max(-rate * dt, Math.min(rate * dt, state.liftTarget - state.lift));
+  const p = state.auto ? state.auto.target * Math.min((state.t - state.auto.t0) / 0.6, 1) : state.pressure;
+  state.applied = p;
+  control(p * 1e3, state.lift);
+  if (drag) pull();
+  else for (let i = 0; i < 6; i++) data.xfrc_applied[6 * L.object + i] = 0;
+  mj.mj_step(model, data);
+  state.t += dt;
+}
+function pull() {
+  const b = L.object, m = model.body_mass[b], x = data.xpos, v = data.cvel;
+  for (let i = 0; i < 3; i++) data.xfrc_applied[6 * b + i] = 200 * m * (drag.target[i] - x[3 * b + i]) - 20 * m * (x[3 * b + i] - (drag.last?.[i] ?? x[3 * b + i])) / model.opt.timestep;
+  drag.last = [x[3 * b], x[3 * b + 1], x[3 * b + 2]];
+}
+
+// ---- three.js: the finger as a swept, ribbed section through the chain's frames ----
+const SAMPLES = 96, RING = 14;
+function ring(s) {  // section (y, z) at s in [0, 1]: pad flat, back ribbed like the seven chambers
+  const f = G.finger, w = f.width / 2, bump = s < 0.88 ? Math.pow(Math.abs(Math.sin(s / 0.88 * Math.PI * 7)), 0.6) : 0;
+  const back = (s < 0.88 ? 0.009 + 0.006 * bump : 0.005 * (1 - (s - 0.88) / 0.14)) + 0.001, pts = [];
+  for (let i = 0; i < RING; i++) {
+    const a = i / RING * 2 * Math.PI, c = Math.cos(a), d = Math.sin(a);
+    const y = w * Math.sign(c) * Math.pow(Math.abs(c), 0.4), z = (back / 2) * (1 + Math.sign(d) * Math.pow(Math.abs(d), 0.4));
+    pts.push([y, z - f.offset]);
+  }
+  return pts;
+}
+const RINGS = Array.from({ length: SAMPLES }, (_, i) => ring(i / (SAMPLES - 1)));
+function makeFinger(T, material) {
+  const g = new T.BufferGeometry(), pos = new Float32Array(SAMPLES * RING * 3), idx = [];
+  for (let s = 0; s < SAMPLES - 1; s++) for (let r = 0; r < RING; r++) {
+    const a = s * RING + r, b = s * RING + (r + 1) % RING, c = a + RING, d = b + RING;
+    idx.push(a, c, b, b, c, d);
+  }
+  g.setAttribute("position", new T.BufferAttribute(pos, 3)); g.setIndex(idx);
+  const mesh = new T.Mesh(g, material); mesh.castShadow = true; mesh.frustumCulled = false;
+  return mesh;
+}
+function updateFinger(mesh, bodies, tipLength) {
+  const x = data.xpos, R = data.xmat, n = bodies.length, st = [];
+  for (let i = 0; i <= n; i++) {
+    const b = bodies[Math.min(i, n - 1)], m = [...R.slice(9 * b, 9 * b + 9)];
+    const ax = [m[0], m[3], m[6]], up = [m[2], m[5], m[8]], side = [m[1], m[4], m[7]];
+    const o = [x[3 * b], x[3 * b + 1], x[3 * b + 2]];
+    st.push({ p: i < n ? o : o.map((v, j) => v + tipLength * ax[j]), up, side });
+  }
+  const pos = mesh.geometry.attributes.position.array;
+  for (let s = 0; s < SAMPLES; s++) {
+    const u = s / (SAMPLES - 1) * n, i = Math.min(Math.floor(u), n - 1), w = u - i;
+    const a = st[Math.max(i - 1, 0)], b = st[i], c = st[i + 1], d = st[Math.min(i + 2, n)];
+    const cr = (j) => 0.5 * (2 * b.p[j] + (c.p[j] - a.p[j]) * w + (2 * a.p[j] - 5 * b.p[j] + 4 * c.p[j] - d.p[j]) * w * w + (3 * b.p[j] - a.p[j] - 3 * c.p[j] + d.p[j]) * w * w * w);
+    const up = b.up.map((v, j) => v + w * (c.up[j] - v)), side = b.side;
+    const centre = [cr(0), cr(1), cr(2)];
+    for (let r = 0; r < RING; r++) {
+      const [y, z] = RINGS[s][r], k = (s * RING + r) * 3;
+      for (let j = 0; j < 3; j++) pos[k + j] = centre[j] + y * side[j] + z * up[j];
+    }
+  }
+  mesh.geometry.attributes.position.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+}
+
+function initThree() {
+  const T = window.THREE, canvas = $("gl");
+  const renderer = new T.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+  const scene = new T.Scene(), camera = new T.PerspectiveCamera(32, 1, 0.01, 5);
+  const up = new T.Vector3(0, 0, 1); camera.up.copy(up);
+  const view = { az: -1.15, el: 0.24, r: 0.5, look: new T.Vector3(0, 0, 0.09) };
+  const key = new T.DirectionalLight(0xffffff, 0.9); key.position.set(0.25, -0.3, 0.6); key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  Object.assign(key.shadow.camera, { left: -0.2, right: 0.2, top: 0.2, bottom: -0.2, near: 0.1, far: 1.2 });
+  scene.add(key, new T.HemisphereLight(0xffffff, 0x8899a0, 0.6));
+  const table = new T.Mesh(new T.CircleGeometry(0.6, 64), new T.MeshStandardMaterial({ roughness: 0.9 }));
+  table.receiveShadow = true; scene.add(table);
+  const silicone = new T.MeshStandardMaterial({ roughness: 0.42, side: T.DoubleSide });
+  const object = new T.MeshStandardMaterial({ color: 0xd6a03c, roughness: 0.55 });
+  const palm = new T.Mesh(new T.CylinderGeometry(0.04, 0.04, 0.01, 40), new T.MeshStandardMaterial({ color: 0x4b5a63, roughness: 0.5, metalness: 0.3 }));
+  palm.rotation.x = Math.PI / 2; palm.castShadow = true; scene.add(palm);
+  const stem = new T.Mesh(new T.CylinderGeometry(0.01, 0.01, 0.5, 20), palm.material); stem.rotation.x = Math.PI / 2; scene.add(stem);
+  let fingers = [], parts = [];
+  const obj = new T.Group(); scene.add(obj);
+  function rebuild() {
+    fingers.forEach(f => { scene.remove(f); f.geometry.dispose(); });
+    fingers = L.links.map(() => { const m = makeFinger(T, silicone); scene.add(m); return m; });
+    obj.clear();
+    const s = SIZES[state.shape];
+    const add = (geo, z) => { const m = new T.Mesh(geo, object); m.castShadow = true; m.position.z = z; if (geo.type.startsWith("Cyl")) m.rotation.x = Math.PI / 2; obj.add(m); };
+    if (state.shape === "box") add(new T.BoxGeometry(2 * s[0], 2 * s[1], 2 * s[2]), 0);
+    else add(new T.CylinderGeometry(s[0], s[0], 2 * s[1], 40), 0);
+    if (state.shape === "bottle") add(new T.CylinderGeometry(0.45 * s[0], 0.45 * s[0], 0.8 * s[1], 28), 1.4 * s[1]);
+  }
+  function paint() {
+    const css = getComputedStyle(document.documentElement), col = n => new T.Color(css.getPropertyValue(n).trim());
+    scene.background = col("--stage"); table.material.color = col("--stage").multiplyScalar(0.72);
+    silicone.color = col("--silicone").lerp(col("--air"), Math.min((state.applied ?? 0) / 40, 1) * 0.55);
+  }
+  function frame() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * devicePixelRatio || canvas.height !== h * devicePixelRatio) {
+      renderer.setPixelRatio(devicePixelRatio); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    camera.position.set(view.look.x + view.r * Math.cos(view.el) * Math.cos(view.az), view.look.y + view.r * Math.cos(view.el) * Math.sin(view.az), view.look.z + view.r * Math.sin(view.el));
+    camera.lookAt(view.look);
+    const l = lookup(G.finger.lengths, (state.applied ?? 0) * 1e3)[N - 1];
+    L.links.forEach((b, k) => updateFinger(fingers[k], b, l));
+    const z = G.height + state.lift, base = data.xpos[3 * L.links[0][0] + 2];
+    palm.position.z = base + 0.005; stem.position.z = base + 0.26;
+    const b = L.object, q = L.objectQpos, Q = data.qpos;
+    obj.position.set(Q[q], Q[q + 1], Q[q + 2]); obj.quaternion.set(Q[q + 4], Q[q + 5], Q[q + 6], Q[q + 3]);
+    paint();
+    renderer.render(scene, camera);
+  }
+  // pointer: drag the object along the plane facing the camera, or turn the view
+  const ray = new T.Raycaster(), ptr = new T.Vector2(), plane = new T.Plane(), hit = new T.Vector3();
+  const at = e => { const r = canvas.getBoundingClientRect(); ptr.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); ray.setFromCamera(ptr, camera); };
+  let orbit = null;
+  canvas.addEventListener("pointerdown", e => {
+    canvas.setPointerCapture(e.pointerId); at(e);
+    const h = ray.intersectObjects(obj.children)[0];
+    if (h) { plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new T.Vector3()), h.point); drag = { target: [h.point.x, h.point.y, h.point.z] }; }
+    else orbit = { x: e.clientX, y: e.clientY, az: view.az, el: view.el };
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (drag) { at(e); if (ray.ray.intersectPlane(plane, hit)) drag.target = [hit.x, hit.y, Math.max(hit.z, 0.005)]; }
+    else if (orbit) { view.az = orbit.az - (e.clientX - orbit.x) * 0.008; view.el = Math.max(0.03, Math.min(1.3, orbit.el + (e.clientY - orbit.y) * 0.006)); }
+  });
+  const end = () => { drag = null; orbit = null; };
+  canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("wheel", e => { e.preventDefault(); view.r = Math.max(0.2, Math.min(0.9, view.r * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+  return { rebuild, frame };
+}
+
+// ---- readouts ----
+function show() {
+  $("pressure-o").textContent = `${(+$("pressure").value).toFixed(1)} kPa`;
+  $("mass-o").textContent = `${state.mass * 1e3 | 0} g`;
+  $("mu-o").textContent = state.mu.toFixed(2);
+}
+let grip = 0, rtf = 0;
+function readout() {
+  const weight = state.mass * 9.81, g = gripForce();
+  grip += 0.1 * (g - grip);
+  const cap = state.mu * grip * state.fingers, z = objectHeight() - G.rest[state.shape];
+  $("r-grip").textContent = `${grip.toFixed(2)} N`;
+  $("r-cap").textContent = `${cap.toFixed(2)} N`;
+  $("r-w").textContent = `${weight.toFixed(2)} N`;
+  $("r-z").textContent = `${(z * 1e3).toFixed(0)} mm`;
+  $("r-rt").textContent = rtf ? `${rtf.toFixed(1)}x real time` : "-";
+  const scale = Math.max(cap, weight, 0.05) * 1.2;
+  $("b-cap").style.width = `${cap / scale * 100}%`; $("b-w").style.left = `${weight / scale * 100}%`;
+  const held = z > 0.01 && grip > 0.005, lifted = state.lift > 0.5 * G.lift;
+  const badge = $("badge");
+  if (held) { badge.dataset.state = "held"; badge.textContent = "Held"; }
+  else if (lifted) { badge.dataset.state = "dropped"; badge.textContent = "Dropped"; }
+  else { badge.dataset.state = "idle"; badge.textContent = grip > 0.005 ? "Touching" : "On the table"; }
+}
+
+// ---- wiring ----
+function seg(id, key, parse) {
+  $(id).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    for (const o of $(id).children) o.setAttribute("aria-pressed", o === b);
+    state[key] = parse(b.dataset.v); build(); $("pressure").value = 0; state.pressure = 0; show();
+  });
+}
+seg("shape", "shape", String); seg("fingers", "fingers", Number);
+$("pressure").addEventListener("input", e => { state.pressure = +e.target.value; state.auto = null; show(); });
+$("mass").addEventListener("input", e => { state.mass = e.target.value / 1e3; show(); if (mj) setObject(); });
+$("mu").addEventListener("input", e => { state.mu = +e.target.value; show(); if (mj) setObject(); });
+$("grasp").addEventListener("click", () => {
+  if (state.liftTarget > 0) { state.liftTarget = 0; $("grasp").textContent = "Grasp and lift"; }
+  else { startGrasp(); $("grasp").textContent = "Lower"; }
+});
+$("reset").addEventListener("click", () => { $("pressure").value = 0; state.pressure = 0; $("grasp").textContent = "Grasp and lift"; build(); show(); });
+function route() {
+  const v = location.hash.slice(1) || "play";
+  for (const b of document.querySelectorAll("nav button")) {
+    const on = b.dataset.view === v; b.setAttribute("aria-selected", on); $(b.dataset.view).hidden = !on;
+  }
+}
+for (const b of document.querySelectorAll("nav button")) b.addEventListener("click", () => { location.hash = b.dataset.view; route(); });
+addEventListener("hashchange", route);
+$("caveat").textContent = G.caveat;
+
+// ---- grasp map ----
+function drawMap() {
+  const M = G.map; if (!M) return;
+  $("tab-map").hidden = false;
+  const pick = { shape: "box", mu: String(M.frictions[1]) };
+  const segs = (id, values, key, label) => {
+    $(id).innerHTML = values.map(v => `<button data-v="${v}" aria-pressed="${v === pick[key]}">${label(v)}</button>`).join("");
+    $(id).onclick = e => { const b = e.target.closest("button"); if (b) { pick[key] = b.dataset.v; for (const o of $(id).children) o.setAttribute("aria-pressed", o === b); grid(); } };
+  };
+  segs("map-shape", Object.keys(M.grid), "shape", v => v[0].toUpperCase() + v.slice(1));
+  segs("map-mu", M.frictions.map(String), "mu", v => `\u03bc ${v}`);
+  function grid() {
+    const held = M.grid[pick.shape][pick.mu], grip = M.grip[pick.shape][pick.mu];
+    const total = held.flat().reduce((a, b) => a + b, 0);
+    $("map-title").textContent = `${pick.shape[0].toUpperCase() + pick.shape.slice(1)} at friction ${pick.mu}: ${total} of ${held.flat().length} grasps held`;
+    $("map-note").textContent = `Two fingers, ${M.count} fast-model grasps in all. Held means the object rose with the gripper.`;
+    let h = `<tr><th>mass \\ kPa</th>${M.pressures.map(p => `<th>${p / 1e3}</th>`).join("")}</tr>`;
+    M.masses.forEach((m, i) => {
+      h += `<tr><th>${m * 1e3} g</th>` + M.pressures.map((p, j) => `<td><button data-i="${i}" data-j="${j}" data-held="${held[i][j]}" title="${m * 1e3} g at ${p / 1e3} kPa: ${held[i][j] ? "held" : "dropped"}, grip ${grip[i][j].toFixed(2)} N per finger">${held[i][j] ? grip[i][j].toFixed(2) : "\u2013"}</button></td>`).join("") + "</tr>";
+    });
+    $("map-grid").innerHTML = h;
+  }
+  $("map-grid").onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const m = M.masses[b.dataset.i], p = M.pressures[b.dataset.j] / 1e3;
+    state.shape = pick.shape; state.fingers = 2; state.mass = m; state.mu = +pick.mu; state.pressure = p;
+    $("mass").value = m * 1e3; $("mu").value = state.mu; $("pressure").value = p;
+    for (const o of $("shape").children) o.setAttribute("aria-pressed", o.dataset.v === pick.shape);
+    for (const o of $("fingers").children) o.setAttribute("aria-pressed", o.dataset.v === "2");
+    location.hash = "play"; route(); build(); show(); startGrasp(); $("grasp").textContent = "Lower";
+  };
+  grid();
+}
+
+// A plain, deterministic run for checking the page against the Python model (tools/check_gripper_page.py).
+window.softsim = {
+  run(cfg) {
+    Object.assign(state, cfg); build();
+    const out = [];
+    for (let i = 0; i < cfg.steps; i++) {
+      const t = i * 1e-3;
+      control(cfg.pressure * 1e3 * Math.min(t / 0.6, 1), cfg.lift * Math.min(Math.max((t - 1.5) / 0.5, 0), 1));
+      mj.mj_step(model, data);
+      if (i % 100 === 99) out.push([objectHeight(), data.xpos[3 * L.links[0][N - 1]], data.xpos[3 * L.links[0][N - 1] + 2]]);
+    }
+    return out;
+  },
+  stats: () => ({ rtf, frames, z: objectHeight(), grip }),
+};
+
+let frames = 0;
+async function start() {
+  show();
+  try {
+    const binary = Uint8Array.from(atob(document.getElementById("wasm").textContent.trim()), c => c.charCodeAt(0));
+    mj = await loadMujoco({ wasmBinary: binary.buffer });
+    build();
+  } catch (e) {
+    $("badge").hidden = true; $("fail").hidden = false;
+    $("fail").textContent = `Live physics could not start here (${e.message ?? e}). Open this file directly in Chrome or Firefox, or run python tools/demo_gripper.py.`;
+    throw e;
+  }
+  three = initThree(); three.rebuild();
+  let last = performance.now(), simMs = 0, wallMs = 0;
+  function tick(now) {
+    const wall = Math.min(now - last, 50); last = now;
+    const dt = model.opt.timestep, steps = Math.round(wall / 1e3 / dt), t0 = performance.now();
+    for (let i = 0; i < steps; i++) advance(dt);
+    simMs += steps * dt * 1e3; wallMs += performance.now() - t0;
+    if (wallMs > 200) { rtf = simMs / wallMs; simMs = wallMs = 0; }
+    readout(); three.frame(); frames++;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+  window.dispatchEvent(new Event("gripper-ready")); document.documentElement.dataset.ready = "1";
+}
+drawMap();
+route();
+start();
+</script>
+<script type="text/plain" id="wasm">/*@WASM@*/</script>

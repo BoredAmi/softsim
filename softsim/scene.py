@@ -286,7 +286,9 @@ class RigidBodySpec:
     Velocities are in the world frame; angular velocity in rad/s. ``mount``
     is ``"free"`` (6 DOF) or ``"slider_z"``: vertical translation only, held
     by a spring (``mount_stiffness`` [N/m], ``mount_damping`` [N s/m]) whose
-    rest position is the initial pose, e.g. a compliant support.
+    rest position is the initial pose, e.g. a compliant support. ``floor`` [m]: the lowest height of the centre of
+    mass, where the body stands on the table. The reference needs it, having no contact between a rigid body and the
+    ground; the other backends collide the body with the ground and ignore it.
     """
 
     name: str
@@ -300,6 +302,7 @@ class RigidBodySpec:
     mount: Literal["free", "slider_z"] = "free"
     mount_stiffness: float = 0.0
     mount_damping: float = 0.0
+    floor: float | None = None
 
     @property
     def requires(self) -> frozenset[Capability]:

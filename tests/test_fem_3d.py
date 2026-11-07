@@ -17,6 +17,7 @@ from softsim.fem.materials import (  # noqa: E402
     from_material,
 )
 from softsim.fem.solid3d import (  # noqa: E402
+    FLOOR_STIFFNESS,
     Problem3D,
     QuadraticTetMesh,
     RigidBody3D,
@@ -173,6 +174,82 @@ def test_free_flight_and_spin_are_exact():
     t = 0.01
     np.testing.assert_allclose(c, [0.1 * t, 0, 0.105 - 1.0 * t - 0.5 * 9.81 * t * t], atol=1e-12)
     np.testing.assert_allclose(r, expm_so3([0, 0, 10.0 * t]), atol=1e-12)
+
+
+def _on_floor(z: float, velocity=(0.0, 0.0, 0.0), floor: float | None = 0.05) -> RigidBody3D:
+    return RigidBody3D("w", parts=(Part("cylinder", (0.02, 0.005, 0), (0, 0, 0.005)),), mass=0.05,
+                       inertia=((1e-5, 0, 0), (0, 1e-5, 0), (0, 0, 2e-5)), com=(0, 0, 0.005), position=(0, 0, z),
+                       velocity=velocity, floor=floor)
+
+
+def _block() -> QuadraticTetMesh:
+    lin = structured_box((0.02, 0.02, 0.01), 0.01)
+    return QuadraticTetMesh.from_linear(lin.points, lin.tets)
+
+
+def test_body_rests_on_its_floor():
+    """Dropped 1 mm on its floor, a body comes to rest sunk by its weight over the floor's stiffness."""
+    s = Solid3DSolver(Problem3D(_block(), NeoHookeanIso(1e4), 1e6, 1000.0, rigid=(_on_floor(0.046),)))
+    for _ in range(400):
+        assert s.advance(1e-3)
+    assert s.rigid_pose(0)[0][2] == pytest.approx(0.05 - 0.05 * 9.81 / FLOOR_STIFFNESS, abs=1e-7)
+
+
+def test_floor_pushes_one_way():
+    """Thrown upwards, a body is untouched by its floor: it rises v^2 / 2g as if there were none."""
+    s = Solid3DSolver(Problem3D(_block(), NeoHookeanIso(1e4), 1e6, 1000.0, rigid=(_on_floor(0.05, (0, 0, 0.5)),)))
+    top = 0.0
+    for _ in range(60):
+        assert s.advance(1e-3)
+        top = max(top, s.rigid_pose(0)[0][2])
+    assert top - 0.055 == pytest.approx(0.5**2 / (2 * 9.81), abs=2e-4)
+
+
+def test_floor_takes_a_push_from_contact():
+    """A soft block landing on a body cannot drive it through its floor: the reason grasps need one. Closing fingers
+    push an object down at about four times its weight; with its support taken away it shot through the table."""
+    def fall(floor):
+        body = _on_floor(-0.0101, floor=floor)
+        s = Solid3DSolver(Problem3D(_block(), NeoHookeanIso(1e4), 1e6, 1000.0, rigid=(body,)))
+        for _ in range(30):
+            assert s.advance(1e-3)
+        return s.rigid_pose(0)[0][2]
+
+    assert fall(-0.0051) == pytest.approx(-0.0051, abs=2e-5)
+    assert fall(None) < -0.0051 - 1e-3
+
+
+def test_floor_is_for_free_bodies():
+    with pytest.raises(ValueError, match="free body"):
+        RigidBody3D("w", parts=(Part("cylinder", (0.02, 0.005, 0), (0, 0, 0)),), mass=0.05, mount="fixed", floor=0.0)
+
+
+def _pulled_block():
+    """A block held at its base, the base moving up 1 mm per second."""
+    m = _block()
+    fixed = m.nodes[:, 2] < 1e-9
+    s = Solid3DSolver(Problem3D(m, NeoHookeanIso(1e4), 1e6, 1000.0, pinned=np.nonzero(fixed)[0]))
+    n = int(s.fixed.sum())
+    s.fixed_motion = lambda t: np.full(n, 1e-3 * t)
+    return s
+
+
+def test_prescribed_motion_survives_a_bad_predictor(monkeypatch):
+    """A predictor with no finite energy must not cost a step its prescribed motion. It once did, silently: the palm
+    of a grasp stopped at 0.6 nm, fell further behind every step, and the run finished with nothing lifted."""
+    s = _pulled_block()
+    energy = s.energy
+    calls = iter([np.inf])
+    monkeypatch.setattr(s, "energy", lambda y, ctx: next(calls, None) or energy(y, ctx))
+    assert s.solve_step(1e-3)
+    assert s.y[s.fixed] == pytest.approx(1e-6, abs=1e-15)
+
+
+def test_step_fails_rather_than_leave_its_prescribed_path(monkeypatch):
+    s = _pulled_block()
+    monkeypatch.setattr(s, "energy", lambda y, ctx: np.inf)
+    assert not s.solve_step(1e-3)
+    assert s.t == 0.0 and not s.y.any()
 
 
 def test_fem_backend_refuses_numerical_damping_and_stvk():

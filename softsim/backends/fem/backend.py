@@ -160,7 +160,7 @@ class FemBackend(Backend):
                 rb.name, parts=tuple(rb.parts), mass=rb.mass, inertia=tuple(map(tuple, inertia)), com=tuple(com),
                 position=tuple(rb.pose.position), quaternion=tuple(rb.pose.quaternion), velocity=tuple(v_com),
                 angular_velocity=tuple(omega), mount=rb.mount, stiffness=rb.mount_stiffness,
-                damping=rb.mount_damping, edge_radius=EDGE_RADIUS,
+                damping=rb.mount_damping, edge_radius=EDGE_RADIUS, floor=rb.floor,
                 contact=contact(max(mat.friction.sliding, rb.friction.sliding), mat.adhesion)))
         def with_midpoints(corners) -> list[int]:
             """``corners`` and the mid-edge nodes between two of them (they move with them)."""

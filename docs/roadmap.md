@@ -342,6 +342,9 @@ forces, slip, pull-out). Contact quality work, including the M4 SOFA
 artefacts, finger self-collision and a friction benchmark. A grasp benchmark
 grid.
 
+Started 2026-11-06: two-finger gripper on the reference, a fast finger fitted to it, a local live page and a grasp map
+([gripper.md](gripper.md)). Finite-element grasps and the page's replay of them are still to come.
+
 ## M10: magnetic soft robots (MRE)
 
 Hard-magnetic elastomer model (per-element magnetisation in an external

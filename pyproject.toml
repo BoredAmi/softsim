@@ -43,7 +43,7 @@ fem = "softsim.backends.fem:FemBackend"
 include = ["softsim*"]
 
 [tool.setuptools.package-data]
-softsim = ["materials/presets/*.yaml", "geometry/presets/*.yaml"]
+softsim = ["materials/presets/*.yaml", "geometry/presets/*.yaml", "reduced/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

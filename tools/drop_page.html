@@ -1,0 +1,535 @@
+<title>Soft Drop Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a high-speed camera bench. The shot fills the page, the trace sits under it, one column drives it. */
+:root {
+  --bg: #e4e9ec; --panel: #f3f6f7; --ink: #17262e; --muted: #566a75; --line: #c3ced4;
+  --silicone: #1c8c8a; --air: #c8571f; --stage: #d3dce1;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10181d; --panel: #18232a; --ink: #e5edf0; --muted: #93a7b2; --line: #2d3c45;
+  --silicone: #3fbdb8; --air: #ee8450; --stage: #141e24; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10181d; --panel: #18232a; --ink: #e5edf0; --muted: #93a7b2; --line: #2d3c45;
+  --silicone: #3fbdb8; --air: #ee8450; --stage: #141e24; color-scheme: dark }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); display: flex; flex-direction: column; }
+header { padding: 12px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); }
+h1 { margin: 0; font: 700 22px/1.1 var(--display); letter-spacing: -.01em; }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+.left { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.stage { position: relative; flex: 1; background: var(--stage); min-height: 300px; overflow: hidden; }
+.stage canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+.badge { position: absolute; left: 14px; top: 12px; font: 600 14px var(--body); padding: 3px 10px; color: var(--bg); background: var(--muted); }
+.badge[data-state="impact"] { background: var(--air); }
+.hint { position: absolute; left: 14px; bottom: 10px; color: var(--muted); font-size: 13px; }
+.trace { flex: none; height: 190px; background: var(--panel); border-top: 1px solid var(--line); position: relative; }
+.trace canvas { display: block; width: 100%; height: 100%; }
+aside { background: var(--panel); border-left: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-width: 0; }
+.field label { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 500; }
+.field input[type="number"] { width: 84px; font: 500 14px var(--mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); padding: 1px 4px; text-align: right; }
+.field .unit { color: var(--muted); font: 500 13px var(--mono); min-width: 30px; }
+.field .value { display: flex; align-items: center; gap: 4px; }
+select { width: 100%; font: 500 13.5px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); padding: 5px; margin-top: 4px; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+details > div, #objectFields, .fields { display: flex; flex-direction: column; gap: 10px; }
+details > div { margin-top: 8px; }
+summary { font: 700 15px var(--display); cursor: pointer; }
+.field output, .read b { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--air); margin: 4px 0 0; }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.seg button { font: 500 13.5px var(--body); color: var(--ink); background: var(--panel); border: 0; padding: 6px 2px; cursor: pointer; }
+.seg button:last-child:nth-child(4n+3) { grid-column: span 2; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.act { display: flex; gap: 8px; }
+.act button { flex: 1; font: 600 14px var(--body); padding: 9px 4px; cursor: pointer; border: 1px solid var(--ink); background: none; color: var(--ink); }
+.act button.go { background: var(--air); border-color: var(--air); color: #fff; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--silicone); outline-offset: 2px; }
+.read { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13.5px; border-top: 1px solid var(--line); padding-top: 10px; }
+.read span { color: var(--muted); }
+.fine { font-size: 12.5px; color: var(--muted); margin: 0; }
+@media (max-width: 760px) {
+  html, body { height: auto; } main { display: block; } .stage { height: 52vh; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+
+<header><h1>Soft Drop Bench</h1></header>
+<main>
+  <div class="left">
+    <div class="stage">
+      <canvas id="view" aria-label="Three-dimensional view of the drop"></canvas>
+      <div class="badge" id="badge" role="status">Ready</div>
+      <div class="hint">Drag to look around, scroll to zoom</div>
+    </div>
+    <div class="trace"><canvas id="plot" role="img" aria-label="Indentation against time since contact"></canvas></div>
+  </div>
+  <aside>
+    <div class="field">
+      <label>Replay a recorded drop</label>
+      <div class="seg" id="recorded" style="grid-template-columns: 1fr 1fr">
+        <button data-v="w020">20 g, filmed</button><button data-v="w050">50 g, filmed</button>
+      </div>
+    </div>
+    <div class="field"><label for="height">Height <output id="heightOut"></output></label><input id="height" type="range" min="5" max="80" step="1" value="38"></div>
+    <div class="field"><label for="offset">Off centre <output id="offsetOut"></output></label><input id="offset" type="range" min="0" max="15" step="0.5" value="0"></div>
+    <div class="field"><label for="tilt">Tilt <output id="tiltOut"></output></label><input id="tilt" type="range" min="0" max="20" step="1" value="0"></div>
+    <details id="objectBox" open><summary>The object</summary><div>
+      <div class="field"><label>Start from</label><div class="seg" id="thing"></div></div>
+      <div id="objectFields">
+        <div class="field"><label>Shape</label><div class="seg" id="shape" style="grid-template-columns: 1fr 1fr"><button data-v="disc">Disc</button><button data-v="sphere">Ball</button></div></div>
+        <div class="fields" id="objectSize"></div>
+        <div class="field"><label>Weight set by</label><div class="seg" id="massBy" style="grid-template-columns: 1fr 1fr"><button data-v="mass">Mass</button><button data-v="material">Material</button></div></div>
+        <div class="field" id="objectMaterialField"><label for="objectMaterial">Made of</label><select id="objectMaterial"></select></div>
+        <div class="fields" id="objectMass"></div>
+      </div>
+      <p class="fine" id="objectRead"></p>
+    </div></details>
+    <details id="bodyBox"><summary>The soft body</summary><div>
+      <div class="field"><label>Stiffness set by</label><div class="seg" id="by">
+        <button data-v="material">Material</button><button data-v="E">Young's E</button><button data-v="G">Shear G</button><button data-v="M100" aria-label="100% modulus">100%</button></div></div>
+      <div class="field" id="materialField"><label for="material">Material</label><select id="material"></select></div>
+      <div class="fields" id="stiffness"></div>
+      <div class="fields" id="bodyFields"></div>
+      <p class="fine" id="bodyRead"></p>
+    </div></details>
+    <div class="act"><button class="go" id="drop">Drop</button><button id="reset">Reset</button></div>
+    <div class="read">
+      <span>Time since contact</span><b id="rT">–</b>
+      <span>Peak indentation</span><b id="rP">–</b>
+      <span>Reached at</span><b id="rPt">–</b>
+      <span>Peak force</span><b id="rF">–</b>
+      <span>Bounce height</span><b id="rB">–</b>
+      <span>Slow motion</span><b id="rS">–</b>
+      <span>Time step</span><b id="rD">–</b>
+    </div>
+    <p class="fine" id="status"></p>
+    <p class="fine" id="caveat"></p>
+  </aside>
+</main>
+
+<script>/*@THREE@*/</script>
+<script>/*@SOLVER@*/</script>
+<script>const DATA = /*@DATA@*/null;</script>
+<script>
+const $ = id => document.getElementById(id);
+const G = 9.81, GAP = 1e-4, END = 0.25, RELAXED_NU = 0.47;
+const state = {thing: "w050", recording: null, phase: "idle", sim: null, peak: 0, peakT: 0, force: 0, smooth: 0, bounce: 0, contact: null, trace: [], rate: 0, fall: 0,
+               by: "E", material: 0, shape: "disc", massBy: "mass", objectMaterial: "Brass", knob: [0.5, 0.5], mesh: DATA.mesh, H: DATA.height, values: {}};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* Declared values live in state.values, in the units on screen; every field shows them, none of them holds them. */
+const DEFAULTS = {modulus: DATA.card.E / 1e3, nu: DATA.card.nu, relax: DATA.card.g, tau: DATA.card.tau * 1e3, bodyD: DATA.diameter * 1e3, bodyH: DATA.height * 1e3,
+                  density: DATA.specimenMass / cylinderMass(1, DATA.diameter / 2, DATA.height)};
+const FIELDS = {
+  modulus: {box: "stiffness", label: "Young's modulus", unit: "kPa", min: 5, max: 5000, log: true, digits: 1},
+  nu: {box: "bodyFields", label: "Poisson's ratio", unit: "", min: 0.45, max: 0.4995, digits: 4},
+  density: {box: "bodyFields", label: "Density", unit: "kg/m³", min: 500, max: 2000, digits: 0},
+  relax: {box: "bodyFields", label: "Relaxing share g", unit: "", min: 0, max: 0.95, digits: 3},
+  tau: {box: "bodyFields", label: "Relaxation time", unit: "ms", min: 0.2, max: 50, log: true, digits: 1},
+  bodyD: {box: "bodyFields", label: "Diameter", unit: "mm", min: 20, max: 80, digits: 1},
+  bodyH: {box: "bodyFields", label: "Height", unit: "mm", min: 8, max: 40, digits: 1},
+  objD: {box: "objectSize", label: "Diameter", unit: "mm", min: 5, max: 70, digits: 1},
+  objH: {box: "objectSize", label: "Thickness", unit: "mm", min: 2, max: 40, digits: 1},
+  mass: {box: "objectMass", label: "Mass", unit: "g", min: 1, max: 1000, log: true, digits: 1},
+};
+const MODULUS = {E: "Young's modulus", G: "Shear modulus", M100: "100% modulus"};
+const value = id => state.values[id];
+function sliderOf(id, v) { const f = FIELDS[id], s = f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min); return Math.round(1000 * s); }
+function fromSlider(id, s) { const f = FIELDS[id], u = s / 1000; return f.log ? f.min * (f.max / f.min) ** u : f.min + u * (f.max - f.min); }
+function setValue(id, v) {
+  state.values[id] = v;
+  $(id).value = sliderOf(id, v);
+  $(id + "Number").value = +v.toFixed(FIELDS[id].digits);
+}
+function buildFields() {
+  for (const [id, f] of Object.entries(FIELDS)) {
+    const box = document.createElement("div");
+    box.className = "field";
+    box.id = id + "Field";
+    box.innerHTML = `<label for="${id}Number"><span id="${id}Label">${f.label}</span><span class="value"><input type="number" id="${id}Number" min="${f.min}" max="${f.max}" step="any"><span class="unit">${f.unit}</span></span></label>
+      <input type="range" id="${id}" min="0" max="1000" aria-label="${f.label}">`;
+    $(f.box).append(box);
+    $(id).addEventListener("input", () => { setValue(id, fromSlider(id, +$(id).value)); edited(); });
+    $(id + "Number").addEventListener("change", () => {
+      const v = +$(id + "Number").value;
+      setValue(id, Number.isFinite(v) ? Math.min(f.max, Math.max(f.min, v)) : value(id));
+      edited();
+    });
+  }
+}
+function modulusPa() {  // the declared stiffness as the solver's helper takes it
+  if (state.by === "material") return {by: "G", value: DATA.materials[state.material].G};
+  return {by: state.by, value: value("modulus") * 1e3};
+}
+function card() { return declaredCard({...modulusPa(), nu: value("nu"), g: value("relax"), tau: value("tau") / 1e3}); }
+function object() {
+  const preset = thing();
+  if (preset.shape === "none") return preset;
+  const radius = value("objD") / 2e3, o = {shape: state.shape, radius, height: state.shape === "sphere" ? 2 * radius : value("objH") / 1e3};
+  o.mass = state.massBy === "mass" ? value("mass") / 1e3 : objectMass(o, DATA.objectMaterials[state.objectMaterial]);
+  return state.shape === "sphere" ? o : {...o, knobRadius: state.knob[0] * radius, knobHeight: state.knob[1] * o.height};
+}
+function thing() { return DATA.things[state.thing]; }
+function inputs() {
+  const r = state.recording && DATA.recordings[state.recording];
+  return {height: +$("height").value / 100, offset: r ? r.offset : $("offset").value / 1e3, tilt: $("tilt").value * Math.PI / 180,
+          speed: r ? r.speed : Math.sqrt(2 * G * $("height").value / 100), spin: r ? r.spin : 0};
+}
+function makeSim() {
+  const c = inputs(), t = object(), radius = value("bodyD") / 2e3;
+  state.H = value("bodyH") / 1e3;
+  state.mesh = scaledMesh(DATA.mesh, value("bodyD") / 1e3 / DATA.diameter, state.H / DATA.height);
+  const material = {...card(), mass: cylinderMass(value("density"), radius, state.H)}, friction = {object: 5, table: 5};
+  if (t.shape === "none") return new DropSim(state.mesh, material, {shape: "none"}, friction, {lift: GAP, velocity: [0, 0, -c.speed]});
+  const low = t.shape === "sphere" ? t.radius : t.height / 2 * Math.cos(c.tilt) + t.radius * Math.sin(c.tilt);
+  return new DropSim(state.mesh, material, {...t, position: [c.offset, 0, state.H + low + GAP], velocity: [0, 0, -c.speed], tilt: c.tilt, spin: c.spin}, friction);
+}
+function indentation(sim) {
+  const o = sim.object;
+  return o ? state.H - (o.p[2] - (o.shape === "sphere" ? o.radius : o.height / 2)) : null;
+}
+function record(sim) {  // called after each step
+  if (sim.object) {
+    const d = indentation(sim);
+    if (state.contact === null && sim.contactForce > 0) state.contact = sim.t;
+    if (state.contact !== null) {
+      if (d > state.peak) { state.peak = d; state.peakT = sim.t - state.contact; }
+      if (sim.t > state.contact + 1e-3) state.bounce = Math.max(state.bounce, -d);
+    }
+    // a node landing on the object is a one-step spike: the force that moves the weight is the filtered one (0.2 ms)
+    const k = sim.dt / 2e-4;
+    state.smooth += k * (sim.contactForce - state.smooth);
+    state.force = Math.max(state.force, state.smooth);
+  } else {
+    let low = Infinity, f = 0;
+    for (let i = 0; i < sim.n; i++) low = Math.min(low, sim.x[3 * i + 2]);
+    if (state.contact === null && low < 0) state.contact = sim.t;
+    if (state.contact !== null) {
+      const top = sim.x[3 * DATA.topNode + 2], d = state.H - top;
+      if (d > state.peak) { state.peak = d; state.peakT = sim.t - state.contact; }
+      if (sim.t > state.contact + 1e-3) state.bounce = Math.max(state.bounce, low);
+    }
+  }
+}
+function healthy(sim) {
+  if (sim.failed) return false;
+  for (let i = 0; i < 3 * sim.n; i += 30) if (!Number.isFinite(sim.x[i])) return false;
+  return !sim.object || Number.isFinite(sim.object.p[2]);
+}
+function clear() {
+  Object.assign(state, {phase: "idle", peak: 0, peakT: 0, force: 0, smooth: 0, bounce: 0, contact: null, trace: [], rate: 0, fall: 0});
+  state.sim = makeSim();
+}
+function drop() { clear(); state.phase = "fall"; state.fall = performance.now(); }
+function advance(ms) {  // as many steps as fit in ``ms`` of wall time
+  const s = state.sim, start = performance.now();
+  let steps = 0, next = state.trace.length ? state.trace[state.trace.length - 1][0] + 5e-5 : 0;
+  while (performance.now() - start < ms && s.t < END) {
+    for (let i = 0; i < 20; i++) {
+      s.step();
+      record(s);
+      steps++;
+      if (state.contact !== null && s.t - state.contact >= next) {
+        const d = s.object ? indentation(s) : state.H - s.x[3 * DATA.topNode + 2];
+        state.trace.push([s.t - state.contact, d]);
+        next = s.t - state.contact + 5e-5;
+      }
+    }
+  }
+  state.rate = 0.9 * state.rate + 0.1 * (steps * s.dt) / ((performance.now() - start) / 1e3);
+  if (!healthy(s)) { state.phase = "failed"; return; }
+  if (s.t >= END) state.phase = "done";
+}
+
+/* three.js view, z up */
+let T;
+function initThree() {
+  const canvas = $("view"), renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(32, 1, 0.005, 5);
+  camera.up.set(0, 0, 1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445560, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(0.3, -0.5, 0.8);
+  scene.add(sun);
+  const table = new THREE.Mesh(new THREE.CircleGeometry(0.16, 64), new THREE.MeshLambertMaterial({color: 0x8f9ea6}));
+  table.position.z = -2e-4;
+  scene.add(table);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * (DATA.mesh.points.length / 3)), 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(DATA.mesh.points.length), 3));
+  geo.setIndex(DATA.tris);
+  const body = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({vertexColors: true, shininess: 40, side: THREE.DoubleSide}));
+  body.frustumCulled = false;
+  scene.add(body);
+  const view = {yaw: -1.57, pitch: 0.22, r: 0.2, target: new THREE.Vector3(0, 0, 0.022)};
+  T = {renderer, scene, camera, body, geo, view, object: null, canvas};
+  let last = null;
+  canvas.addEventListener("pointerdown", e => { last = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => {
+    if (!last) return;
+    view.yaw -= (e.clientX - last[0]) * 0.008;
+    view.pitch = Math.max(0.02, Math.min(1.4, view.pitch + (e.clientY - last[1]) * 0.006));
+    last = [e.clientX, e.clientY];
+  });
+  canvas.addEventListener("pointerup", () => last = null);
+  canvas.addEventListener("wheel", e => { e.preventDefault(); view.r = Math.max(0.06, Math.min(0.8, view.r * Math.exp(e.deltaY * 1e-3))); }, {passive: false});
+}
+function makeObject() {
+  if (T.object) T.scene.remove(T.object);
+  T.object = null;
+  const t = object();
+  if (t.shape === "none") return;
+  const g = new THREE.Group();
+  if (t.shape === "sphere") {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(t.radius, 40, 28), new THREE.MeshPhongMaterial({color: 0xb9c4cc, specular: 0xffffff, shininess: 90})));
+  } else {
+    const brass = new THREE.MeshPhongMaterial({color: 0xc29a3d, specular: 0xfff0c0, shininess: 70});
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(t.radius, t.radius, t.height, 48), brass);
+    disc.rotation.x = Math.PI / 2;
+    g.add(disc);
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(t.knobRadius, t.knobRadius, t.knobHeight, 24), brass);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.z = (t.height + t.knobHeight) / 2;
+    g.add(knob);
+  }
+  T.scene.add(g);
+  T.object = g;
+}
+function paint(lift) {
+  const s = state.sim, {geo, object} = T, p = geo.attributes.position.array, c = geo.attributes.color.array, rest = state.mesh.points;
+  const a = new THREE.Color(css("--silicone")), b = new THREE.Color(css("--air")), col = new THREE.Color();
+  for (let i = 0; i < s.n; i++) {
+    const j = 3 * i;
+    p[j] = s.x[j]; p[j + 1] = s.x[j + 1]; p[j + 2] = s.x[j + 2] + (thing().shape === "none" ? lift : 0);
+    const u = Math.hypot(s.x[j] - rest[j], s.x[j + 1] - rest[j + 1], s.x[j + 2] - rest[j + 2]);
+    col.copy(a).lerp(b, Math.min(u / 0.006, 1));
+    c[j] = col.r; c[j + 1] = col.g; c[j + 2] = col.b;
+  }
+  geo.attributes.position.needsUpdate = true;
+  geo.attributes.color.needsUpdate = true;
+  geo.computeVertexNormals();
+  if (object) {
+    const o = s.object;
+    object.position.set(o.p[0], o.p[1], o.p[2] + lift);
+    object.quaternion.set(o.q[1], o.q[2], o.q[3], o.q[0]);
+  }
+}
+function resize() {
+  const {renderer, camera, canvas} = T, w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+}
+function render(lift) {
+  resize();
+  paint(lift);
+  const {camera, view} = T;
+  const cp = Math.cos(view.pitch);
+  camera.position.set(view.target.x + view.r * cp * Math.cos(view.yaw), view.target.y + view.r * cp * Math.sin(view.yaw), view.target.z + view.r * Math.sin(view.pitch));
+  camera.lookAt(view.target);
+  T.renderer.render(T.scene, camera);
+}
+
+/* trace: one plot, indentation against time since contact */
+function plot() {
+  const c = $("plot"), dpr = Math.min(devicePixelRatio, 2), w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const x = c.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  const rec = state.recording && DATA.recordings[state.recording];
+  const tmax = Math.max(12, state.trace.length ? state.trace[state.trace.length - 1][0] * 1e3 : 0);
+  const series = state.trace.map(p => p[1] * 1e3), all = series.concat(rec ? rec.track.map(p => p[1]) : []);
+  const top = Math.max(6, ...all) * 1.1, bottom = Math.min(-2, ...all.filter(v => v > -30));
+  const L = 52, R = 14, Tp = 24, B = 40, px = t => L + t / tmax * (w - L - R), py = d => Tp + (top - d) / (top - bottom) * (h - Tp - B);
+  x.font = "12px " + css("--mono");
+  x.fillStyle = css("--muted");
+  x.strokeStyle = css("--line");
+  x.lineWidth = 1;
+  x.beginPath();
+  x.moveTo(L, py(0)); x.lineTo(w - R, py(0));
+  x.stroke();
+  x.textAlign = "right"; x.textBaseline = "middle";
+  const ystep = top - bottom > 16 ? 5 : 2;
+  for (let d = Math.ceil(bottom / ystep) * ystep; d <= top; d += ystep) x.fillText(String(d), L - 6, py(d));
+  x.textAlign = "center"; x.textBaseline = "top";
+  const xstep = tmax > 120 ? 50 : tmax > 40 ? 20 : tmax > 20 ? 5 : 2;
+  for (let t = 0; t <= tmax; t += xstep) x.fillText(String(t), px(t), h - B + 5);
+  x.textAlign = "left";
+  x.textAlign = "center";
+  x.fillText("time since contact, ms", L + (w - L - R) / 2, h - 16);
+  x.save(); x.translate(13, Tp + (h - Tp - B) / 2); x.rotate(-Math.PI / 2); x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("indentation, mm", 0, 0); x.restore();
+  const line = (pts, colour, width) => {
+    x.strokeStyle = colour; x.lineWidth = width; x.lineJoin = "round"; x.beginPath();
+    let on = false;
+    for (const [t, d] of pts) { if (t > tmax) break; if (on) x.lineTo(px(t), py(d)); else { x.moveTo(px(t), py(d)); on = true; } }
+    x.stroke();
+  };
+  if (rec) line(rec.track, css("--ink"), 2);
+  line(state.trace.map(p => [p[0] * 1e3, p[1] * 1e3]), css("--air"), 2);
+  x.textBaseline = "middle"; x.textAlign = "left";
+  let lx = L;
+  for (const [label, colour] of [["live solver", css("--air")], ...(rec ? [["high-speed film", css("--ink")]] : [])]) {
+    x.fillStyle = colour; x.fillRect(lx, 9, 16, 3);
+    x.fillStyle = css("--muted"); x.fillText(label, lx + 22, 11);
+    lx += 34 + x.measureText(label).width;
+  }
+}
+function show() {
+  $("heightOut").textContent = `${$("height").value} cm`;
+  $("offsetOut").textContent = `${(+$("offset").value).toFixed(1)} mm`;
+  $("tiltOut").textContent = `${$("tilt").value}°`;
+  const press = (box, on) => { for (const b of $(box).children) b.setAttribute("aria-pressed", String(b.dataset.v === on)); };
+  press("thing", state.custom ? null : state.thing);
+  press("recorded", state.recording);
+  press("by", state.by);
+  press("shape", state.shape);
+  press("massBy", state.massBy);
+  $("materialField").hidden = state.by !== "material";
+  $("modulusField").hidden = state.by === "material";
+  if (state.by !== "material") $("modulusLabel").textContent = MODULUS[state.by];
+  const bare = thing().shape === "none";
+  $("objectFields").hidden = bare;
+  $("objHField").hidden = state.shape === "sphere";
+  $("objectMaterialField").hidden = state.massBy !== "material";
+  $("massField").hidden = state.massBy !== "mass";
+  const c = card(), m = cylinderMass(value("density"), value("bodyD") / 2e3, value("bodyH") / 1e3), o = object();
+  $("bodyRead").textContent = `E ${(c.E / 1e3).toFixed(1)} kPa, G ${(c.G / 1e3).toFixed(1)} kPa, K ${(c.K / 1e6).toFixed(1)} MPa, mass ${(m * 1e3).toFixed(1)} g.` +
+    (value("nu") < RELAXED_NU ? " Poisson's ratio below 0.47 lets a hard impact collapse the core." : "");
+  $("objectRead").textContent = bare ? "The cylinder itself falls on the table." : `Mass ${(o.mass * 1e3).toFixed(1)} g.`;
+  $("status").textContent = state.recording ? "Same settings as the film." : "Your settings: not checked against the film.";
+}
+function readout() {
+  const hit = state.contact !== null, s = state.sim, b = $("badge");
+  $("rT").textContent = hit ? `${((s.t - state.contact) * 1e3).toFixed(1)} ms` : "–";
+  $("rP").textContent = hit ? `${(state.peak * 1e3).toFixed(2)} mm` : "–";
+  $("rPt").textContent = hit ? `${(state.peakT * 1e3).toFixed(2)} ms` : "–";
+  $("rF").textContent = hit && s.object ? `${state.force.toFixed(1)} N` : "–";
+  $("rB").textContent = hit ? `${(state.bounce * 1e3).toFixed(1)} mm` : "–";
+  $("rS").textContent = state.rate > 0 && state.phase === "impact" ? `1/${Math.round(1 / state.rate)}` : "–";
+  $("rD").textContent = `${(s.dt * 1e6).toFixed(1)} µs`;
+  const text = {idle: "Ready", fall: "Falling, real time", impact: "Impact, slow motion", done: "Finished", failed: "The solver gave up on this drop"}[state.phase];
+  b.textContent = text;
+  b.dataset.state = state.phase;
+}
+function edited() { state.recording = null; state.custom = true; refresh(); }
+function refresh() { clear(); makeObject(); show(); }
+function setThing(key) {
+  const t = DATA.things[key];
+  Object.assign(state, {thing: key, custom: false});
+  if (t.shape !== "none") {
+    Object.assign(state, {shape: t.shape, massBy: "mass"});
+    setValue("objD", 2e3 * t.radius);
+    setValue("mass", 1e3 * t.mass);
+    if (t.shape === "disc") { setValue("objH", 1e3 * t.height); state.knob = [t.knobRadius / t.radius, t.knobHeight / t.height]; }
+  }
+  refresh();
+}
+function setBody() {  // the card the film was checked with
+  state.by = "E";
+  for (const [id, v] of Object.entries(DEFAULTS)) setValue(id, v);
+}
+function setBy(by) {  // the same stiffness, declared another way
+  if (by !== "material") {
+    const c = card();
+    setValue("modulus", {E: c.E, G: c.G, M100: 1.75 * c.G}[by] / 1e3);
+  }
+  state.by = by;
+  edited();
+}
+function setMaterial(i) {
+  const m = DATA.materials[i];
+  state.material = i;
+  setValue("density", m.density);
+  setValue("relax", 0);
+  edited();
+}
+function setRecording(key) {
+  state.recording = key;
+  if (key) {
+    for (const [id, v] of [["height", 38], ["offset", 0], ["tilt", 0]]) $(id).value = v;
+    setBody();
+    setThing(key);
+  } else refresh();
+}
+function loop(now) {
+  let lift = 0;
+  const c = inputs();
+  if (state.phase === "fall") {
+    const t = (now - state.fall) / 1e3, tf = c.speed / G;  // free fall in real time: analytic, nothing to solve
+    if (t >= tf) state.phase = "impact";
+    else lift = c.height - 0.5 * G * t * t;
+  } else if (state.phase === "idle") {
+    lift = c.height;
+  }
+  if (state.phase === "impact") advance(14);
+  render(lift);
+  plot();
+  readout();
+  requestAnimationFrame(loop);
+}
+
+for (const [k, t] of Object.entries(DATA.things)) {
+  const b = document.createElement("button");
+  b.dataset.v = k;
+  b.textContent = t.label;
+  $("thing").append(b);
+}
+for (const [i, m] of DATA.materials.entries()) $("material").add(new Option(m.label, i));
+for (const k of Object.keys(DATA.objectMaterials)) $("objectMaterial").add(new Option(k, k));
+buildFields();
+$("objectMaterial").value = state.objectMaterial;
+$("thing").addEventListener("click", e => { if (e.target.dataset.v) { state.recording = null; setThing(e.target.dataset.v); } });
+$("by").addEventListener("click", e => { if (e.target.dataset.v) { setBy(e.target.dataset.v); if (e.target.dataset.v === "material") setMaterial(state.material); } });
+$("material").addEventListener("change", e => setMaterial(+e.target.value));
+$("shape").addEventListener("click", e => { if (e.target.dataset.v) { state.shape = e.target.dataset.v; edited(); } });
+$("massBy").addEventListener("click", e => { if (e.target.dataset.v) { state.massBy = e.target.dataset.v; edited(); } });
+$("objectMaterial").addEventListener("change", e => { state.objectMaterial = e.target.value; edited(); });
+$("recorded").addEventListener("click", e => { if (e.target.dataset.v) setRecording(e.target.dataset.v); });
+for (const id of ["height", "offset", "tilt"]) $(id).addEventListener("input", () => { state.recording = null; clear(); show(); });
+$("drop").addEventListener("click", drop);
+$("reset").addEventListener("click", clear);
+$("caveat").textContent = DATA.caveat;
+window.softdrop = {
+  /* for tools/check_drop_page.py: one whole drop without drawing */
+  run(key, end) {
+    setRecording(key);
+    const s = state.sim;
+    state.phase = "check";
+    while (s.t < end) { s.step(); record(s); }
+    return {peak: state.peak, peakT: state.peakT, force: state.force, ok: healthy(s)};
+  },
+  /* the same through the declared settings: ``d`` = {by, material, shape, massBy, objectMaterial, height, fields...} */
+  declare(d, end) {
+    setRecording(null);
+    setBody();
+    setThing("w050");
+    Object.assign(state, {shape: d.shape ?? state.shape, massBy: d.massBy ?? state.massBy, objectMaterial: d.objectMaterial ?? state.objectMaterial, by: d.by ?? state.by});
+    if (d.material !== undefined) setMaterial(d.material);
+    for (const id of Object.keys(FIELDS)) if (d[id] !== undefined) setValue(id, d[id]);
+    if (d.height !== undefined) $("height").value = d.height;
+    edited();
+    const s = state.sim;
+    state.phase = "check";
+    while (s.t < end) { s.step(); record(s); }
+    return {peak: state.peak, force: state.force, ok: healthy(s), E: s.mu * 2 * (1 + value("nu")), dt: s.dt, bodyRead: $("bodyRead").textContent, objectRead: $("objectRead").textContent};
+  },
+  card,
+  stats: () => ({phase: state.phase, rate: state.rate, t: state.sim.t, peak: state.peak, n: state.sim.n, m: state.sim.m, dt: state.sim.dt,
+                 bodyMass: cylinderMass(value("density"), value("bodyD") / 2e3, value("bodyH") / 1e3)}),
+};
+initThree();
+setBody();
+setThing(state.thing);
+requestAnimationFrame(loop);
+document.documentElement.dataset.ready = "1";
+</script>

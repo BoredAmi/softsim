@@ -645,8 +645,73 @@ def bind_files(model, base_dir) -> None:
             bind_files(item, base_dir)
 
 
+class SoftGripper(StrictModel):
+    """Two opposed ribbed fingers (:class:`SoftRibbedFinger`) hanging from a palm at z = ``height``, meshed as one
+    soft body with two components: the reference solver takes one body, and one air line feeds both cavities.
+
+    The right finger's axis runs down from (``gap`` / 2 + its thickness, 0, ``height``); its toothed face is the
+    plane x = ``gap`` / 2 and it curls towards x = 0. The left finger is the right one turned 180 degrees about
+    z, a proper rotation, so tetrahedra stay positive and both fingers keep y as their width axis (``plane_strain:
+    y`` holds for the pair). Fingers bend towards each other but do not collide with each other.
+
+    Regions: ``cavity`` (both, closed), ``base``, ``base_right``, ``base_left``, ``tips``, ``pads`` (the toothed
+    faces), ``backs``, ``side``. Moving ``base_right`` and ``base_left`` as separate prescribed regions gives each
+    finger's reaction: its x component is that finger's squeeze on the object."""
+
+    type: Literal["gripper"] = "gripper"
+    finger: SoftRibbedFinger = SoftRibbedFinger()
+    gap: PositiveLength = 0.05       # between the toothed faces at rest
+    height: PositiveLength = 0.12    # of the palm above the table (inflated fingers lengthen: leave room)
+
+    @model_validator(mode="after")
+    def _clears_the_table(self) -> "SoftGripper":
+        if self.height <= self.finger.length:
+            raise ValueError(f"gripper: height {self.height} m puts the {self.finger.length} m fingers through the table")
+        return self
+
+    @property
+    def min_feature(self) -> float:
+        return self.finger.min_feature
+
+    @property
+    def top_height(self) -> float:
+        return self.height
+
+    def volume(self) -> float:
+        return 2 * self.finger.volume()
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        one = self.finger.mesh(settings)
+        x, y, z = one.points.T
+        right = np.column_stack([self.gap / 2 + z, y, self.height - x])  # finger x -> -z, finger z -> +x: a rotation
+        left = right * (-1.0, -1.0, 1.0)                                # 180 degrees about z
+        return TetMesh(np.vstack([right, left]), np.vstack([one.tets, one.tets + one.n_points]))
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        tol, f = _tol(mesh), self.finger
+        _, cavities = f._boxes()
+
+        def local(p):  # finger coordinates of either finger (they are symmetric in y)
+            return self.height - p[:, 2], np.abs(p[:, 1]), np.abs(p[:, 0]) - self.gap / 2
+
+        def cavity(p):
+            x, y, z = local(p)
+            inside = np.zeros(len(p), bool)
+            for x0, _, z0, x1, y1, z1 in cavities:
+                inside |= (x > x0 - tol) & (x < x1 + tol) & (y < y1 + tol) & (z > z0 - tol) & (z < z1 + tol)
+            return inside
+
+        return _resolve(mesh, {"cavity": cavity, "base": lambda p: local(p)[0] < tol,
+                               "base_right": lambda p: (local(p)[0] < tol) & (p[:, 0] > 0),
+                               "base_left": lambda p: (local(p)[0] < tol) & (p[:, 0] < 0),
+                               "tips": lambda p: local(p)[0] > f.length - tol,
+                               "pads": lambda p: local(p)[2] < f.tooth_height + tol,
+                               "backs": lambda p: local(p)[2] > f.top_height - tol,
+                               "side": lambda p: local(p)[1] > f.width / 2 - tol})
+
+
 SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftRibbedFinger, SoftCableFinger,
-                            SoftMeshFile],
+                            SoftGripper, SoftMeshFile],
                       Field(discriminator="type")]
 
 

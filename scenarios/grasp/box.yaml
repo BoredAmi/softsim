@@ -1,0 +1,36 @@
+# Two validated fingers (scenarios/actuation/ribbed_finger.yaml, same card, same plane strain) close on a 10 g box
+# on a table, lift it 30 mm and hold it. Close 0-25 kPa over 0.6 s, lift 0.7-1.2 s, hold to 1.5 s. Each finger's base
+# is its own moved region, so its x reaction is its squeeze on the box (``grip_force``). docs/gripper.md.
+#   softsim run scenarios/grasp/box.yaml --set simulation.timestep=10ms
+scenario: grasp
+description: Two ribbed fingers lift a 10 g box 30 mm.
+backend: fem
+
+simulation:
+  timestep: 10 ms
+  duration: 1500 ms
+  output_rate: 100 Hz
+  gravity: [0, 0, -9.81]
+
+ground:
+  enabled: true
+
+body:
+  name: gripper
+  geometry: {type: gripper, height: 140 mm}
+  material: {preset: posilicone_a20_wang2026, damping: null}
+  mesh: {size: 1.5 mm, method: gmsh}
+  plane_strain: y
+  prescribed:
+    - region: base_right
+      path: [[0 ms, [0 mm, null, 0 mm]], [700 ms, [0 mm, null, 0 mm]], [1200 ms, [0 mm, null, 30 mm]]]
+    - region: base_left
+      path: [[0 ms, [0 mm, null, 0 mm]], [700 ms, [0 mm, null, 0 mm]], [1200 ms, [0 mm, null, 30 mm]]]
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0 kPa], [100 ms, 1 kPa], [200 ms, 4 kPa], [300 ms, 10 kPa], [400 ms, 17 kPa], [500 ms, 22 kPa],
+               [600 ms, 25 kPa], [1500 ms, 25 kPa]]
+
+object: {shape: box, size: [16 mm, 12 mm, 30 mm], mass: 10 g}
