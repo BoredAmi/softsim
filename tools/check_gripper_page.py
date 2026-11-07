@@ -25,6 +25,7 @@ import websockets
 
 from softsim.reduced import ReducedFinger, ReducedGripper
 from softsim.reduced.mjcf import OBJECTS
+from truth_data import face_nodes, fast_run
 
 CASES = [dict(shape="box", fingers=2, mass=0.01, mu=0.8, pressure=30.0, lift=0.04, steps=3000),
          dict(shape="box", fingers=2, mass=0.05, mu=0.8, pressure=30.0, lift=0.04, steps=3000),
@@ -69,7 +70,39 @@ class Page:
         path.write_bytes(base64.b64decode((await self.call("Page.captureScreenshot", format="png"))["data"]))
 
 
-async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None) -> None:
+async def check_truth(p: Page, run: Path, f: ReducedFinger, shots: Path | None) -> None:
+    """The Truth tab shows the recording: its decoded nodes against the run file, its readouts against both models."""
+    d = dict(np.load(run))
+    nodes, _ = face_nodes(d["rest"], d["tris"])
+    fast = fast_run(f, d["t"], d["palm"])
+    await p.js("location.hash='truth'")
+    await asyncio.sleep(1)
+    n = await p.js("window.softsimTruth.nodes")
+    if n != len(nodes):
+        raise SystemExit(f"truth: {n} nodes, the run has {len(nodes)}")
+    worst = 0.0
+    for frame in (0, 70, 94, 120, len(d["t"]) - 1):
+        for i in (0, n // 3, n - 1):
+            worst = max(worst, float(np.abs(np.array(await p.js(f"window.softsimTruth.node({frame}, {i})")) - d["x"][frame, nodes[i]][[0, 2]]).max()))
+        await p.js(f"window.softsimTruth.goTo({frame})")
+        shown = [float((await p.js(f"window.softsimTruth.read('{k}')")).split()[0]) for k in ("tr-palm", "tf-palm", "tf-rise", "tr-grip", "tf-grip")]
+        want = [d["palm"][frame] * 1e3, fast["palm"][frame] * 1e3, fast["rise"][frame] * 1e3, d["grip"][frame], fast["grip"][frame]]
+        if not np.allclose(shown, want, atol=0.06):
+            raise SystemExit(f"truth, frame {frame}: page {shown}, data {want}")
+    print(f"truth: {n} nodes, worst decoded gap {worst * 1e3:.4f} mm; chapters {await p.js('window.softsimTruth.chapters')}")
+    if worst > 0.006e-3:
+        raise SystemExit("truth: decoded positions differ from the run")
+    if shots:
+        await p.js("window.softsimTruth.goTo(94)")
+        await asyncio.sleep(0.5)
+        await p.shot(shots / "truth.png")
+    await p.js("document.getElementById('truth-play').click()")
+    await asyncio.sleep(2)
+    await p.js("document.getElementById('truth-play').click()")
+    await p.js("location.hash='play'")
+
+
+async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None, truth: Path | None = None) -> None:
     target = next(t for t in json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list")) if t["type"] == "page")
     async with websockets.connect(target["webSocketDebuggerUrl"], max_size=2**27) as ws:
         p = Page(ws)
@@ -97,6 +130,8 @@ async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None) -> No
             await asyncio.sleep(1)
             await p.shot(shots / "map.png")
             await p.js("location.hash='play'")
+        if truth:
+            await check_truth(p, truth, f, shots)
         worst = 0.0
         for c in CASES:
             page = np.array(await p.js(f"window.softsim.run({json.dumps(c)})"))
@@ -115,6 +150,7 @@ def main() -> None:
     ap.add_argument("page", type=Path)
     ap.add_argument("--finger", type=Path, required=True)
     ap.add_argument("--shots", type=Path)
+    ap.add_argument("--truth", type=Path, help="the run the page's Truth tab was built from")
     a = ap.parse_args()
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -125,7 +161,7 @@ def main() -> None:
                                    "--window-size=1280,800", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             time.sleep(3)
-            asyncio.run(drive(a.page.resolve().as_uri(), port, ReducedFinger.from_json(a.finger), a.shots))
+            asyncio.run(drive(a.page.resolve().as_uri(), port, ReducedFinger.from_json(a.finger), a.shots, a.truth))
         finally:
             chrome.terminate()
             chrome.wait()

@@ -19,8 +19,11 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
+import numpy as np
+
 from softsim.reduced import ReducedFinger, ReducedGripper
 from softsim.reduced.mjcf import OBJECTS
+from truth_data import pack
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = Path(__file__).with_name("gripper_page.html")
@@ -81,13 +84,18 @@ def main() -> None:
     ap.add_argument("--finger", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=ROOT / "docs" / "viewer" / "gripper.html")
     ap.add_argument("--map", type=Path, help="tools/grasp_map.py output: adds the Grasp map tab")
+    ap.add_argument("--truth", type=Path, help="tools/run_fe_grasp.py output: adds the Truth tab")
+    ap.add_argument("--truth-label", default="2 mm mesh, no teeth", help="what the Truth tab calls that run")
     a = ap.parse_args()
     extra = {}
     if a.map:
         grasps = json.loads(a.map.read_text())
         grasps["count"] = sum(len(sum(g, [])) for s in grasps["grid"].values() for g in s.values())
         extra["map"] = grasps
-    html = page(ReducedFinger.from_json(a.finger), extra)
+    finger = ReducedFinger.from_json(a.finger)
+    if a.truth:
+        extra["truth"] = pack(dict(np.load(a.truth)), finger, a.truth_label)
+    html = page(finger, extra)
     a.out.write_text(f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">{html}</html>')
     print(f"{a.out}: {a.out.stat().st_size / 1e6:.1f} MB")
 

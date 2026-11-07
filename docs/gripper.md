@@ -12,8 +12,9 @@ python tools/demo_gripper.py --finger softsim/reduced/wang_finger.json    # desk
 ```
 
 The page runs MuJoCo compiled to WebAssembly in your browser. **Play** has sliders for pressure, mass and friction,
-three objects, two to four fingers, and a live readout of grip against weight. Drag the object to push it. **Grasp
-map** shows which grasps hold; selecting a cell loads that grasp into Play. Only the page's fonts come from the
+three objects, two to four fingers, and a live readout of grip against weight. Drag the object to push it. **Truth**
+replays a recorded finite-element grasp beside the fast finger on the same clock, with a time slider and jumps to the
+moments that matter. **Grasp map** shows which grasps hold; selecting a cell loads that grasp into Play. Only the page's fonts come from the
 network, and it falls back to system fonts offline.
 
 ## The fast finger
@@ -99,7 +100,13 @@ the real height.
 ```bash
 python tools/run_fe_grasp.py --mass 10 --out runs/grasp/box_10g_2mm.npz --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0
 python tools/plot_fe_grasp.py runs/grasp/box_10g_2mm.npz --finger softsim/reduced/wang_finger.json --out docs/media/gripper_fe_grasp.png
+python tools/make_gripper_page.py --finger softsim/reduced/wang_finger.json --map runs/reduced/grasp_map.json --truth runs/grasp/box_10g_2mm.npz
+python tools/check_gripper_page.py docs/viewer/gripper.html --finger softsim/reduced/wang_finger.json --truth runs/grasp/box_10g_2mm.npz --shots runs/page
 ```
+
+The Truth tab draws the finger's side face. Contact is usually mid-width, where the cavity bulges the pad past that face,
+so a marked node can sit in a gap between the drawn finger and the box. The fast finger there gets the same pressure
+schedule and is asked for the same palm path, but its palm follows about 6 mm behind during the lift.
 
 ## Checks
 
@@ -110,6 +117,8 @@ python tools/plot_fe_grasp.py runs/grasp/box_10g_2mm.npz --finger softsim/reduce
   the fit recovers a known stiffness, MuJoCo agrees with the static balance, and a mass under the friction limit rises
   while one over it stays. Mutations of the load direction, the spread load, the object's friction and the held metric
   each fail a test.
+- `tools/check_gripper_page.py --truth` compares the tab's decoded nodes with the run file (worst 0.005 mm, the storage
+  step) and its readouts with both models. `tests/test_truth_data.py` checks the packing, the chapters and the schedule.
 - `tests/test_grasp.py`: two fingers are exactly two of the finger, they curl inwards, and held and slip mean what they
   say.
 

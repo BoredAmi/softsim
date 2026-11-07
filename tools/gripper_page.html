@@ -63,6 +63,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--silicone); 
 #map td button[data-held="1"] { background: var(--held); color: var(--bg); }
 #map td button:hover { outline: 2px solid var(--ink); }
 .wide { overflow-x: auto; }
+.truth-left { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.truth-left .stage { flex: 1; }
+.trace { flex: none; height: 170px; background: var(--panel); border-top: 1px solid var(--line); }
+.trace canvas { display: block; width: 100%; height: 100%; }
+.seg.stack { flex-direction: column; }
+.seg.stack button + button { border-left: 0; border-top: 1px solid var(--line); }
+.read.three { grid-template-columns: 1fr auto auto; }
+.read.three i { font: 500 12.5px var(--body); color: var(--muted); text-align: right; }
 @media (max-width: 760px) {
   html, body { height: auto; } main { display: block; }
   .view { display: flex; flex-direction: column; } .stage { height: 56vh; }
@@ -131,7 +139,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--silicone); 
       <p class="fine" id="caveat"></p>
     </aside>
   </section>
-  <section class="view" id="truth" hidden></section>
+  <section class="view" id="truth" hidden>
+    <div class="truth-left">
+      <div class="stage"><canvas id="truth-view" role="img" aria-label="The finite-element grasp and the fast finger side by side"></canvas></div>
+      <div class="trace"><canvas id="truth-trace" role="img" aria-label="Palm and box height against time for both models"></canvas></div>
+    </div>
+    <aside>
+      <div class="act"><button id="truth-play" class="go">Play</button></div>
+      <div class="field"><label for="truth-t">Time <output id="truth-t-o"></output></label><input id="truth-t" type="range" min="0" max="1" step="1" value="0"></div>
+      <div><div class="field"><label>Speed</label></div>
+        <div class="seg" id="truth-speed"><button data-v="1">1×</button><button data-v="0.25" aria-pressed="true">1/4</button><button data-v="0.1">1/10</button></div></div>
+      <div><div class="field"><label>Jump to</label></div><div class="seg stack" id="truth-chapters"></div></div>
+      <div class="read three">
+        <span></span><i>FE</i><i>Fast</i>
+        <span>Palm rise</span><b id="tr-palm"></b><b id="tf-palm"></b>
+        <span>Box rise</span><b id="tr-rise"></b><b id="tf-rise"></b>
+        <span>Grip per finger</span><b id="tr-grip"></b><b id="tf-grip"></b>
+        <span>Held at the end</span><b id="tr-held"></b><b id="tf-held"></b>
+      </div>
+      <p class="fine" id="truth-note"></p>
+    </aside>
+  </section>
   <section id="map" hidden style="flex:1">
     <h2 id="map-title"></h2>
     <p class="fine" id="map-note"></p>
@@ -451,6 +479,123 @@ window.softsim = {
   stats: () => ({ rtf, frames, z: objectHeight(), grip }),
 };
 
+// ---- truth: a recorded finite-element grasp beside the fast finger, on one clock ----
+const R = G.truth;
+const truth = { frame: 0, playing: false, speed: 0.25, clock: 0, last: 0, xz: null };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function fit(c) {
+  const dpr = Math.min(devicePixelRatio, 2), w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const x = c.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  return [x, w, h];
+}
+function nodeXZ(frame, i) { const j = 2 * (frame * R.nodes + i); return [truth.xz[j] * R.quantum, truth.xz[j + 1] * R.quantum]; }
+function drawTruthView() {
+  const [x, w, h] = fit($("truth-view")), f = truth.frame, half = w / 2;
+  const top = 34, zmin = -0.006, zmax = 0.178, s = Math.min((h - top - 8) / (zmax - zmin), (half - 16) / 0.112);
+  const panel = (centre, title, draw) => {
+    const px = v => centre + v * s, pz = v => h - 8 - (v - zmin) * s;
+    x.fillStyle = css("--ink"); x.font = "600 14px " + css("--body") ; x.textAlign = "center"; x.fillText(title, centre, 22);
+    x.strokeStyle = css("--muted"); x.lineWidth = 1; x.beginPath(); x.moveTo(px(-0.055), pz(0)); x.lineTo(px(0.055), pz(0)); x.stroke();
+    draw(px, pz);
+  };
+  const box = (px, pz, c) => {
+    x.strokeStyle = css("--ink"); x.lineWidth = 2;
+    x.strokeRect(px(c[0] - R.half[0]), pz(c[1] + R.half[1]), 2 * R.half[0] * s, 2 * R.half[1] * s);
+  };
+  panel(half / 2, `Finite element, ${R.label}`, (px, pz) => {
+    x.fillStyle = css("--silicone"); x.beginPath();
+    for (let k = 0; k < R.tris.length; k += 3) {
+      for (let c = 0; c < 3; c++) { const [a, b] = nodeXZ(f, R.tris[k + c]); if (c) x.lineTo(px(a), pz(b)); else x.moveTo(px(a), pz(b)); }
+      x.closePath();
+    }
+    x.fill();
+    box(px, pz, R.box[f]);
+    x.fillStyle = css("--air");
+    for (const [a, b] of R.touch[f]) { x.beginPath(); x.arc(px(a), pz(b), 3, 0, 7); x.fill(); }
+  });
+  panel(1.5 * half, "Fast finger, 8 links", (px, pz) => {
+    x.fillStyle = css("--silicone");
+    for (const r of R.fast.rects[f]) { x.beginPath(); r.forEach(([a, b], i) => i ? x.lineTo(px(a), pz(b)) : x.moveTo(px(a), pz(b))); x.closePath(); x.fill(); }
+    box(px, pz, R.fast.box[f]);
+  });
+}
+function drawTruthTrace() {
+  const [x, w, h] = fit($("truth-trace")), L = 52, Rt = 24, T = 24, B = 40, tmax = R.t[R.t.length - 1], top = 32;
+  const px = t => L + t / tmax * (w - L - Rt), py = v => T + (top - v) / (top + 2) * (h - T - B);
+  x.font = "12px " + css("--mono"); x.fillStyle = css("--muted"); x.strokeStyle = css("--line"); x.lineWidth = 1;
+  x.textAlign = "right"; x.textBaseline = "middle";
+  for (let v = 0; v <= 30; v += 10) { x.beginPath(); x.moveTo(L, py(v)); x.lineTo(w - Rt, py(v)); x.stroke(); x.fillText(String(v), L - 6, py(v)); }
+  x.textAlign = "center"; x.textBaseline = "top";
+  for (let t = 0; t <= tmax + 1e-9; t += 0.25) x.fillText(t.toFixed(2), px(t), h - B + 5);
+  x.fillText("time, s", L + (w - L - Rt) / 2, h - 16);
+  x.save(); x.translate(13, T + (h - T - B) / 2); x.rotate(-Math.PI / 2); x.textBaseline = "middle"; x.fillText("rise, mm", 0, 0); x.restore();
+  const series = [["palm", R.palm, css("--muted"), [5, 4]], ["box, finite element", R.rise, css("--silicone"), []], ["box, fast finger", R.fast.rise, css("--air"), []]];
+  let lx = L;
+  x.textBaseline = "middle"; x.textAlign = "left";
+  for (const [label, v, colour, dash] of series) {
+    x.strokeStyle = colour; x.lineWidth = 2; x.setLineDash(dash); x.lineJoin = "round"; x.beginPath();
+    v.forEach((y, i) => i ? x.lineTo(px(R.t[i]), py(y * 1e3)) : x.moveTo(px(R.t[i]), py(y * 1e3)));
+    x.stroke();
+    x.beginPath(); x.moveTo(lx, 11); x.lineTo(lx + 16, 11); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css("--muted"); x.fillText(label, lx + 22, 11);
+    lx += 36 + x.measureText(label).width;
+  }
+  x.strokeStyle = css("--ink"); x.lineWidth = 1; x.beginPath(); x.moveTo(px(R.t[truth.frame]), T); x.lineTo(px(R.t[truth.frame]), h - B); x.stroke();
+}
+function showTruth() {
+  const f = truth.frame, mm = v => `${(v * 1e3).toFixed(1)} mm`, newton = v => `${v.toFixed(3)} N`;
+  $("truth-t").value = f;
+  $("truth-t-o").textContent = `${R.t[f].toFixed(2)} s`;
+  $("tr-palm").textContent = mm(R.palm[f]); $("tf-palm").textContent = mm(R.fast.palm[f]);
+  $("tr-rise").textContent = mm(R.rise[f]); $("tf-rise").textContent = mm(R.fast.rise[f]);
+  $("tr-grip").textContent = newton(R.grip[f]); $("tf-grip").textContent = newton(R.fast.grip[f]);
+  drawTruthView(); drawTruthTrace();
+}
+function truthLoop(now) {
+  if (!$("truth").hidden && truth.playing) {
+    truth.clock += Math.min(now - truth.last, 50) / 1e3 * truth.speed;
+    truth.frame = R.t.findIndex(t => t >= truth.clock);
+    if (truth.frame < 0) { truth.frame = R.t.length - 1; truth.playing = false; $("truth-play").textContent = "Play"; }
+    showTruth();
+  }
+  truth.last = now;
+  requestAnimationFrame(truthLoop);
+}
+function goTo(frame) { truth.frame = frame; truth.clock = R.t[frame]; showTruth(); }
+function initTruth() {
+  if (!R) return;
+  const bytes = Uint8Array.from(atob(R.xz), c => c.charCodeAt(0));
+  truth.xz = new Int16Array(bytes.buffer);
+  $("tab-truth").hidden = false;
+  $("truth-t").max = R.t.length - 1;
+  $("tr-held").textContent = R.held ? "Yes" : "No"; $("tf-held").textContent = R.fast.held ? "Yes" : "No";
+  $("truth-note").textContent = `Recorded, not live: the finite-element run took hours. Both get the same pressure schedule and are asked for the same palm path, which the fast palm follows late and stops 1 mm short of. The drawing is the finger's side face; orange marks every node touching the box, usually mid-width, where the pad bulges past that face. The fast finger cannot peel or re-grip, so its lift height is not a prediction.`;
+  for (const c of R.chapters) {
+    const b = document.createElement("button"); b.textContent = `${c.label}, ${R.t[c.frame].toFixed(2)} s`; b.dataset.frame = c.frame; $("truth-chapters").append(b);
+  }
+  $("truth-chapters").addEventListener("click", e => { if (e.target.dataset.frame) { truth.playing = false; $("truth-play").textContent = "Play"; goTo(+e.target.dataset.frame); } });
+  $("truth-t").addEventListener("input", e => { truth.playing = false; $("truth-play").textContent = "Play"; goTo(+e.target.value); });
+  $("truth-play").addEventListener("click", () => {
+    truth.playing = !truth.playing;
+    if (truth.playing && truth.frame >= R.t.length - 1) truth.clock = 0;
+    $("truth-play").textContent = truth.playing ? "Pause" : "Play";
+  });
+  $("truth-speed").addEventListener("click", e => {
+    if (!e.target.dataset.v) return;
+    truth.speed = +e.target.dataset.v;
+    for (const b of $("truth-speed").children) b.setAttribute("aria-pressed", String(b === e.target));
+  });
+  addEventListener("resize", () => { if (!$("truth").hidden) showTruth(); });
+  addEventListener("hashchange", () => { if (!$("truth").hidden) showTruth(); });
+  for (const b of document.querySelectorAll("nav button")) b.addEventListener("click", () => { if (!$("truth").hidden) showTruth(); });
+  window.softsimTruth = { goTo, node: (frame, i) => nodeXZ(frame, i), read: id => $(id).textContent, chapters: R.chapters, count: R.t.length, nodes: R.nodes };
+  if (!$("truth").hidden) showTruth();
+  requestAnimationFrame(truthLoop);
+}
+
 let frames = 0;
 async function start() {
   show();
@@ -479,6 +624,7 @@ async function start() {
 }
 drawMap();
 route();
+initTruth();
 start();
 </script>
 <script type="text/plain" id="wasm">/*@WASM@*/</script>
