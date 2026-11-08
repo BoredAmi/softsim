@@ -25,8 +25,10 @@ def main() -> None:
     ap.add_argument("--friction", type=float, default=None)
     ap.add_argument("--set", action="append", default=[], dest="overrides")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--checkpoint", type=Path, help="save the run here as it goes; run the same command again to go on from it")
     a = ap.parse_args()
     over = ["output.save_model=false", f"object.mass={a.mass}g", *a.overrides] + ([f"object.friction={a.friction}"] if a.friction else [])
+    over += [f"output.checkpoint={a.checkpoint.resolve()}"] if a.checkpoint else []
     sim = Simulation(SCENARIO, over, backend="fem")
     result = sim.run(record_vertices=True)
     ts = result.timeseries

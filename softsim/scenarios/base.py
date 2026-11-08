@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 import pandas as pd
+from pydantic import Field
 
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
+from softsim.config.units import Time
 from softsim.errors import ConfigError
 from softsim.geometry.soft import bind_files
 from softsim.materials import load_material
@@ -30,6 +32,8 @@ class OutputSettings(StrictModel):
     format: Literal["parquet", "csv"] = "parquet"
     save_vertices: bool = False
     save_model: bool = True
+    checkpoint: str | None = None  # file to save a long run to, and go on from if it exists (softsim.checkpoint)
+    checkpoint_every: Annotated[Time, Field(gt=0)] = 600.0  # wall-clock time between saves
 
 
 class ScenarioConfig(StrictModel):

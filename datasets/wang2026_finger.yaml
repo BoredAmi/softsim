@@ -25,3 +25,8 @@ table:   # pressure, measured chord angle (Table 5), the authors' FE chord angle
   - [30, 34.40, 35.25, 68.55]
   - [35, 36.80, 37.16, 76.05]
   - [40, 35.00, 35.38, 81.78]
+tip_force:   # pressure [kPa], blocked tip force [N] (Table 7: the tip pressing on a force gauge; the contact point and the
+             # gauge's direction are not recorded, and the paper has no FE of it). Not used in any fit here.
+  - [20, 0.47]
+  - [30, 0.77]
+  - [35, 0.96]

@@ -18,16 +18,16 @@ from pathlib import Path
 import numpy as np
 
 from softsim.reduced import ReducedFinger
-from softsim.reduced.mjcf import OBJECTS, run_grasp
+from softsim.reduced.mjcf import GRASP_END, OBJECTS, run_grasp
 
 MASSES = [0.002, 0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05]  # kg
 PRESSURES = [10e3, 15e3, 20e3, 25e3, 30e3, 35e3, 40e3]  # Pa
 FRICTIONS = [0.4, 0.8, 1.2]
 
 
-def cell(finger: Path, case: tuple) -> tuple:
+def cell(finger: Path, end: float, case: tuple) -> tuple:
     shape, mu, m, p = case
-    r = run_grasp(ReducedFinger.from_json(finger), p, m, friction=mu, shape=shape)
+    r = run_grasp(ReducedFinger.from_json(finger), p, m, friction=mu, shape=shape, end=end)
     return case, r["held"], r["grip"]
 
 
@@ -36,10 +36,11 @@ def main() -> None:
     ap.add_argument("--finger", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--end", type=float, default=GRASP_END, help="s; each grasp holds until then")
     a = ap.parse_args()
     cases = list(product(OBJECTS, FRICTIONS, MASSES, PRESSURES))
     with ProcessPoolExecutor(a.jobs) as pool:
-        results = list(pool.map(partial(cell, a.finger), cases, chunksize=8))
+        results = list(pool.map(partial(cell, a.finger, a.end), cases, chunksize=2))
     grid = {s: {str(mu): np.zeros((len(MASSES), len(PRESSURES)), int).tolist() for mu in FRICTIONS} for s in OBJECTS}
     grip = {s: {str(mu): np.zeros((len(MASSES), len(PRESSURES))).tolist() for mu in FRICTIONS} for s in OBJECTS}
     for (shape, mu, m, p), held, force in results:

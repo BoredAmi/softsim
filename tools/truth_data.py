@@ -15,7 +15,7 @@ import mujoco
 import numpy as np
 import yaml
 
-from plot_fe_grasp import FRICTION, HALF_Z, MASS, OFF_TABLE, touching
+from plot_fe_grasp import FRICTION, HALF_Z, OFF_TABLE, touching
 from softsim.actuation import PressureActuatorConfig
 from softsim.reduced import ReducedFinger, ReducedGripper
 from softsim.reduced.mjcf import OBJECTS
@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "scenarios" / "grasp" / "box.yaml"
 QUANTUM = 1e-5  # m
 CLOSED = 0.7  # s: the fingers have closed and the palm starts up
+MASS = 0.01  # kg: the box in the run the page shows
 
 
 def pressure_schedule(path: Path = SCENARIO) -> tuple[np.ndarray, np.ndarray]:

@@ -20,6 +20,7 @@ import pandas as pd
 import yaml
 
 from softsim.backends import Backend, SimState, get_backend
+from softsim.checkpoint import Saved, fingerprint, read_checkpoint, write_checkpoint
 from softsim.checks import Finding, check_scene
 from softsim.config.loader import apply_overrides, load_yaml, set_dotted
 from softsim.config.schema import validate
@@ -163,14 +164,29 @@ class Simulation:
 
         ``controller(sim)`` (closed-loop control) is called before every output interval with this
         simulation (``sim.time``, ``sim.metrics()``, ``sim.state()``) and returns actuator values to
-        hold from then on, ``{name: value}`` in SI (NaN: back to the schedule), or None."""
+        hold from then on, ``{name: value}`` in SI (NaN: back to the schedule), or None.
+
+        With ``output.checkpoint`` the run saves itself there every ``output.checkpoint_every`` of wall-clock time and,
+        if the file exists, goes on from it (:mod:`softsim.checkpoint`). A longer ``duration`` extends a finished run. A
+        ``controller``'s own memory is not saved: only what it set."""
         sim = self.config.simulation
         duration = sim.duration if duration is None else duration
         record_vertices = self.config.output.save_vertices if record_vertices is None else record_vertices
         n_samples = int(round(duration / (sim.output_every * sim.timestep)))
         rows, verts = [], {b.name: [] for b in self.scene.soft_bodies} if record_vertices else {}
-        start = time.perf_counter()
-        for i in range(n_samples + 1):
+        path = self.config.output.checkpoint
+        path = None if path is None else self.base_dir / path
+        mark = fingerprint(self.config, self.scene, record_vertices) if path else ""
+        first, spent = 0, 0.0
+        if path and path.exists():
+            saved = read_checkpoint(path, mark)
+            if saved.sample > n_samples:
+                raise ConfigError(f"{path} is at sample {saved.sample}, past this run's {n_samples}")
+            self.backend.restore(saved.state)
+            rows, spent, first = saved.rows, saved.wall_time, saved.sample + 1
+            verts = {k: list(v) for k, v in saved.vertices.items()} if record_vertices else {}
+        start = last_save = time.perf_counter()
+        for i in range(first, n_samples + 1):
             if i:
                 self.step()
             if controller is not None and i < n_samples:
@@ -181,7 +197,12 @@ class Simulation:
                 verts[name].append(state.soft[name].vertices.astype(np.float32))
             if progress is not None:
                 progress((i) / max(n_samples, 1))
-        return self.make_result(rows, time.perf_counter() - start, verts)
+            now = time.perf_counter()
+            if path and (now - last_save >= self.config.output.checkpoint_every or i == n_samples):
+                write_checkpoint(path, Saved(mark, i, spent + now - start, rows, {k: np.stack(v) for k, v in verts.items()},
+                                             self.backend.checkpoint()))
+                last_save = now
+        return self.make_result(rows, spent + time.perf_counter() - start, verts)
 
     def make_result(self, rows: list[dict[str, float]], wall_time: float,
                     vertices: Mapping[str, list[np.ndarray]] | None = None) -> RunResult:

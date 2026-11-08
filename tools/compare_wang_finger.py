@@ -23,9 +23,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "datasets" / "wang2026_finger.yaml"
 
 
+def timeseries(run: Path) -> pd.DataFrame:
+    """A run's timeseries: a ``softsim run`` output directory, or a CSV a script wrote."""
+    return pd.read_csv(run) if run.suffix == ".csv" else pd.read_parquet(run / "timeseries.parquet")
+
+
 def chord_at(run: Path, pressures_kpa: np.ndarray) -> np.ndarray:
     """Chord angle [deg] of a run at the given cavity pressures (the ramp is monotone)."""
-    ts = pd.read_parquet(run / "timeseries.parquet")
+    ts = timeseries(run)
     p = ts["cavity_pressure"].to_numpy() / 1e3
     keep = np.concatenate([[True], np.diff(p) > 1e-9])  # the rising part, once
     return np.degrees(np.interp(pressures_kpa, p[keep], ts["chord_angle"].to_numpy()[keep]))

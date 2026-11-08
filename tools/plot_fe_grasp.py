@@ -1,11 +1,13 @@
 """Draw one finite-element grasp against the fast finger, and print the numbers that compare them.
 
-    python tools/plot_fe_grasp.py runs/grasp/box_10g_2mm.npz --finger softsim/reduced/wang_finger.json \
-        --out docs/media/gripper_fe_grasp.png
+    python tools/plot_fe_grasp.py runs/grasp/coulomb_10g_2mm.npz --finger softsim/reduced/wang_finger.json \
+        --out docs/media/gripper_fe_grasp.png [--mass 30]
 
 Top: the fingers and the box in the x-z plane at four moments, the touching pad nodes marked. Bottom: the box's height
 above the table against the palm's rise, for both models. Reads the file tools/run_fe_grasp.py writes, and runs the same
-grasp on the fast finger. The box is scenarios/grasp/box.yaml's; a node touches it within ``TOUCH`` of its side.
+grasp on the fast finger, at ``--mass`` grams (the FE run's own mass, which the file doesn't record). The box is
+scenarios/grasp/box.yaml's; a node touches it within ``TOUCH`` of its side. A box that never leaves the table has no
+lift-off, printed as nan.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from softsim.scenarios.grasp import is_held
 
 HALF_X, HALF_Z = 0.016, 0.03  # m, the box
 TOUCH = 3e-4  # m
-LIFT, PRESSURE, MASS, FRICTION = 0.03, 25e3, 0.01, 0.8  # m, Pa, kg, -
+LIFT, PRESSURE, FRICTION = 0.03, 25e3, 0.8  # m, Pa, -
 OFF_TABLE = 5e-5  # m
 MOMENTS = (0.7, 0.9, 0.95, 1.5)  # s
 INK, MUTED, FE, FAST = "#17262e", "#566a75", "#1c8c8a", "#c8571f"
@@ -37,15 +39,16 @@ def fe(path: Path) -> dict:
     d = np.load(path)
     height = d["object"][:, 2] - HALF_Z
     settled = height[int(np.argmax(d["t"] >= 0.1))]  # it starts on a small clearance and lands
-    off = int(np.argmax((height > settled + OFF_TABLE) & (d["t"] > 0.1)))
+    up = (height > settled + OFF_TABLE) & (d["t"] > 0.1)
+    off = int(np.argmax(up))
     before = int(np.argmax(d["t"] >= 0.7))
-    return dict(d=d, height=height, palm=d["palm"], lift_off=d["palm"][off], rise=height[-1] - settled, grip_before=d["grip"][before],
+    return dict(d=d, height=height, palm=d["palm"], lift_off=d["palm"][off] if up.any() else np.nan, rise=height[-1] - settled, grip_before=d["grip"][before],
                 grip_hold=d["grip"][-20:].mean(), steady=np.ptp(height[-20:]), held=float(is_held(d["t"], height - settled)))
 
 
-def fast(f: ReducedFinger) -> dict:
+def fast(f: ReducedFinger, mass: float) -> dict:
     """The same grasp on the fast finger, recording height against palm."""
-    g = ReducedGripper(f, fingers=2, shape="box", size=OBJECTS["box"], mass=MASS, friction=FRICTION)
+    g = ReducedGripper(f, fingers=2, shape="box", size=OBJECTS["box"], mass=mass, friction=FRICTION)
     for i in range(1500):
         g.step(PRESSURE * min(i / 600, 1))
     z0, grip = g.object_height, g.grip_force()
@@ -55,7 +58,7 @@ def fast(f: ReducedFinger) -> dict:
         palm.append(g.palm_rise)
         height.append(g.object_height - z0)
     palm, height = np.array(palm), np.array(height)
-    return dict(palm=palm, height=height, lift_off=palm[int(np.argmax(height > OFF_TABLE))], rise=height[-1], grip_before=grip,
+    return dict(palm=palm, height=height, lift_off=palm[int(np.argmax(height > OFF_TABLE))] if (height > OFF_TABLE).any() else np.nan, rise=height[-1], grip_before=grip,
                 grip_hold=g.grip_force(), steady=np.ptp(height[-200:]), held=float(is_held(np.arange(2000) * g.model.opt.timestep, height)))
 
 
@@ -93,8 +96,9 @@ def main() -> None:
     ap.add_argument("run", type=Path)
     ap.add_argument("--finger", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--mass", type=float, default=10.0, help="the box, g (default 10)")
     args = ap.parse_args()
-    a, b = fe(args.run), fast(ReducedFinger.from_json(args.finger))
+    a, b = fe(args.run), fast(ReducedFinger.from_json(args.finger), args.mass * 1e-3)
     print(f"{'':28}{'FE':>9}{'fast':>9}")
     for label, key, scale in (("palm rise at lift-off, mm", "lift_off", 1e3), ("final rise, mm", "rise", 1e3), ("grip before the lift, N", "grip_before", 1),
                               ("grip while holding, N", "grip_hold", 1), ("height wobble at the end, mm", "steady", 1e3),

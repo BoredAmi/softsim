@@ -45,6 +45,7 @@ import scipy.sparse.linalg as spla
 
 from softsim.fem import jax_setup
 from softsim.fem.axisym import ContactSettings
+from softsim.fem.magnetic import FIELD_SIZE, SoftMagnet as SoftMagnetic, element_kernels
 from softsim.fem.materials import (IsochoricLaw, InvariantLaw, OgdenGeneralIso, OgdenIso, Prony, det3,
                                    volumetric_energy)
 from softsim.geometry.rigid import Part
@@ -102,6 +103,7 @@ _A4, _B4 = 0.5854101966249685, 0.1381966011250105
 _XI4 = np.array([[_B4, _B4, _B4], [_A4, _B4, _B4], [_B4, _A4, _B4], [_B4, _B4, _A4]])
 _W4 = np.full(4, 1.0 / 24.0)
 _STIFFNESS_RULES = {8: (_W, _DN), 4: (_W4, tet10_shape(_XI4)[1])}
+_STIFFNESS_SHAPES = {8: tet10_shape(_XI)[0], 4: tet10_shape(_XI4)[0]}
 FLOOR_STIFFNESS = 1e5  # N/m: the table under a body with a ``RigidBody3D.floor``; 1 N sinks it 10 um
 ELEMENT_CHUNK = 25_000  # elements per kernel launch (see ``Solid3DSolver._chunked``)
 _XI_M, _W_M = tet_quadrature(3)      # mass: 27 points, exact to degree 5 (P2 x P2 is degree 4)
@@ -491,6 +493,12 @@ class Problem3D:
     #   ``Solid3DSolver.forces`` [N]: uniform traction, consistent (mid-edge nodes, a third of the face area each)
     zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
     zone_pronys: tuple[Prony | None, ...] = ()  # each zone's own series (None: undamped); empty: the body's ``prony``
+    magnetic: SoftMagnetic | None = None  # the body takes up a field; ``Solid3DSolver.magnetic_field`` sets it
+
+
+# What a step changes: dofs and their rates, rotations, viscous memory, contact memory, the loads and the last residual.
+_SOLVER_STATE = ("y", "v", "a", "R", "omega", "alpha", "_q", "_s_prev", "_bond", "_anchor", "_lam", "pressures", "tensions",
+                 "forces", "free_lengths", "gravity", "residual", "magnetic_field")
 
 
 class Solid3DSolver:
@@ -505,6 +513,7 @@ class Solid3DSolver:
         if quadrature not in _STIFFNESS_RULES:
             raise ValueError(f"quadrature must be one of {sorted(_STIFFNESS_RULES)}, got {quadrature}")
         w_q, dn_q = _STIFFNESS_RULES[quadrature]
+        self._shapes = _STIFFNESS_SHAPES[quadrature]
         def general(law):  # the axisymmetric Ogden form assumes a block-diagonal C
             return OgdenGeneralIso(law.mu, law.alpha) if isinstance(law, OgdenIso) else law
 
@@ -568,6 +577,7 @@ class Solid3DSolver:
         # gradient of the last accepted step's incremental potential, all dofs: zero at free dofs, and at
         # held ones the force their support exerts on the body (internal + inertial - external) [N]
         self.residual = np.zeros(self.ndof)
+        self.magnetic_field = np.zeros(FIELD_SIZE)  # softsim.fem.magnetic.field's parameters; set between steps
         self._force_vecs = []  # per region force: its nodal loads for 1 N total
         for faces, direction in problem.force_loads:
             c = m.nodes[faces[:, :3]]
@@ -689,6 +699,9 @@ class Solid3DSolver:
 
         self._dndx_j, self._wv_j = jnp.asarray(self._dndx), jnp.asarray(self._wv)
         self._elem_grad_hess, self._elem_energy, self._iso_stress = elem_grad_hess, elem_energy, iso_stress
+        if self.p.magnetic is not None:
+            self._mag_energy, self._mag_grad_hess = element_kernels(self.p.magnetic, self._shapes)
+            self._mag_x0 = jnp.asarray(self.p.mesh.nodes[self.p.mesh.tets].reshape(-1, 30))
         self._build_load_kernels()
 
     @staticmethod
@@ -952,7 +965,7 @@ class Solid3DSolver:
     def energy(self, y: np.ndarray, ctx) -> float:
         u = y[:3 * self.n].reshape(self.n, 3)
         e = float(self._elem_energy(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), ctx["c"], ctx["b"]))
-        e += self._quadratic(y, ctx)[0]
+        e += self._quadratic(y, ctx)[0] + self.magnetic_energy(y)
         for k, pressure in enumerate(self.pressures):
             if pressure:
                 e += pressure * float(self._face_s(self._face_x(y, k)))
@@ -966,6 +979,17 @@ class Solid3DSolver:
             e += float(k["energy"](jnp.asarray(self._contact_z(y, i)), jnp.asarray(self._bond[i]),
                                    jnp.asarray(self._anchor[i]), jnp.asarray(self._lam[i]), cr, rr))
         return e
+
+    def _magnetised(self) -> bool:
+        return self.p.magnetic is not None and bool(np.any(self.magnetic_field))
+
+    def magnetic_energy(self, y: np.ndarray) -> float:
+        """Energy [J] of the body in the field set by ``magnetic_field``: zero without one."""
+        if not self._magnetised():
+            return 0.0
+        u = y[:3 * self.n].reshape(self.n, 3)
+        return float(self._mag_energy(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._mag_x0, self._dndx, self._wv,
+                                      jnp.asarray(self.magnetic_field)))
 
     def _face_x(self, y: np.ndarray, k: int):
         """Current positions of pressure load ``k``'s face nodes, (K, 18)."""
@@ -1010,6 +1034,13 @@ class Solid3DSolver:
         for dof, lowest in ctx["floors"]:
             if y[dof] < lowest:
                 hess[pat.diag[np.flatnonzero(self.free == dof)[0]]] += FLOOR_STIFFNESS
+        if self._magnetised():
+            gm, hm = (np.asarray(a) for a in self._mag_grad_hess(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._mag_x0,
+                                                                 self._dndx, self._wv, jnp.asarray(self.magnetic_field)))
+            if project:
+                hm = self._project_psd(hm)
+            grad += np.bincount(self._edofs.ravel(), weights=gm.ravel(), minlength=self.ndof)
+            hess += pat.scatter(self._epos, hm.reshape(-1))
         for k, pressure in enumerate(self.pressures):
             if not pressure:
                 continue
@@ -1172,6 +1203,35 @@ class Solid3DSolver:
             bond |= gaps <= 0.0
             limit = 6.0 * cs.adhesion_range if cs.adhesion else 0.0
             bond &= gaps <= limit
+
+    # -- checkpoints -------------------------------------------------------------------------------
+
+    def checkpoint(self) -> dict[str, np.ndarray]:
+        """Everything a step changes, as flat arrays: a solver built on the same problem and given this by
+        :meth:`restore` goes on as this one would. ``residual`` is here because the supports' forces are read from it."""
+        out = {"t": np.array(self.t)}
+        for name in _SOLVER_STATE:
+            value = getattr(self, name)
+            if isinstance(value, list):
+                out |= {f"{name}.{i}": np.array(v) for i, v in enumerate(value)}
+            else:
+                out[name] = np.array(value)
+        return out
+
+    def restore(self, state: dict[str, np.ndarray]) -> None:
+        """Take the state :meth:`checkpoint` gave; refused if it does not fit this problem."""
+        def fitted(key: str, like: np.ndarray) -> np.ndarray:
+            if key not in state or np.shape(state[key]) != np.shape(like):
+                raise ValueError(f"checkpoint does not fit this solver: {key}")
+            return np.array(state[key], dtype=np.asarray(like).dtype)
+
+        for name in _SOLVER_STATE:
+            value = getattr(self, name)
+            if isinstance(value, list):
+                setattr(self, name, [fitted(f"{name}.{i}", v) for i, v in enumerate(value)])
+            else:
+                setattr(self, name, fitted(name, value))
+        self.t = float(state["t"])
 
     # -- outputs -----------------------------------------------------------------------------------
 

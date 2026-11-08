@@ -141,17 +141,20 @@ class ReducedGripper:
         return total / self.fingers
 
 
+GRASP_END = 20.0  # s: many grasps still up 2 s after the lift have fallen by now (tools/check_long_hold.py)
+
+
 def run_grasp(f: ReducedFinger, pressure: float, mass: float, friction: float = 0.8, shape: str = "box", fingers: int = 2,
-              lift: float = 0.04, **kwargs) -> dict:
+              lift: float = 0.04, end: float = GRASP_END, **kwargs) -> dict:
     """One scripted grasp: ramp to ``pressure`` [Pa] over 0.6 s, settle to 1.5 s, lift by ``lift`` [m] over 0.5 s, hold
-    to 3.5 s. ``held``: it left the table and stayed up (:func:`softsim.scenarios.grasp.is_held`).
+    to ``end`` [s]. ``held``: it left the table and stayed up (:func:`softsim.scenarios.grasp.is_held`).
     ``grip``: :meth:`ReducedGripper.grip_force` [N] just before the lift."""
     g = ReducedGripper(f, fingers=fingers, shape=shape, size=OBJECTS[shape], mass=mass, friction=friction, **kwargs)
     for i in range(1500):
         g.step(pressure * min(i / 600, 1))
     z0, grip = g.object_height, g.grip_force()
-    rises = np.zeros(2000)
-    for i in range(2000):
+    rises = np.zeros(round(end / g.model.opt.timestep) - 1500)
+    for i in range(len(rises)):
         g.step(pressure, lift * min(i / 500, 1))
         rises[i] = g.object_height - z0
-    return dict(held=is_held(np.arange(2000) * g.model.opt.timestep, rises), rise=rises[-1], grip=grip)
+    return dict(held=is_held(np.arange(len(rises)) * g.model.opt.timestep, rises), rise=rises[-1], grip=grip)

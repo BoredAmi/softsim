@@ -162,7 +162,7 @@ drop weights. See [materials.md](materials.md).
   - SOFA loses less with sticking friction, but much more frictionless.
 - **500 g:**
   - out-of-plane tilt ruled out (a 20° sweep closes 17% of a 2× gap);
-  - a model-free check shows no passive specimen can explain it: the
+  - (since withdrawn: the two weights do not load the specimen alike, docs/experiments.md) a model-free check shows no passive specimen can explain it: the
     recording needs 12× the 50 g force at the same indentation and rate.
 - **3D solver ~1.8× faster** (fixed sparsity pattern, PARDISO analysis once,
   closed-form tangents); `tools/bench_fem.py` for the GPU machine.
@@ -343,13 +343,20 @@ artefacts, finger self-collision and a friction benchmark. A grasp benchmark
 grid.
 
 Started 2026-11-06: two-finger gripper on the reference, a fast finger fitted to it, a local live page and a grasp map
-([gripper.md](gripper.md)). Finite-element grasps and the page's replay of them are still to come.
+([gripper.md](gripper.md)). Two finite-element grasps with Coulomb friction (10 g held, 30 g dropped) agree with the fast
+finger and play in the page's Truth tab. The finite-element finger's tip force is about 5.5 times below the measurement
+([actuation.md](actuation.md#tip-force-a-test-it-fails)); that gap is open.
 
 ## M10: magnetic soft robots (MRE)
 
-Hard-magnetic elastomer model (per-element magnetisation in an external
-field). Magnetic cantilever check against analytic and published data, and a
-magnetic crawler/gripper.
+Soft-magnetic elastomer first, because that is what isotropic MRE fingers are: carbonyl-iron particles with no
+remanence, magnetised by the applied field. The energy is linear-magnetic with axes that follow the deformation, in a
+given field (uniform plus a point dipole); the field is not solved for. Then a permanent magnet's field, an MRE finger
+against a measured force, and a magnetic gripper. A hard-magnetic model (fixed magnetisation) follows if a design needs it.
+
+Started 2026-11-08: `softsim/fem/magnetic.py` on the reference, checked against a turned body's energy, the pull up a
+dipole's gradient and a cantilever's closed form up to buckling (`tests/test_magnetic.py`). Not yet in the scenario
+config.
 
 ## M11: design and control toolkit
 

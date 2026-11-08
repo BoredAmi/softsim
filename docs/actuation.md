@@ -936,11 +936,39 @@ only; a plane-strain beam deflects 1/(1-nu^2) less, tests/test_plane_strain.py).
 layer, to an effective 2.6 mm.
 
 Result of the committed scenario on the reference (1.5 mm mesh, dynamic 1 s ramp): RMS error against the measurements
-0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static A 1 mm mesh gives 0.95 deg and differs from 1.5 mm by 0.5 deg RMS: read the result as agreement within about 1 deg of discretisation error. MuJoCo (2 mm: 16.4 deg, 1.5 mm: 8.1) and SOFA (1.5 mm: 10.2) do not reproduce the finger; see docs/decisions.md.
-5.04). Reproduce:
+0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static 5.04). A 1 mm mesh gives 0.95 deg and differs from 1.5 mm by 0.5 deg
+RMS: read the result as agreement within about 1 deg of discretisation error. MuJoCo (2 mm: 16.4 deg, 1.5 mm: 8.1) and
+SOFA (1.5 mm: 10.2) do not reproduce the finger; see docs/decisions.md. Reproduce:
 
     softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set simulation.timestep=10ms --out runs/wang/fem_1p5mm
     python tools/compare_wang_finger.py runs/wang/fem_1p5mm --plot      # table and docs/media/wang_finger.png
 
-Not done: a mesh-convergence run at 1 mm; MuJoCo and SOFA (they refuse Yeoh: `softsim material project`, then
+### Tip force: a test it fails
+
+The paper also measured the force the tip presses with (Table 7: 0.47, 0.77 and 0.96 N at 20, 30 and 35 kPa) and has no
+FE of it. Nothing here was fitted to it. Holding the tip face in z (a roller) and reading its reaction:
+
+| model | bending, RMS against Table 5 | tip force / measured, 20 / 30 / 35 kPa |
+|---|---|---|
+| width held, published card (the committed scenario) | 0.76 deg | 0.18 / 0.19 / 0.17 (0.085 / 0.146 / 0.165 N) |
+| free width, card 2.8x stiffer | 3.15 deg | 0.53 / 0.55 / 0.54 (0.247 / 0.423 / 0.521 N) |
+| free width, card 4x stiffer | 4.53 deg (bends too little) | 0.48 / 0.49 / 0.48 |
+
+**The validated finger pushes about 5.5 times too weakly**, at every pressure. Releasing the width does most of the
+change; stiffening the card does not close the rest, and no model here matches both bending and force. The card is not
+the obvious suspect: the paper's raw tensile data fits it (168/166/159 kPa against 163 at 100% strain), though that strain
+is crosshead travel over 40 mm and may read soft. The paper doesn't record where the tip met the gauge or at what angle,
+which could account for a factor of about 2. Read the chord-angle agreement as a check of the bending, not of the force.
+The gripper's held and dropped limits inherit this (docs/gripper.md).
+
+    softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --out runs/wang/blocked_1p5mm \
+        --set simulation.timestep=10ms --set simulation.duration=900ms \
+        --set "body.prescribed=[{region: tip, path: [[0 ms, [null, null, 0 mm]], [900 ms, [null, null, 0 mm]]]}]"   # about 16 min
+    python tools/compare_wang_tip_force.py runs/wang/blocked_1p5mm
+    # free width, card S times stiffer: add these to the run above (blocked) and to one without the prescribed tip (bending)
+    #   --set body.plane_strain=null --set body.material.elastic.c10=<44163*S> \
+    #   --set body.material.elastic.c20=<530.71*S> --set body.material.elastic.c30=<16.251*S>
+    python tools/compare_wang_finger.py runs/wang/<free run>
+
+Not done: MuJoCo and SOFA (they refuse Yeoh: `softsim material project`, then
 `softsim transfer`). The interactive slider viewer of recorded runs is `tools/make_viewer.py` (docs/viewer/*.html).

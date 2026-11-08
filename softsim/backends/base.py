@@ -224,6 +224,14 @@ class Backend(ABC):
     def _clear_controls(self) -> None:
         self.__dict__.pop("_control_overrides", None)
 
+    def checkpoint(self) -> dict[str, np.ndarray]:
+        """The running state as arrays, for :meth:`restore` on a backend built from the same scene."""
+        raise NotImplementedError(f"the {self.name} backend has no checkpoints")
+
+    def restore(self, state: dict[str, np.ndarray]) -> None:
+        """Go on from a :meth:`checkpoint`."""
+        raise NotImplementedError(f"the {self.name} backend has no checkpoints")
+
     def set_material(self, body_name: str, material: Material) -> None:
         """Replace a soft body's material; the model is rebuilt and reset."""
         new_scene = self.scene.with_material(body_name, material)

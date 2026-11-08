@@ -91,13 +91,19 @@ Slider viewers for the finger, PneuNet and arm: `docs/viewer/*.html`.
 `softsim run scenarios/actuation/ribbed_finger.yaml --backend fem`, then `python tools/compare_wang_finger.py`;
 details in [docs/actuation.md](docs/actuation.md).*
 
-![Live soft gripper holding a box](docs/media/gripper_play.png)
+![Live soft gripper closing on a box and lifting it](docs/media/gripper_play.gif)
 
 *Play with it: `xdg-open docs/viewer/gripper.html`, or double-click the file. It needs no server. A gripper built from
 that finger runs live in your browser: pressure, mass and friction sliders, and a map of what it can hold. The live
 finger is a chain of links fitted to the reference, within 5–7% on a tip load left out of the fit (9–27% on a load
-spread along the pads). Its grasps are not yet checked against finite-element grasps.
-Details and commands in [docs/gripper.md](docs/gripper.md).*
+spread along the pads).*
+
+![Finite-element grasp replayed beside the fast finger](docs/media/gripper_truth.gif)
+
+*The page's Truth tab replays a finite-element grasp beside the live model, both with friction 0.8. Both lift the 10 g box
+almost at once and carry it, with grips within 8% while holding. A second finite-element run drops a 30 g box, as the fast
+model does. Both runs are a coarse 2 mm finger, so every other held and dropped limit is the fast model's alone. Details and
+commands in [docs/gripper.md](docs/gripper.md).*
 
 ![Live drop bench against the high-speed film](docs/media/drop_play.png)
 

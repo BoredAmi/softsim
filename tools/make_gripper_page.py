@@ -36,9 +36,10 @@ DIGESTS = {"three.min.js": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c1
 LIFT = 0.04  # m
 GAP, HEIGHT = 0.05, 0.14  # m
 CAVEAT = ("Live model: a chain of links fitted to the finite-element finger. It follows the finger's bend and stiffness "
-          "but does not deform around the object. In one coarse finite-element grasp the same 10 g box was carried too, but "
-          "the real fingers peel and re-grip first, using 14 mm of the lift where this model uses almost none. Held or "
-          "dropped limits come from this fast model only. Two fingers are the fitted case; three and four are extrapolations.")
+          "but does not deform around the object. Two coarse finite-element grasps of the box at 25 kPa agree with it: 10 g "
+          "held, 30 g dropped. Every other held or dropped limit comes from this fast model only, and the real finger pushes "
+          "about 5 times harder than the finite-element one, so they are the model's limits, not the real gripper's. Two "
+          "fingers are the fitted case; three and four are extrapolations.")
 
 
 def vendor() -> dict[str, bytes]:
@@ -85,7 +86,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=ROOT / "docs" / "viewer" / "gripper.html")
     ap.add_argument("--map", type=Path, help="tools/grasp_map.py output: adds the Grasp map tab")
     ap.add_argument("--truth", type=Path, help="tools/run_fe_grasp.py output: adds the Truth tab")
-    ap.add_argument("--truth-label", default="2 mm mesh, no teeth", help="what the Truth tab calls that run")
+    ap.add_argument("--truth-label", default="2 mm mesh, friction 0.8", help="what the Truth tab calls that run")
     a = ap.parse_args()
     extra = {}
     if a.map:

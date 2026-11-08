@@ -311,6 +311,17 @@ class FemBackend(Backend):
         state = SimState(time=s.t, rigid=rigid, soft=soft, contacts=contacts, controls=self.controls())
         return state if self._scene.spin is not None else self._to_world(state)  # a spin runs in the world
 
+    def checkpoint(self) -> dict[str, np.ndarray]:
+        overrides = self.__dict__.get("_control_overrides", {})
+        return self.solver.checkpoint() | {f"control.{name}": np.array(value) for name, value in overrides.items()}
+
+    def restore(self, state: dict[str, np.ndarray]) -> None:
+        self.solver.restore(state)
+        self._clear_controls()
+        for key, value in state.items():
+            if key.startswith("control."):
+                self.set_control(key.removeprefix("control."), float(value))
+
     def is_finite(self) -> bool:
         return self.solver is not None and bool(np.all(np.isfinite(self.solver.y)))
 

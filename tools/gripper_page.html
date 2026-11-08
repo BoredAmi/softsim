@@ -240,8 +240,7 @@ function startGrasp() {
 }
 function advance(dt) {
   if (state.auto) {
-    const s = (state.t - state.auto.t0) / 0.6;
-    if (s > 1.5) { state.liftTarget = G.lift; state.auto = null; }
+    if (state.t - state.auto.t0 > 1.5) { state.liftTarget = G.lift; state.auto = null; }  // run_grasp's schedule, as the map ran it
   }
   const rate = G.lift / 0.5;
   state.lift += Math.max(-rate * dt, Math.min(rate * dt, state.liftTarget - state.lift));
@@ -383,7 +382,7 @@ function show() {
   $("mass-o").textContent = `${state.mass * 1e3 | 0} g`;
   $("mu-o").textContent = state.mu.toFixed(2);
 }
-let grip = 0, rtf = 0;
+let grip = 0, rtf = 0, paused = false;
 function readout() {
   const weight = state.mass * 9.81, g = gripForce();
   grip += 0.1 * (g - grip);
@@ -444,7 +443,7 @@ function drawMap() {
     const held = M.grid[pick.shape][pick.mu], grip = M.grip[pick.shape][pick.mu];
     const total = held.flat().reduce((a, b) => a + b, 0);
     $("map-title").textContent = `${pick.shape[0].toUpperCase() + pick.shape.slice(1)} at friction ${pick.mu}: ${total} of ${held.flat().length} grasps held`;
-    $("map-note").textContent = `Two fingers, ${M.count} fast-model grasps in all. Held means the object left the table and stayed up.`;
+    $("map-note").textContent = `Two fingers, ${M.count} fast-model grasps in all. Held means the object left the table and was still up after 20 s.`;
     let h = `<tr><th>mass \\ kPa</th>${M.pressures.map(p => `<th>${p / 1e3}</th>`).join("")}</tr>`;
     M.masses.forEach((m, i) => {
       h += `<tr><th>${m * 1e3} g</th>` + M.pressures.map((p, j) => `<td><button data-i="${i}" data-j="${j}" data-held="${held[i][j]}" title="${m * 1e3} g at ${p / 1e3} kPa: ${held[i][j] ? "held" : "dropped"}, grip ${grip[i][j].toFixed(2)} N per finger">${held[i][j] ? grip[i][j].toFixed(2) : "\u2013"}</button></td>`).join("") + "</tr>";
@@ -477,6 +476,14 @@ window.softsim = {
     return out;
   },
   stats: () => ({ rtf, frames, z: objectHeight(), grip }),
+  // Take the live page off the clock and advance it by hand, one drawn frame per call: the same controls and the same
+  // advance() a presenter gets, repeatably (tools/rehearse_gripper_demo.py, tools/make_gripper_gif.py).
+  step(steps) {
+    paused = true;
+    for (let i = 0; i < steps; i++) advance(model.opt.timestep);
+    readout(); three.frame();
+    return { badge: $("badge").textContent, height: (objectHeight() - G.rest[state.shape]) * 1e3, grip, t: state.t, lift: state.lift };
+  },
 };
 
 // ---- truth: a recorded finite-element grasp beside the fast finger, on one clock ----
@@ -572,7 +579,7 @@ function initTruth() {
   $("tab-truth").hidden = false;
   $("truth-t").max = R.t.length - 1;
   $("tr-held").textContent = R.held ? "Yes" : "No"; $("tf-held").textContent = R.fast.held ? "Yes" : "No";
-  $("truth-note").textContent = `Recorded, not live: the finite-element run took hours. Both get the same pressure schedule and are asked for the same palm path, which the fast palm follows late and stops 1 mm short of. The drawing is the finger's side face; orange marks every node touching the box, usually mid-width, where the pad bulges past that face. The fast finger cannot peel or re-grip, so its lift height is not a prediction.`;
+  $("truth-note").textContent = `Recorded, not live: the finite-element run took hours. Both get the same pressure schedule and are asked for the same palm path, which the fast palm follows late and stops 1 mm short of. The drawing is the finger's side face; orange marks every node touching the box, usually mid-width, where the pad bulges past that face. The fast finger cannot deform around the box, so compare its grip and the box's height, not the shape of the contact.`;
   for (const c of R.chapters) {
     const b = document.createElement("button"); b.textContent = `${c.label}, ${R.t[c.frame].toFixed(2)} s`; b.dataset.frame = c.frame; $("truth-chapters").append(b);
   }
@@ -612,6 +619,7 @@ async function start() {
   let last = performance.now(), simMs = 0, wallMs = 0;
   function tick(now) {
     const wall = Math.min(now - last, 50); last = now;
+    if (paused) { requestAnimationFrame(tick); return; }
     const dt = model.opt.timestep, steps = Math.round(wall / 1e3 / dt), t0 = performance.now();
     for (let i = 0; i < steps; i++) advance(dt);
     simMs += steps * dt * 1e3; wallMs += performance.now() - t0;

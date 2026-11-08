@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -102,7 +103,27 @@ async def check_truth(p: Page, run: Path, f: ReducedFinger, shots: Path | None) 
     await p.js("location.hash='play'")
 
 
-async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None, truth: Path | None = None) -> None:
+@contextmanager
+def chrome(window: str = "1280,800"):
+    """Headless Chrome on a free debugging port, with software graphics."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as profile:
+        process = subprocess.Popen(["google-chrome", "--headless=new", "--no-sandbox", "--use-angle=swiftshader",
+                                    "--enable-unsafe-swiftshader", f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
+                                    f"--window-size={window}", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(3)
+            yield port
+        finally:
+            process.terminate()
+            process.wait()
+
+
+@asynccontextmanager
+async def opened(url: str, port: int):
+    """The page at ``url``, once its physics has started."""
     target = next(t for t in json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list")) if t["type"] == "page")
     async with websockets.connect(target["webSocketDebuggerUrl"], max_size=2**27) as ws:
         p = Page(ws)
@@ -116,6 +137,11 @@ async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None, truth
         fail = await p.js("document.getElementById('fail').textContent")
         if fail:
             raise SystemExit(f"page did not start: {fail}")
+        yield p
+
+
+async def drive(url: str, port: int, f: ReducedFinger, shots: Path | None, truth: Path | None = None) -> None:
+    async with opened(url, port) as p:
         await asyncio.sleep(3)
         s = await p.js("window.softsim.stats()")
         print(f"live: {s['rtf']:.1f}x real time, {s['frames'] / 3:.0f} frames/s (software GL in this check)")
@@ -152,19 +178,8 @@ def main() -> None:
     ap.add_argument("--shots", type=Path)
     ap.add_argument("--truth", type=Path, help="the run the page's Truth tab was built from")
     a = ap.parse_args()
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as profile:
-        chrome = subprocess.Popen(["google-chrome", "--headless=new", "--no-sandbox", "--use-angle=swiftshader",
-                                   "--enable-unsafe-swiftshader", f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
-                                   "--window-size=1280,800", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            time.sleep(3)
-            asyncio.run(drive(a.page.resolve().as_uri(), port, ReducedFinger.from_json(a.finger), a.shots, a.truth))
-        finally:
-            chrome.terminate()
-            chrome.wait()
+    with chrome() as port:
+        asyncio.run(drive(a.page.resolve().as_uri(), port, ReducedFinger.from_json(a.finger), a.shots, a.truth))
 
 
 if __name__ == "__main__":

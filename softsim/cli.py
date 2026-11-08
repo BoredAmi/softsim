@@ -23,7 +23,8 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     from softsim.runner import Simulation
 
-    sim = Simulation(args.config, args.overrides, backend=args.backend, strict=args.strict)
+    overrides = [*args.overrides, *([f"output.checkpoint={Path(args.checkpoint).resolve()}"] if args.checkpoint else [])]
+    sim = Simulation(args.config, overrides, backend=args.backend, strict=args.strict)
     for f in sim.findings:
         print(f, file=sys.stderr)
     last = [-1]
@@ -436,6 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--vertices", action="store_true", help="also save soft-body vertex trajectories")
     p.add_argument("--strict", action="store_true", help="treat check warnings as errors")
     p.add_argument("--quiet", action="store_true")
+    p.add_argument("--checkpoint", metavar="FILE", help="save the run here as it goes, and go on from FILE if it exists (fem backend)")
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser("check", help="validate a config, print mesh stats, physics findings, backend support")

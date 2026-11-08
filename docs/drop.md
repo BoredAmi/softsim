@@ -82,7 +82,7 @@ pytest tests/test_drop_solver.py
 - Only the 20 and 50 g drops at the filmed height and on the filmed body are checked against film. Every other object,
   body, material, height or tilt is unchecked, and the page says so. The similarity tests show the sizes and stiffness
   reach the solver correctly, not that those drops match reality.
-- The 500 g film is not a passive impact ([experiments.md](experiments.md)): the solver peaks at 9.0 mm against 4.52 mm.
+- The 500 g film is not reproduced: the solver peaks at 9.0 mm against 4.52 mm, and why is open ([experiments.md](experiments.md)).
 - 500 g from 80 cm breaks the solver. The page says so and stops.
 - Peak force is filtered over 0.2 ms, because a node landing on the object is a one-step spike. It is 66 N for the 50 g
   drop, where the film implies 65 N at peak indentation; the two are not the same moment in general.

@@ -167,6 +167,13 @@ def test_no_pressure_no_grasp(finger):
     assert out["grip"] == 0 and not out["held"]
 
 
+def test_held_means_it_lasts():
+    """A 10 g cylinder at 30 kPa is still up 2 s after the lift and back on the table by 20 s: that is a drop."""
+    f = ReducedFinger.from_json(Path(__file__).resolve().parents[1] / "softsim" / "reduced" / "wang_finger.json")
+    assert run_grasp(f, 30e3, 0.01, shape="cylinder", end=3.5)["held"]
+    assert not run_grasp(f, 30e3, 0.01, shape="cylinder")["held"]
+
+
 def test_palm_rise_is_where_the_palm_is_not_where_it_was_asked_to_go():
     f = ReducedFinger.from_json(Path(__file__).resolve().parents[1] / "softsim" / "reduced" / "wang_finger.json")
     g = ReducedGripper(f, shape="box", size=(0.016, 0.012, 0.03), mass=0.01, friction=0.8)

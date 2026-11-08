@@ -467,7 +467,7 @@ modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:
   gap. The MuJoCo transfer of the physical card (Prony g = 0.94) inverts
   elements under 500 g and can't be used for this case.
 
-- **No passive specimen can do it (a model-free check).** The force on the
+- **The force the film implies.** The force on the
   weight at its peak indentation is m·(a + g), with the deceleration a taken
   from a parabola through the tracked indentation (±0.8 ms around the peak):
 
@@ -479,24 +479,23 @@ modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:
   | 500 g | 4.52 mm | 2.67 ms | 1572 m/s² | 791 N |
 
   The tracked decelerations hardly depend on the mass, which spans 25×. 50 and
-  500 g hit at the same speed and push the specimen along nearly the same
-  path: 4.3 against 4.5 mm, reached in 3.7 against 2.7 ms. A specimen deformed
-  along nearly the same path pushes back with nearly the same force, whatever
-  its material law, viscoelasticity and inertia included. The 500 g recording
-  needs 12× the force. Rate sensitivity would need force ∝ rate⁷ to bridge the
-  1.4× difference in rate.
+  500 g hit at the same speed and reach nearly the same indentation: 4.3
+  against 4.5 mm, in 3.7 against 2.7 ms. The 500 g recording needs 12× the
+  force. **This is not model-free, and it does not rule the specimen out.** The
+  two weights do not deform the specimen the same way: the 50 g weight is 27 mm
+  wide and indents a 40 mm face, the 500 g weight is 43 mm wide and compresses
+  all of it, so the same depth need not mean the same force. What stands is the
+  simulations above: full-face runs on the reference still stop at 6.4-8.1 mm.
 
-The cause is still unknown, but it is not the material. The 500 g track does
-not show the specimen alone stopping the weight. What is left is the setup and
-the measurement:
+The cause is still unknown. The candidates left are the material under
+full-face confinement, the setup and the measurement:
 
 - what is under the specimen (cloth and table compliance, a stiffer support
   under heavy loads);
 - the side view's projection of depth motion: the camera looks down at 18.6°,
   so a weight moving away from it appears to rise by 0.32× that motion.
 
-500 g is therefore kept out of the fits, on physical grounds and not only
-because no model matches it.
+500 g is kept out of the fits because no model matches it and the cause is open.
 
 ## What the fitted modulus means
 
