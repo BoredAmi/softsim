@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from softsim.fem.magnetic import MU0, SoftMagnet
+from softsim.fem.magnetic import MU0, SoftMagnet, field_parameters, ring
 from softsim.fem.materials import NeoHookeanIso
 from softsim.fem.solid3d import Problem3D, QuadraticTetMesh, Solid3DSolver
 from softsim.meshing import structured_box
@@ -79,10 +79,17 @@ def test_the_body_is_pulled_up_a_dipoles_gradient():
     assert abs(got[0]) < 1e-6 * abs(want_z) and abs(got[1]) < 1e-6 * abs(want_z)  # on the axis: no sideways pull
 
 
-def test_the_solvers_hessian_is_the_derivative_of_its_gradient():
-    """The magnetic part of Newton's gradient and Hessian (field on minus field off) against central differences, in a
-    dipole's uneven field on a sheared, stretched body. Without the Hessian Newton still converges, only slower, so the
-    solutions alone would not show it missing."""
+# a tilted ring magnet above the bar's top face, its rim 0.57 mm from the nearest node of the deformed bar (none inside it)
+RING_BESIDE = tuple(field_parameters(uniform=(0, 0, 3e3), cylinders=ring((0.012, -0.004, 0.0158), (0.15, 1, 0), 1.23, 0.01,
+                                                                          0.0021, 0.005)))
+
+
+@pytest.mark.parametrize("q", [(2e4, 0, 1e4, 0, 0, 5.0, 0.015, 0.005, -0.03), RING_BESIDE], ids=["dipole", "ring magnet"])
+def test_the_solvers_hessian_is_the_derivative_of_its_gradient(q):
+    """The magnetic part of Newton's gradient and Hessian (field on minus field off) against central differences, on a
+    sheared, stretched body in a dipole's uneven field, and next to a tilted ring magnet whose rim comes within 0.6 mm of
+    it (there the solver differentiates the field's local expansion, not the field: this is what checks that). Without the
+    Hessian Newton still converges, only slower, so the solutions alone would not show it missing."""
     s = Solid3DSolver(bar(0.03, 0.01, 0.004, 0.005, SoftMagnet(0.9, 0.2, 0.4), pinned=True), dynamic=False)
     rng = np.random.default_rng(0)
     x = s.p.mesh.nodes
@@ -91,9 +98,9 @@ def test_the_solvers_hessian_is_the_derivative_of_its_gradient():
     ctx = s._context(1e-3)
 
     def magnetic(y):
-        s.magnetic_field[:] = (2e4, 0, 1e4, 0, 0, 5.0, 0.015, 0.005, -0.03)
+        s.magnetic_field = np.array(q, float)
         g_on, h_on = s._grad_hess(y, ctx)
-        s.magnetic_field[:] = 0
+        s.magnetic_field = np.zeros(len(q))
         g_off, h_off = s._grad_hess(y, ctx)
         return (g_on - g_off)[s.free], h_on - h_off
 
@@ -106,6 +113,9 @@ def test_the_solvers_hessian_is_the_derivative_of_its_gradient():
     fd = (magnetic(y + eps * d)[0] - magnetic(y - eps * d)[0]) / (2 * eps)
     assert np.abs(g).max() > 0
     np.testing.assert_allclose(full @ d[s.free], fd, rtol=0, atol=1e-5 * np.abs(fd).max())
+    s.magnetic_field = np.array(q, float)  # and the gradient is the energy's (the line search reads the energy)
+    slope = (s.magnetic_energy(y + eps * d) - s.magnetic_energy(y - eps * d)) / (2 * eps)
+    assert g @ d[s.free] == pytest.approx(slope, rel=1e-6)
 
 
 def test_a_cantilever_follows_its_closed_form_up_to_buckling():
@@ -124,3 +134,21 @@ def test_a_cantilever_follows_its_closed_form_up_to_buckling():
         l = ratio * np.pi / (2 * length)
         want = tilt * (np.sin(l * length) / l + np.tan(l * length) * (1 - np.cos(l * length)) / l - length)
         assert s.y[:3 * s.n].reshape(-1, 3)[tip, 2].mean() == pytest.approx(want, rel=tolerance)
+
+
+def test_the_magnetic_kernels_in_chunks_are_the_same(monkeypatch):
+    """Elements a few at a time (a magnet's Hessian is large: big meshes need it) give the same energy, gradient and
+    Hessian as all at once."""
+    def solver():
+        s = Solid3DSolver(bar(0.03, 0.01, 0.004, 0.005, SoftMagnet(0.9, 0.2, 0.4), pinned=True), dynamic=False)
+        s.magnetic_field[:] = (2e4, 0, 1e4, 0, 0, 5.0, 0.015, 0.005, -0.03)
+        return s
+    whole = solver()
+    monkeypatch.setenv("SOFTSIM_FEM_MAG_CHUNK", "7")
+    parts = solver()
+    assert len(whole.p.mesh.tets) > 3 * 7
+    y = 1e-5 * np.random.default_rng(2).standard_normal(whole.ndof)  # small: no element turned inside out
+    ctx = whole._context(1e-3)
+    assert parts.magnetic_energy(y) == pytest.approx(whole.magnetic_energy(y), rel=1e-12)
+    for a, b in zip(parts._grad_hess(y, ctx), whole._grad_hess(y, ctx)):
+        np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-12 * np.abs(b).max())

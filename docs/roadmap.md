@@ -355,8 +355,35 @@ given field (uniform plus a point dipole); the field is not solved for. Then a p
 against a measured force, and a magnetic gripper. A hard-magnetic model (fixed magnetisation) follows if a design needs it.
 
 Started 2026-11-08: `softsim/fem/magnetic.py` on the reference, checked against a turned body's energy, the pull up a
-dipole's gradient and a cantilever's closed form up to buckling (`tests/test_magnetic.py`). Not yet in the scenario
-config.
+dipole's gradient and a cantilever's closed form up to buckling (`tests/test_magnetic.py`).
+
+2026-11-09 ([magnetic.md](magnetic.md)):
+
+- **Config.** `magneto_active` cards take a susceptibility or an iron fraction, with block demagnetising factors.
+  A scene-level `magnetic_field:` holds a uniform field and ring or disc magnets, which can move along paths and can be
+  solid.
+- **Field.** The magnets' fields are exact, checked against current loops to 1e-7.
+- **Checks.** A bar built from the config follows its closed form to 2.2%. A mutation sweep tries 32 slips.
+- **Against Bernat et al.'s gripper** (arXiv:2407.13477), digitised from the paper's vector figures:
+  - The rolling torque is flat, as in their ANSYS. The point where it falls to zero suggests a strip about 2 mm thick.
+  - With the susceptibility from the recipe alone, the torque is 58-66% of theirs.
+  - The 0.7 N finger force is not checked yet: the paper does not give the contact point.
+- **Solid magnets.** A magnet can also be a rigid cylinder for contact. Each magnet has a chamfer (`edge`, 0.2 mm) that
+  softens its field's singular rims and rounds its contact surface: the singular rims had drawn a strip into the magnet's
+  corner.
+- **Fixed: H inside a magnet.** It is now `B / mu0 - M`; taking `B / mu0` made a false well under the rim.
+- **Finger force.**
+  - Energy balance for a free end peeled along the rim's tangent gives 0.24-0.28 N on our torque and 0.44 N on
+    ANSYS's, against 0.66-0.83 N measured.
+  - A clamped strip pulled that way cannot peel. Finite elements show the force rising past 1.9 N.
+  - So the measured force depends on the gauge's unrecorded contact point.
+- **Not yet simulated:**
+  - the 15 mm strip, whose overhanging flaps snap onto the magnet's poles;
+  - the strip closing from a gap: it hits the magnet at metres per second.
+- **Next:**
+  - saturation, using the card's `saturation_magnetization`;
+  - the finger against a gauge, once the set-up is known;
+  - a hard-magnetic model.
 
 ## M11: design and control toolkit
 

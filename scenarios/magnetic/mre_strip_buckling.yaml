@@ -1,0 +1,38 @@
+# A strip of soft-magnetic elastomer (MRE) across a uniform field: the verification case for magneto-active material
+# (docs/magnetic.md). A 4 x 4 x 60 mm bar clamped at its base, no gravity, in a field along x tilted 0.2 deg towards the
+# bar (z). The bar magnetises more easily along its length (demagnetising factors of the block, susceptibility 1), so the
+# field pulls it round to lie along x: an axial load K = mu0 A (chi_a - chi_n) H^2 that buckles it at
+# K = E I (pi / 2 L)^2, here at H = 22.15 kA/m, and below that bends it by the closed form of tests/test_scenario_magnetic.py.
+# The field ramps to 70% of buckling over 2 s (the bar's first mode is about 1.3 Hz there) and holds; the quasi-static check solves at the end-of-ramp field.
+#   softsim run scenarios/magnetic/mre_strip_buckling.yaml
+scenario: actuation
+description: MRE bar (4 x 4 x 60 mm, E = 200 kPa, chi = 1) across a uniform field, to 70% of buckling.
+backend: fem
+
+simulation:
+  timestep: 20 ms
+  duration: 4 s
+  output_rate: 50 Hz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: strip
+  geometry: {type: box, size: [4 mm, 4 mm, 60 mm]}
+  material:
+    density: 2000 kg/m^3
+    elastic:
+      model: magneto_active
+      matrix: {model: neo_hookean, youngs_modulus: 200 kPa, poisson_ratio: 0.3}
+      susceptibility: 1.0
+      along: [0, 0, 1]
+      normal: [1, 0, 0]
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+
+actuators: []
+
+magnetic_field:
+  uniform: [[0 ms, [0, 0, 0]], [2 s, [15.504 kA/m, 0, 0.05412 kA/m]]]

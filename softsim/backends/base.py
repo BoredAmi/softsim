@@ -125,6 +125,7 @@ class Backend(ABC):
     capabilities: ClassVar[frozenset[Capability]]
     locking_free: ClassVar[bool] = False  # elements that do not lock near incompressibility (no locking warning)
     implicit_actuation: ClassVar[bool] = False  # actuator loads in the implicit solve (no explicit-stability limit)
+    implicit_prony: ClassVar[bool] = False  # Prony overstress in the implicit solve (no explicit-stability limit)
 
     @classmethod
     def unsupported(cls, scene: Scene) -> list[str]:

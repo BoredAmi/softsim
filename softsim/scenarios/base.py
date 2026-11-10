@@ -20,6 +20,7 @@ from softsim.config.schema import StrictModel
 from softsim.config.units import Time
 from softsim.errors import ConfigError
 from softsim.geometry.soft import bind_files
+from softsim.magnetism import MagneticField, MagneticFieldConfig
 from softsim.materials import load_material
 from softsim.materials.models import Material
 from softsim.scene import ContactSettings, GroundSettings, Scene, SimulationSettings
@@ -48,6 +49,7 @@ class ScenarioConfig(StrictModel):
     ground: GroundSettings = GroundSettings()
     output: OutputSettings = OutputSettings()
     material_paths: list[str] = []
+    magnetic_field: MagneticFieldConfig | None = None  # an applied field for magneto_active bodies (softsim.magnetism)
 
 
 class Scenario(ABC):
@@ -67,6 +69,10 @@ class Scenario(ABC):
         self.config = config
         self.base_dir = base_dir or Path.cwd()
         bind_files(config, self.base_dir)  # mesh files relative to the config file
+
+    def magnetic_field(self) -> MagneticField | None:
+        """The config's applied field, for the scene (None without one)."""
+        return self.config.magnetic_field.build() if self.config.magnetic_field is not None else None
 
     def load_material(self, ref: str | dict) -> Material:
         """Resolve a material reference relative to the config file."""

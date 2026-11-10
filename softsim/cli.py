@@ -79,10 +79,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
     try:
         backend_cls = get_backend(config.backend)
         locking_free, implicit_actuation = backend_cls.locking_free, backend_cls.implicit_actuation
+        implicit_prony = backend_cls.implicit_prony
     except ConfigError:  # unknown or uninstalled backend: reported under "backend support"
-        locking_free = implicit_actuation = False
+        locking_free = implicit_actuation = implicit_prony = False
     findings = check_scene(scene, scenario.estimates(), locking_free=locking_free,
-                           implicit_actuation=implicit_actuation)
+                           implicit_actuation=implicit_actuation, implicit_prony=implicit_prony)
     for f in findings:
         print(" ", f)
     print("backend support:")

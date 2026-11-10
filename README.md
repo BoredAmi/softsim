@@ -110,6 +110,14 @@ commands in [docs/gripper.md](docs/gripper.md).*
 *Drop things in slow motion: `xdg-open docs/viewer/drop.html`. A live solver with the reference's Ecoflex card, nothing
 fitted, beside the film's trace: filmed peaks within 12%, rebound too slow. Details in [docs/drop.md](docs/drop.md).*
 
+![Rolling torque of an MRE strip on a ring magnet, softsim against ANSYS](docs/media/mre_rolling_torque.png)
+
+*Magnetic soft materials: an iron-filled silicone strip rolling onto a ring magnet, as in Bernat et al.'s MRE gripper
+(arXiv:2407.13477). The ANSYS curve is read exactly from the paper's vector figure. The torque is flat, as theirs is, and
+falls where a 2 mm strip runs out. With the susceptibility from the recipe alone it is 58–66% of theirs; the gap is
+reported, not fitted. The magnets' fields are exact, checked against current loops to 1e-7.
+`python tools/mre_rolling_torque.py --plot FILE`; details in [docs/magnetic.md](docs/magnetic.md).*
+
 ![Cable-bent cantilever vs Euler-Bernoulli](docs/media/cable_cantilever.png)
 
 *A cable-bent cantilever against the Euler-Bernoulli solution: tip angle over the tension ramp, and the deformed beam.
@@ -271,6 +279,7 @@ tests/
 - [Actuation: pressure and cable actuators, verified against the exact thick sphere and a cable-bent cantilever](docs/actuation.md)
 - [Soft gripper: the live demo, the fast finger and what it can hold](docs/gripper.md)
 - [Soft drop bench: drop things on the Ecoflex cylinder, beside the film](docs/drop.md)
+- [Magnetic soft materials (MRE): the model, its checks, and Bernat et al.'s gripper](docs/magnetic.md)
 - [Moving to a faster machine: setup, data to copy, long jobs](docs/new_machine.md)
 
 ## Data and citation

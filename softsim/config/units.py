@@ -39,6 +39,8 @@ _UNITS: dict[str, tuple[float, str]] = {
     "J/m^2": (1.0, "energy_per_area"), "J/m2": (1.0, "energy_per_area"), "mJ/m^2": (1e-3, "energy_per_area"),
     "Pa*s": (1.0, "viscosity"), "Pas": (1.0, "viscosity"), "kPa*s": (1e3, "viscosity"),
     "K": (1.0, "temperature"), "degC": (1.0, "temperature"),
+    "T": (1.0, "flux_density"), "mT": (1e-3, "flux_density"),
+    "A/m": (1.0, "field_strength"), "kA/m": (1e3, "field_strength"),
 }
 # affine units: SI value = number * factor + offset
 _OFFSETS: dict[str, float] = {"degC": 273.15}
@@ -48,6 +50,7 @@ SI_UNITS: dict[str, str] = {
     "length": "m", "mass": "kg", "time": "s", "pressure": "Pa", "density": "kg/m^3", "velocity": "m/s",
     "force": "N", "frequency": "Hz", "angle": "rad", "angular_velocity": "rad/s", "stiffness": "N/m", "viscous_damping": "N*s/m",
     "rate": "1/s", "energy_per_area": "J/m^2", "viscosity": "Pa*s", "temperature": "K",
+    "flux_density": "T", "field_strength": "A/m",
 }
 
 _QUANTITY = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([A-Za-z/^*0-9]+)?\s*$")
@@ -116,3 +119,5 @@ StrainRate = Rate
 EnergyPerArea = _quantity("energy_per_area")
 Viscosity = _quantity("viscosity")
 Temperature = _quantity("temperature")
+FluxDensity = _quantity("flux_density")  # T: a magnet's remanence
+FieldStrength = _quantity("field_strength")  # A/m: an applied field H

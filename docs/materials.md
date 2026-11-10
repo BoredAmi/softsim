@@ -45,6 +45,7 @@ references:
 | `ogden` | `mu: [...]`, `alpha: [...]` | N terms |
 | `gent` | `mu`, `jm` | stiffens without bound as I1 − 3 → J_m |
 | `arruda_boyce` | `mu`, `lambda_m` | five-term series (Abaqus form); locking stretch λ_m |
+| `magneto_active` | `matrix` (any hyperelastic law above), `susceptibility` or `particle_volume_fraction`, `along`, `normal`, `demagnetization` | iron-filled (MRE): soft-magnetic in the scene's `magnetic_field`; reference backend only ([magnetic.md](magnetic.md)) |
 
 The laws with a bulk modulus take `bulk_modulus` or `poisson_ratio`.
 `softsim material show <card>` prints the small-strain equivalents (E0, μ0,

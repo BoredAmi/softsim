@@ -39,10 +39,11 @@ def p_wave_speed(youngs: float, poisson: float, density: float) -> float:
 
 
 def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
-                locking_free: bool = False, implicit_actuation: bool = False) -> list[Finding]:
+                locking_free: bool = False, implicit_actuation: bool = False,
+                implicit_prony: bool = False) -> list[Finding]:
     """Return all findings for ``scene``; ``locking_free``: the backend's elements don't lock (no
     volumetric-locking findings); ``implicit_actuation``: it applies actuator loads implicitly (no
-    explicit-stability findings for them)."""
+    explicit-stability findings for them); ``implicit_prony``: likewise its Prony overstress."""
     est = dict(estimates or {})
     sim, contact = scene.simulation, scene.contact
     dt = sim.timestep
@@ -142,7 +143,7 @@ def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
         out += _adhesion_findings(scene, body, dt)
         if not implicit_actuation:
             out += _cable_findings(scene, body, dt)
-        out += _prony_findings(body, dt)
+        out += _prony_findings(body, dt, implicit_prony)
         out += _spin_findings(scene, body, dt)
         validity = body.material.validity
         strain = est.get("expected_strain")  # compressive, positive
@@ -185,8 +186,9 @@ def _spin_findings(scene: Scene, body, dt: float) -> list[Finding]:
     return out
 
 
-def _prony_findings(body, dt: float) -> list[Finding]:
-    """The Maxwell-branch overstress is explicit: its shear stiffness must be resolvable at ``dt``."""
+def _prony_findings(body, dt: float, implicit: bool = False) -> list[Finding]:
+    """Where the Maxwell-branch overstress is explicit (MuJoCo, SOFA) its shear stiffness must be resolvable at ``dt``;
+    an ``implicit`` backend (the reference) has no such limit. Either way a term faster than two steps is reported."""
     from softsim.materials.viscoelastic import max_stable_timestep, prony_of
 
     prony = prony_of(body.material)
@@ -194,11 +196,11 @@ def _prony_findings(body, dt: float) -> list[Finding]:
         return []
     out = []
     dt_max = max_stable_timestep(body.material, body.effective_density, body.mesh.quality()["min_edge"])
-    if dt > dt_max:
+    if not implicit and dt > dt_max:
         out.append(Finding("error", "prony-unstable",
                            f"{body.name}: explicit Prony overstress (sum g * mu0) needs dt <= {dt_max:.2e} s on the "
                            f"smallest element, got {dt:.2e} s; lower the timestep or coarsen the mesh"))
-    elif dt > 0.3 * dt_max:
+    elif not implicit and dt > 0.3 * dt_max:
         out.append(Finding("warning", "prony-stiff",
                            f"{body.name}: Prony overstress resolved with omega*dt = {dt / dt_max:.2f}; results may "
                            "depend on the timestep"))

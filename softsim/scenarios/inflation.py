@@ -237,7 +237,7 @@ class InflationScenario(Scenario):
             self._spin = spin
             return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,
                          ground=self.config.ground, metadata={"name": self.config.name or self.config.scenario},
-                         actuators=actuators, mount=mount, spin=spin)
+                         actuators=actuators, mount=mount, spin=spin, magnetic_field=self.magnetic_field())
         except ValueError as exc:
             if not (cfg.mount_path or rotation):
                 raise

@@ -1,0 +1,53 @@
+# Bernat et al.'s MRE strip on their ring magnet (arXiv:2407.13477; docs/magnetic.md), for tools/mre_tangent_pull.py, which
+# wraps it half-way round the rim, lets it settle, and pulls its tip along the rim's tangent. Nothing fitted: RTV silicone
+# with iron powder at 1 : 1 by weight (12.3% iron by volume, so chi = 0.42 by Maxwell Garnett, and 1.93 g/cm^3),
+# E = 0.81 MPa (their Table 3); a 60 x 15 x 2 mm strip (the thickness ANSYS's torque points to), clamped at its root
+# (base); the 20/4.2 x 5 mm ring magnet, 1.23 T, axis across the strip, its rim touching the strip 15 mm from the root,
+# solid, with 0.2 mm edges. No gravity (the strip weighs 0.034 N). The tool holds the tip (top) along its own path, sets
+# the width (4 mm by default: the 15 mm strip overhangs the magnet, see the tool) and, to settle the start, a Prony branch
+# that keeps the long-term modulus at 0.81 MPa.
+#   python tools/mre_tangent_pull.py
+scenario: actuation
+description: Bernat et al.'s MRE strip wrapped on their ring magnet, its tip pulled along the rim's tangent (nothing fitted).
+backend: fem
+
+simulation:
+  timestep: 0.25 ms
+  duration: 200 ms
+  output_rate: 200 Hz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: strip
+  geometry: {type: box, size: [2 mm, 15 mm, 60 mm]}
+  material:
+    density: 1930 kg/m^3
+    friction: {sliding: 0.8}
+    elastic:
+      model: magneto_active
+      matrix: {model: neo_hookean, youngs_modulus: 810 kPa, poisson_ratio: 0.49}
+      particle_volume_fraction: 0.123
+      along: [0, 0, 1]
+      normal: [1, 0, 0]
+  mesh: {size: 1 mm, method: structured}
+  fixed: [base]
+  prescribed:
+    - region: top
+      path: [[0 s, [0, 0, 0]], [1 s, [0, 0, 0]]]   # replaced by the tool's path
+
+actuators: []
+
+magnetic_field:
+  magnets:
+    - name: magnet
+      remanence: 1.23 T
+      diameter: 20 mm
+      hole: 4.2 mm
+      thickness: 5 mm
+      position: [11 mm, 0, 15 mm]
+      axis: [0, 1, 0]
+      solid: true
+      edge: 0.2 mm

@@ -27,6 +27,7 @@ from softsim.materials.models import (
     ARRUDA_BOYCE_C,
     ArrudaBoyce,
     Gent,
+    MagnetoActive,
     Material,
     MooneyRivlin,
     NeoHookean,
@@ -244,8 +245,11 @@ class Prony:
 
 
 def from_material(material: Material) -> tuple[IsochoricLaw, float, Prony | None]:
-    """(isochoric law, bulk modulus, Prony series or None) for a softsim material."""
+    """(isochoric law, bulk modulus, Prony series or None) for a softsim material; a magneto-active one's are its
+    matrix's (its magnetic part is softsim.fem.magnetic's, see :func:`softsim.backends.fem.backend`)."""
     e = material.elastic
+    if isinstance(e, MagnetoActive):
+        e = e.matrix
     if isinstance(e, (NeoHookean, StableNeoHookean)):
         mu = e.youngs_modulus / (2.0 * (1.0 + e.poisson_ratio))
         kappa = e.youngs_modulus / (3.0 * (1.0 - 2.0 * e.poisson_ratio))

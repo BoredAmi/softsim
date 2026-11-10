@@ -180,6 +180,7 @@ class DropTestScenario(Scenario):
             contact=cfg.contact,
             ground=cfg.ground,
             metadata={"name": cfg.name or "drop_test", "specimen_top": self._top},
+            magnetic_field=self.magnetic_field(),
         )
 
     # -- metrics -----------------------------------------------------------

@@ -94,7 +94,9 @@ The formulation is the axisymmetric one, in 3D:
 - friction: coefficients combine by maximum. 0 is frictionless, ≥ 1 is
   sticking (identical to μ = 1 statically, see below, and much faster for
   Newton), and anything in between is Coulomb;
-- adhesion from the material and the ground.
+- adhesion from the material and the ground;
+- magneto-active (MRE) material in the scene's magnetic field, with solid magnets as rigid cylinders. See
+  [magnetic.md](magnetic.md).
 
 Rayleigh and Kelvin–Voigt damping are refused: they are numerical damping,
 so give the card a Prony series or no damping.

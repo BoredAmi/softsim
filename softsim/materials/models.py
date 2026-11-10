@@ -24,6 +24,7 @@ from __future__ import annotations
 import math
 from typing import Annotated, Any, ClassVar, Iterable, Literal, Union
 
+import numpy as np
 from pydantic import Field, model_validator
 
 from softsim.capabilities import Capability
@@ -332,19 +333,55 @@ HyperelasticMatrix = Annotated[
 ]
 
 
-class MagnetoActive(StrictModel):
-    """Placeholder for magnetorheological elastomers (MRE).
+def composite_susceptibility(volume_fraction: float) -> float:
+    """Susceptibility of an elastomer filled with a volume fraction of iron particles, Maxwell Garnett's mixing rule for
+    spheres far more permeable than the matrix: ``3 phi / (1 - phi)``. A dilute estimate, meant for the 10-30% of
+    iron-powder MRE; chains of particles (an MRE cured in a field) are more permeable along them."""
+    return 3.0 * volume_fraction / (1.0 - volume_fraction)
 
-    Holds the passive matrix model and particle data so presets can already be
-    written; no backend implements the magneto-mechanical coupling yet, so any
-    scene using it is rejected rather than silently simulated as passive.
+
+class MagnetoActive(StrictModel):
+    """Soft-magnetic elastomer (MRE): a hyperelastic matrix filled with iron particles that the applied field magnetises.
+
+    The magnetic energy per unit reference volume is ``-mu0 / 2 (chi_a (a.H)^2 + chi_n (n.H)^2 + chi_b (...)^2)`` with the
+    material axes ``along`` and ``normal`` (body frame) carried by the deformation (softsim.fem.magnetic). Each axis's
+    effective susceptibility is ``chi / (1 + N chi)``: ``chi`` is the composite's (``susceptibility``, or Maxwell Garnett's
+    ``3 phi / (1 - phi)`` from ``particle_volume_fraction``), ``N`` the body's demagnetising factor along the axis, by
+    default that of the rectangular block bounding the body at rest along ``along``, ``normal`` and across (exact,
+    Aharoni 1998: right for strips and plates, approximate for other shapes); or give ``demagnetization`` as
+    ``[N_along, N_normal, N_across]``. Linear: keep the induced magnetisation ``chi H`` well below the composite's
+    ``saturation_magnetization`` (recorded for that check, not used by the model). The field comes from the scene's
+    ``magnetic_field`` (softsim.magnetism).
     """
 
     model: Literal["magneto_active"] = "magneto_active"
     matrix: HyperelasticMatrix
-    particle_volume_fraction: Annotated[float, Field(ge=0, lt=1)]
+    susceptibility: Annotated[float, Field(ge=0)] | None = None
+    particle_volume_fraction: Annotated[float, Field(ge=0, lt=1)] | None = None
     saturation_magnetization: Annotated[float, Field(ge=0)] = 0.0  # A/m
+    demagnetization: Literal["block"] | tuple[Annotated[float, Field(ge=0, le=1)], Annotated[float, Field(ge=0, le=1)],
+                                              Annotated[float, Field(ge=0, le=1)]] = "block"
+    along: tuple[float, float, float] = (1.0, 0.0, 0.0)
+    normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
     requires: ClassVar[frozenset[Capability]] = frozenset({Capability.MAGNETO_ACTIVE})
+
+    @model_validator(mode="after")
+    def _check(self) -> "MagnetoActive":
+        if (self.susceptibility is None) == (self.particle_volume_fraction is None):
+            raise ValueError("give exactly one of susceptibility and particle_volume_fraction")
+        a, n = np.asarray(self.along, float), np.asarray(self.normal, float)
+        if np.linalg.norm(a) == 0 or np.linalg.norm(n) == 0:
+            raise ValueError("along and normal must be non-zero")
+        if abs(a @ n) > 1e-9 * np.linalg.norm(a) * np.linalg.norm(n):
+            raise ValueError("along and normal must be perpendicular")
+        return self
+
+    @property
+    def chi(self) -> float:
+        """The composite's susceptibility (before demagnetisation)."""
+        if self.susceptibility is not None:
+            return self.susceptibility
+        return composite_susceptibility(self.particle_volume_fraction)
 
     def initial_youngs_modulus(self) -> float:
         return self.matrix.initial_youngs_modulus()

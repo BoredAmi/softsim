@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Literal, Union
+from typing import TYPE_CHECKING, Annotated, Literal, Union
 
 import numpy as np
 from pydantic import Field
@@ -20,6 +20,9 @@ from softsim.config.units import Frequency, Length, Time
 from softsim.geometry.rigid import Part
 from softsim.materials.models import Adhesion, Friction, Material
 from softsim.meshing import TetMesh
+
+if TYPE_CHECKING:  # softsim.magnetism builds on MountMotion, defined here
+    from softsim.magnetism import MagneticField
 
 
 GROUND_NAME = "ground"  # name of the ground in contact reports, in every backend
@@ -446,6 +449,7 @@ class Scene:
     actuators: tuple[Actuator, ...] = ()
     mount: MountMotion | None = None
     spin: MountSpin | None = None
+    magnetic_field: "MagneticField | None" = None  # the applied field (softsim.magnetism), world frame
 
     def __post_init__(self) -> None:
         if self.mount is not None or self.spin is not None:
@@ -486,6 +490,8 @@ class Scene:
             req.add(Capability.MOVING_MOUNT)
         if self.spin is not None:
             req.add(Capability.ROTATING_MOUNT)
+        if self.magnetic_field is not None and self.magnetic_field.active:
+            req.add(Capability.MAGNETO_ACTIVE)
         if self.ground.enabled:
             req |= self.ground.friction.requires
             if self.ground.adhesion is not None and self.soft_bodies:

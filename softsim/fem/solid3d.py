@@ -106,6 +106,7 @@ _STIFFNESS_RULES = {8: (_W, _DN), 4: (_W4, tet10_shape(_XI4)[1])}
 _STIFFNESS_SHAPES = {8: tet10_shape(_XI)[0], 4: tet10_shape(_XI4)[0]}
 FLOOR_STIFFNESS = 1e5  # N/m: the table under a body with a ``RigidBody3D.floor``; 1 N sinks it 10 um
 ELEMENT_CHUNK = 25_000  # elements per kernel launch (see ``Solid3DSolver._chunked``)
+MAGNETIC_CHUNK = 4096  # the same for the magnetic kernels (``Solid3DSolver._magnetic_chunked``)
 _XI_M, _W_M = tet_quadrature(3)      # mass: 27 points, exact to degree 5 (P2 x P2 is degree 4)
 _N_M, _DN_M = tet10_shape(_XI_M)
 
@@ -700,9 +701,35 @@ class Solid3DSolver:
         self._dndx_j, self._wv_j = jnp.asarray(self._dndx), jnp.asarray(self._wv)
         self._elem_grad_hess, self._elem_energy, self._iso_stress = elem_grad_hess, elem_energy, iso_stress
         if self.p.magnetic is not None:
-            self._mag_energy, self._mag_grad_hess = element_kernels(self.p.magnetic, self._shapes)
+            self._mag_energy, self._mag_grad_hess = self._magnetic_chunked(*element_kernels(self.p.magnetic, self._shapes))
             self._mag_x0 = jnp.asarray(self.p.mesh.nodes[self.p.mesh.tets].reshape(-1, 30))
         self._build_load_kernels()
+
+    @staticmethod
+    def _magnetic_chunked(energy, grad_hess):
+        """The magnetic kernels at most ``MAGNETIC_CHUNK`` elements at a time (env ``SOFTSIM_FEM_MAG_CHUNK``), to bound
+        their memory on fine meshes. (Differentiating a magnet's elliptic integrals twice in reverse took 4 MB an element,
+        41 GB for a 10 800-element finger; the field's local expansion, softsim.fem.magnetic.element_kernels, made that
+        small. 4096 was the fastest of 512, 4096 and 20 000 on that finger: 1.0 s a Hessian, 1.2 GB.)"""
+        size = int(os.environ.get("SOFTSIM_FEM_MAG_CHUNK", MAGNETIC_CHUNK))
+
+        def pieces(n):
+            return [slice(s, min(s + size, n)) for s in range(0, n, size)]
+
+        def chunked_energy(u, x0, dndx, wv, q):
+            if len(u) <= size:
+                return energy(u, x0, dndx, wv, q)
+            return sum(float(energy(u[s], x0[s], dndx[s], wv[s], q)) for s in pieces(len(u)))
+
+        def chunked_grad_hess(u, x0, dndx, wv, q):
+            if len(u) <= size:
+                return grad_hess(u, x0, dndx, wv, q)
+            ge, he = np.empty((len(u), 30)), np.empty((len(u), 30, 30))
+            for s in pieces(len(u)):
+                ge[s], he[s] = (np.asarray(a) for a in grad_hess(u[s], x0[s], dndx[s], wv[s], q))
+            return ge, he
+
+        return chunked_energy, chunked_grad_hess
 
     @staticmethod
     def _chunked(kernels):
