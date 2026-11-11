@@ -1,0 +1,74 @@
+site_name: softsim
+site_description: Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.
+repo_url: https://github.com/BoredAmi/softsim
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+hooks:
+  - docs/hooks/repo_links.py
+exclude_docs: |
+  hooks/
+
+theme:
+  name: material
+  features: [navigation.sections, navigation.top, search.highlight, content.code.copy]
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/brightness-7, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/brightness-4, name: Light mode}
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.arithmatex: {generic: true}
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.details
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - First drop simulation: tutorials/first_drop.md
+      - Change a material: tutorials/change_a_material.md
+      - Actuate a finger: tutorials/actuated_finger.md
+  - Concepts:
+      - Architecture: architecture.md
+      - Materials: materials.md
+      - Material library: material_library.md
+      - Drop test scenario: scenarios/drop_test.md
+  - Backends:
+      - MuJoCo: backends/mujoco.md
+      - SOFA: backends/sofa.md
+      - Rod (BeamAdapter): backends/rod.md
+      - Reference FEM: reference_fem.md
+  - Robots:
+      - Actuation: actuation.md
+      - Soft gripper: gripper.md
+      - Gripper demo script: demo_script.md
+      - Drop bench: drop.md
+      - Magnetic (MRE): magnetic.md
+  - Validation:
+      - Benchmarks: benchmarks.md
+      - Validation on unseen data: validation.md
+      - Experiments and calibration: experiments.md
+  - ROS 2: ros2.md
+  - Extending:
+      - Add a material: adding_a_material.md
+      - Add a body: adding_a_body.md
+      - Add a scenario: adding_a_scenario.md
+      - Add a backend: adding_a_backend.md
+      - Add a dataset: adding_a_dataset.md
+  - Project:
+      - Roadmap: roadmap.md
+      - Open decisions: decisions.md
+      - Moving to a faster machine: new_machine.md
+      - Changelog: changelog.md
+      - Contributing: contributing.md

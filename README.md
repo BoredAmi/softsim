@@ -4,11 +4,11 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status:** M1 (core + MuJoCo drop test), M2 (ROS 2 layer), M3 (video
-tracking + calibration) and M4 (SOFA backend) are done. **M5, soft-material
-fidelity, is in progress**; soft-robot actuation (pressure, cables, moving
-mounts, rods) is working and verified against analytic solutions
-([gallery below](#soft-robots)).
+**Status (v0.1.0, unreleased):** the core, the ROS 2 layer, video tracking and calibration, and the SOFA
+backend are done. Soft-material fidelity (M5) and the robot foundations (M6: pressure, cables, forces,
+material zones, CAD import, mounts) are nearly done. The pneumatic finger (M7), the cable finger and rods (M8)
+are validated. The gripper (M9) and magnetic soft materials (M10) are in progress. Every validated case on every
+backend is in one table: [docs/benchmarks.md](docs/benchmarks.md) (`softsim bench`).
 
 Backends:
 
@@ -19,7 +19,7 @@ Backends:
 - **`rod`:** slender bodies reduced to beams on SOFA BeamAdapter. Runs the same
   YAML as the others, in seconds, with finite rotations.
 
-See [docs/roadmap.md](docs/roadmap.md) for what's next.
+Documentation: <https://boredami.github.io/softsim/> (or the [docs/](docs/) folder). What's next: [docs/roadmap.md](docs/roadmap.md).
 
 ![20 g weight dropped on an Ecoflex 00-10 cylinder: high-speed camera vs MuJoCo flex simulation](docs/media/drop_20g_sim_vs_experiment.gif)
 
@@ -154,7 +154,7 @@ Python ≥ 3.10. On ROS 2 Humble, use a venv that can see the ROS packages:
 ```bash
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -e ".[dev]"      # mujoco 3.17, gmsh, scipy, pytest
-.venv/bin/python -m pytest              # ~20 s; add -m "not slow" to skip the slow ones
+.venv/bin/python -m pytest -m "not slow"   # about 10 min on a laptop; drop -m for the slow physics checks too
 ```
 
 `numpy<2` is pinned so ROS 2 Humble's compiled Python modules keep working.
@@ -189,6 +189,7 @@ softsim sweep scenarios/drop_test/sweeps/all_weights.yaml --jobs 5
 softsim sensitivity scenarios/drop_test/cases/w050.yaml --metric peak_indentation --jobs 8 \
     --param "specimen.material.elastic.youngs_modulus=30 kPa:150 kPa" --param "drop.height=0.2:0.4"
 softsim export scenarios/drop_test/cases/w020.yaml --out model.xml
+softsim bench --tier quick                                       # validated cases x backends -> docs/benchmarks.md
 softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5       # video tracking (needs the dataset zips)
 softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3    # fit E and damping to the recordings
 softsim fetch datasets/roels2025_elastomers.yaml                   # public material-test data (checksummed)
@@ -256,18 +257,23 @@ scenarios/          scenario configs, cases and sweeps (data, not code)
 datasets/           experimental dataset descriptions (DOI, camera, cases)
 calibrations/       calibration configs
 data/               raw/ (not versioned) and processed/ experimental data
-tools/              helper scripts (README media generation)
+benchmarks/         benchmark entries (case, truth, tolerance per backend) for softsim bench
+tools/              helper scripts (media, comparisons, long studies)
 docs/               architecture, how-to guides, backend notes, media/
 tests/
 ```
 
 ## Documentation
 
+- Tutorials: [a first drop simulation](docs/tutorials/first_drop.md), [changing a material](docs/tutorials/change_a_material.md),
+  [an actuated body and its transfer to MuJoCo](docs/tutorials/actuated_finger.md)
+- [Benchmarks: every validated case on every backend, against its truth](docs/benchmarks.md)
 - [Architecture](docs/architecture.md)
 - [Materials: cards, changing any value, homogeneous test curves, fitting](docs/materials.md)
 - [Material library: 25 silicone cards fitted to public tension, compression and relaxation data](docs/material_library.md)
 - How to add a [material](docs/adding_a_material.md), [body](docs/adding_a_body.md),
-  [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md)
+  [scenario](docs/adding_a_scenario.md), [backend](docs/adding_a_backend.md), [dataset](docs/adding_a_dataset.md);
+  [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md)
 - [MuJoCo backend: physics notes and limits](docs/backends/mujoco.md)
 - [SOFA backend: setup, physics notes and limits](docs/backends/sofa.md)
 - [Rod backend: slender bodies as beams (BeamAdapter)](docs/backends/rod.md)

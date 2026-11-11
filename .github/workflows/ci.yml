@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10"}
+      - run: pip install "ruff>=0.5"
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: System libraries for gmsh and MuJoCo (headless)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libglu1-mesa libxcursor1 libxinerama1 libxft2 libosmesa6
+      - run: pip install -e ".[dev,fem]"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/softsim/jax
+          key: jax-${{ runner.os }}-py${{ matrix.python }}-${{ hashFiles('softsim/fem/**/*.py') }}
+          restore-keys: jax-${{ runner.os }}-py${{ matrix.python }}-
+      - name: Fast tests
+        env: {MUJOCO_GL: osmesa}
+        run: python -m pytest -m "not slow" -q --durations=15
+
+  core-only:
+    # the package must import and its tests must skip cleanly without any optional extra
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10", cache: pip}
+      - run: pip install -e . pytest
+      - run: softsim --help && softsim materials
+      - run: python -m pytest -m "not slow" -q
+
+  docs:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10"}
+      - run: pip install "mkdocs-material>=9.5" "pymdown-extensions>=10"
+      - run: mkdocs build --strict

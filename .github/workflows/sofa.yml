@@ -1,0 +1,43 @@
+name: SOFA
+
+# The SOFA backend's tests need the SOFA v26.06 binary (Python 3.10), about 1 GB: run weekly and on demand,
+# never as a gate on a push.
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  sofa:
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    env:
+      SOFA_ROOT: ${{ github.workspace }}/../sofa/SOFA_v26.06.00_Linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10", cache: pip}
+      - uses: actions/cache@v4
+        id: sofa-cache
+        with:
+          path: ${{ github.workspace }}/../sofa
+          key: sofa-v26.06.00-linux-py310
+      - name: Download SOFA
+        if: steps.sofa-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSLO https://github.com/sofa-framework/sofa/releases/download/v26.06.00/SOFA_v26.06.00_Linux_Python3.10.zip
+          mkdir -p ../sofa && unzip -q SOFA_v26.06.00_Linux_Python3.10.zip -d ../sofa && rm SOFA_v26.06.00_Linux_Python3.10.zip
+      - name: System libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libglu1-mesa libxcursor1 libxinerama1 libxft2 libosmesa6 libopengl0 libglew2.2
+      - run: pip install -e ".[dev,fem]"
+      - name: SOFA and rod tests
+        run: python -m pytest -q tests/test_sofa_backend.py tests/test_rod_sofa.py tests/test_rod_backend.py tests/test_zones.py tests/test_cable.py tests/test_prescribed.py -m "not slow"
+      - name: Quick benchmarks, every backend
+        run: softsim bench --tier quick --out docs/benchmarks.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmarks
+          path: |
+            docs/benchmarks.md
+            runs/bench/

@@ -1,0 +1,41 @@
+name: Release
+
+# On a version tag: build the sdist and wheel, publish them to PyPI (trusted publishing: set the project up on
+# pypi.org first, with this repository and workflow as a trusted publisher), and deploy the docs to GitHub Pages.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10"}
+      - run: pip install build twine
+      - run: python -m build && twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with: {name: dist, path: dist/}
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: dist, path: dist/}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  docs:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.10"}
+      - run: pip install "mkdocs-material>=9.5" "pymdown-extensions>=10"
+      - run: mkdocs gh-deploy --strict --force
