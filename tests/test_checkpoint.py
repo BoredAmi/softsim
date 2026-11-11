@@ -78,6 +78,7 @@ def sample(path: Path) -> int:
         return json.loads(str(d["head"]))["sample"]
 
 
+@pytest.mark.slow
 def test_friction_memory_survives_a_stop(tmp_path):
     """Coulomb contact on a free box, with the grip read from the residual: stopped once the fingers are on the box."""
     path, whole = tmp_path / "run.npz", run(GRASP)
@@ -123,6 +124,7 @@ def test_a_backend_without_checkpoints_says_so():
     sim.close()
 
 
+@pytest.mark.slow
 def test_everything_a_step_changes_is_saved_and_restored():
     """Structural, so that state added later cannot be forgotten: every array a few steps change (friction memory included,
     which the runs above barely load: a symmetric squeeze needs no friction) is in the checkpoint and comes back exactly."""

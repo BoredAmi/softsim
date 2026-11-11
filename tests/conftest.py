@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+import os
+import re
 from pathlib import Path
 
 import pytest
@@ -28,3 +31,52 @@ def drop_config() -> dict:
 @pytest.fixture
 def drop_base_dir() -> Path:
     return DROP_DIR / "cases"
+
+
+# -- optional dependencies --------------------------------------------------------------------------------------
+# A test that fails because an optional package (an extra, or SOFA) is really absent is reported as skipped, naming
+# the package; with the package installed the same failure is a failure. This keeps `pip install softsim` plus
+# pytest green without a skip guard in every test that builds a MuJoCo model or meshes with gmsh.
+
+OPTIONAL = {"mujoco", "scipy", "jax", "jaxlib", "gmsh", "cv2", "matplotlib", "pypardiso", "PIL", "Sofa", "SofaRuntime",
+            "SofaPython3"}
+_NO_MODULE = re.compile(r"No module named '([\w.]+)'")
+_HINTS = {"needs JAX": "jax", "needs the gmsh package": "gmsh", "SOFA_ROOT": "Sofa"}
+
+
+def _absent(module: str) -> bool:
+    if module == "Sofa" and not os.environ.get("SOFA_ROOT"):
+        return True
+    try:
+        return importlib.util.find_spec(module) is None
+    except (ImportError, ValueError):
+        return True
+
+
+def _optional_cause(exc: BaseException | None) -> str | None:
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        names = []
+        if isinstance(exc, ModuleNotFoundError) and exc.name:
+            names.append(exc.name)
+        names += _NO_MODULE.findall(str(exc))
+        names += [m for hint, m in _HINTS.items() if hint in str(exc)]
+        for name in names:
+            top = name.split(".")[0]
+            if top in OPTIONAL and _absent(top):
+                return top
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if call.excinfo is None or report.passed or call.excinfo.errisinstance(pytest.skip.Exception):
+        return
+    module = _optional_cause(call.excinfo.value)
+    if module:
+        report.outcome = "skipped"
+        report.longrepr = (str(item.path), item.location[1] or 0, f"Skipped: needs the optional package {module!r}")

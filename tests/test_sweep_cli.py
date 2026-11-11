@@ -37,6 +37,7 @@ grid:
 
 
 def test_cli_check_and_lists(capsys):
+    pytest.importorskip("mujoco")
     assert main(["materials"]) == 0
     assert "ecoflex_00_10" in capsys.readouterr().out
     assert main(["scenarios"]) == 0

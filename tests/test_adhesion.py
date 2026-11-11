@@ -4,7 +4,8 @@ import math
 
 import numpy as np
 import pytest
-from scipy.optimize import brentq
+
+brentq = pytest.importorskip("scipy.optimize").brentq
 
 from softsim.backends import get_backend
 from softsim.backends.sofa import SofaBackend

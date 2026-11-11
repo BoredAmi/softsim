@@ -3,9 +3,10 @@ is needed here: the frames are built from an exact arc whose curvature and stret
 
 from pathlib import Path
 
-import mujoco
 import numpy as np
 import pytest
+
+mujoco = pytest.importorskip("mujoco")
 
 
 from softsim.reduced import ReducedFinger, ReducedFingerConfig, ReducedGripper, extract_tables

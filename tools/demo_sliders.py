@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from softsim.actuation import CableActuator, ForceActuator, PressureActuator
+from softsim.actuation import CableActuator, PressureActuator
 from softsim.runner import Simulation
 
 ROOT = Path(__file__).resolve().parents[1]

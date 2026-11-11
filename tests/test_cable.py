@@ -171,6 +171,7 @@ def test_reference_stroke_matches_euler_bernoulli():
     assert stiff.rest_lengths[0] - stiff.cable_length(0) == pytest.approx(0.001, rel=0.01)
 
 
+@pytest.mark.slow
 def test_mujoco_stroke_control():
     pytest.importorskip("mujoco")
     from softsim.backends.mujoco import MujocoBackend
@@ -194,6 +195,7 @@ def test_mujoco_stroke_control():
     assert min(angles) < 0.01
 
 
+@pytest.mark.slow
 def test_closed_loop_controller_holds_a_tip_angle():
     """Simulation.run(controller=...): a PI loop on the tension holds the (lightly damped) beam at 0.1 rad
     (MuJoCo)."""

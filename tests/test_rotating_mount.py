@@ -254,7 +254,7 @@ def _centrifugal_stretch(name, damped_newmark=False, broken=None, dt=None):
     return (x[2] - 0.06) / expected - 1.0, float(np.hypot(x[0], x[1]))
 
 
-@pytest.mark.parametrize("name, lateral", [("fem", 3e-4), ("sofa", 1e-4), ("mujoco", 1e-4)])
+@pytest.mark.parametrize("name, lateral", [pytest.param("fem", 3e-4, marks=pytest.mark.slow), ("sofa", 1e-4), ("mujoco", 1e-4)])
 def test_centrifugal_stretch_of_a_spinning_beam(name, lateral):
     """The rotating rod's stretch rho omega^2 L^3 / (3 E) = 0.555 mm at 60 rad/s. Measured: the reference +3.35%
     at 5 ms, +2.83% at 2.5 ms (second order; +2.7% extrapolated: the 3D rod against the 1D formula), MuJoCo -1.6%

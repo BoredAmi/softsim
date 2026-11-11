@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,8 +7,21 @@ name = "softsim"
 version = "0.1.0"
 description = "Data-driven simulation of soft materials and soft robots, with pluggable physics backends and validation against experiments."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
+authors = [{ name = "BoredAmi" }]
+keywords = ["soft robotics", "simulation", "finite elements", "hyperelasticity", "MuJoCo", "SOFA", "ROS 2"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "numpy>=1.24,<2",          # <2 keeps ROS 2 Humble's compiled Python extensions working
     "pyyaml>=5.4",
@@ -25,7 +38,14 @@ video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
 fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # reference solvers (softsim.fem, backend "fem"); float64 on CPU
 fast = ["pypardiso>=0.4"]   # MKL PARDISO for the 3D reference's linear solves (x86-64; ~35x faster than SuperLU)
-dev = ["pytest>=7", "softsim[mujoco,mesh,calib]"]
+docs = ["mkdocs-material>=9.5", "pymdown-extensions>=10"]
+all = ["softsim[mujoco,mesh,calib,fem,media]"]
+dev = ["pytest>=7", "ruff>=0.5", "softsim[mujoco,mesh,calib]"]
+
+[project.urls]
+Homepage = "https://github.com/BoredAmi/softsim"
+Documentation = "https://boredami.github.io/softsim/"
+Issues = "https://github.com/BoredAmi/softsim/issues"
 
 [project.scripts]
 softsim = "softsim.cli:main"
@@ -50,3 +70,12 @@ testpaths = ["tests"]
 # ROS 2 Humble registers pytest plugins that are incompatible with pytest >= 8
 addopts = "-p no:launch_testing -p no:launch_ros"
 markers = ["slow: long-running physics checks (deselect with -m 'not slow')"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["build", "install", "log", "runs", "data"]
+
+[tool.ruff.lint]
+# errors only: syntax, undefined names, unused imports/variables; style is left to review
+select = ["E9", "E7", "F"]
+ignore = ["E731", "E741"]

@@ -17,7 +17,6 @@ def _material(youngs):
 
 def _body(w=0.012, h=0.008, length=0.06, size=0.002, zones=(), E=1e6):
     mesh = structured_box((w, h, length), size)
-    pts = mesh.points - np.array([w / 2, h / 2, 0.0]) * 0  # structured_box: check origin below
     return SoftBodySpec(name="beam", mesh=mesh, material=_material(E), pinned=tuple(np.nonzero(mesh.points[:, 2] < 1e-9)[0]),
                         zones=tuple(zones))
 

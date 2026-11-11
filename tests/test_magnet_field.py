@@ -2,10 +2,11 @@
 integral by quadrature, the magnet as a stack of current loops (Biot-Savart with scipy's own elliptic integrals), the
 closed form on its axis, a dipole far away, and Maxwell's equations outside it."""
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
+
+jax = pytest.importorskip("jax")
+import jax.numpy as jnp  # noqa: E402
 from scipy.integrate import quad
 from scipy.special import ellipe, ellipk
 
@@ -96,6 +97,7 @@ def test_a_ring_is_a_disc_without_its_hole():
         np.testing.assert_allclose(h_at([0, 0, z], q)[2], disc(A) - disc(0.0021), rtol=1e-12)
 
 
+@pytest.mark.slow
 def test_a_strip_rolled_onto_a_ring_magnet_takes_the_energy_of_its_cross_section():
     """The rolling torque of tools/mre_rolling_torque.py, by two routes. The magnet's field is symmetric about its axis,
     so each radian of strip on the rim holds the same energy: T = -(R + t / 2) (integral of w over the cross-section on the

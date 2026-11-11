@@ -7,7 +7,6 @@ import pytest
 
 from softsim.config.loader import apply_overrides, load_yaml
 from softsim.config.schema import validate
-from softsim.errors import UnsupportedFeatureError
 from softsim.scenarios.inflation import InflationConfig, InflationScenario
 
 BEAM = Path(__file__).parents[1] / "scenarios" / "actuation" / "tip_load_cantilever.yaml"

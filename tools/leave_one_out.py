@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-from softsim.experiments.calibrate import Calibration, _evaluate_case, best_overrides
+from softsim.experiments.calibrate import Calibration, _evaluate_case
 
 ROOT = Path(__file__).resolve().parents[1]
 FOLDS = {"w020": ROOT / "calibrations" / "loo_ecoflex_00_10_fit_w020.yaml",

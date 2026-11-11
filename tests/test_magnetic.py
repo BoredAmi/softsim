@@ -1,9 +1,10 @@
 """The soft-magnetic body against what can be worked out by hand: its energy under rotation and shear, the pull of a
 dipole on a small piece, the field that buckles a cantilever, and Newton's Hessian against its gradient."""
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
+
+jnp = pytest.importorskip("jax.numpy")
 import scipy.sparse as sp
 
 from softsim.fem.magnetic import MU0, SoftMagnet, field_parameters, ring

@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip("jax")
+
 from softsim.backends import get_backend
 from softsim.backends.fem.backend import FemBackend
 from softsim.config.loader import load_yaml
@@ -172,6 +174,7 @@ def test_a_solid_magnet_is_a_cylinder_the_body_touches():
     assert fem._names[-2:] == ["ring", "moving"]
 
 
+@pytest.mark.slow
 def test_a_strip_pulled_onto_a_solid_magnet_stays_outside_it():
     """A short strip released 0.5 mm from a weak solid ring magnet's rim (0.05 T: a full-strength one accelerates it at
     ~1e4 m/s^2 and it lands at metres per second, an impact this test is not about) is pulled onto the rim and lies on

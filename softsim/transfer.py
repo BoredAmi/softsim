@@ -181,7 +181,7 @@ class Transfer:
     def _report(self, initial: dict[str, float], values: dict[str, float], best: dict[str, Any],
                 wall: float) -> dict[str, Any]:
         from softsim.config.schema import validate
-        from softsim.materials import load_material, save_material
+        from softsim.materials import save_material
         from softsim.scenarios.registry import get_scenario
 
         checks = {}

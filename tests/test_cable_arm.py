@@ -49,6 +49,7 @@ def test_arm_config():
     assert {v[0] for v in scene.actuators[0].via} == {0.004} and {v[0] for v in scene.actuators[1].via} == {-0.004}
 
 
+@pytest.mark.slow
 def test_reference_matches_piecewise_euler_bernoulli():
     """Lower soft segment (0-38 mm) carries both cables' moments, (T_A - T_B) d, with the axial force T_A + T_B;
     the upper (42-78 mm) only B's, -T_B d, with T_B; disks rigid, the tail above the second disk unloaded.
@@ -65,6 +66,7 @@ def test_reference_matches_piecewise_euler_bernoulli():
     assert th1 > 1.5 * th2 > 0 and tip_x > 0.01  # S-shape, tip displaced towards cable A's side
 
 
+@pytest.mark.slow
 def test_second_cable_in_the_first_disk_removes_the_return():
     """Control for the S: cable B ending in the same disk as A leaves nothing to bend the upper segment, so
     everything above the disk is straight and the tip tilt equals the disk's (no return)."""

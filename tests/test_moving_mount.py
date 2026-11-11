@@ -38,6 +38,7 @@ def test_path():
         _beam(["body.fixed=[]"]).build_scene()
 
 
+@pytest.mark.slow
 def test_mount_frame_matches_world_frame_reference():
     """The reference two ways, dynamic, 2 ms: in the mount's frame (gravity g - a(t), what every backend
     does) and in the world with the base nodes driven along the path (Newmark-consistent prescribed

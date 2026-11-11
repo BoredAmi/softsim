@@ -78,7 +78,6 @@ def wrapped(nodes: np.ndarray, centre: np.ndarray, radius: float, thickness: flo
     r = radius + (0.5 * thickness - x)  # distance from the axis, the face on the rim
     theta = np.pi - np.clip(u, 0, rho * wrap) / rho
     on = u > 0
-    past = u > rho * wrap
     end = np.pi - wrap
     tangent = np.array([np.sin(end), -np.cos(end)])  # (x, z) direction of increasing length at the end of the wrap
     beyond = np.maximum(u - rho * wrap, 0.0)
