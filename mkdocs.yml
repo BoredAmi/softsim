@@ -51,6 +51,7 @@ nav:
       - Reference FEM: reference_fem.md
   - Robots:
       - Actuation: actuation.md
+      - Inverse control: control.md
       - Soft gripper: gripper.md
       - Gripper demo script: demo_script.md
       - Drop bench: drop.md
@@ -59,6 +60,7 @@ nav:
       - Benchmarks: benchmarks.md
       - Validation on unseen data: validation.md
       - Experiments and calibration: experiments.md
+      - Design optimisation: design.md
   - ROS 2: ros2.md
   - Extending:
       - Add a material: adding_a_material.md

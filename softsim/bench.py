@@ -170,12 +170,29 @@ def _git_commit(root: Path) -> str:
         return ""
 
 
+_CODE_HASH: str | None = None
+
+
+def code_hash() -> str:
+    """Hash of the softsim package's source and presets: a changed default or model makes cached results stale."""
+    global _CODE_HASH
+    if _CODE_HASH is None:
+        root = Path(__file__).resolve().parent
+        h = hashlib.sha256()
+        for f in sorted(root.rglob("*")):
+            if f.suffix in (".py", ".yaml", ".json") and "__pycache__" not in f.parts:
+                h.update(str(f.relative_to(root)).encode())
+                h.update(f.read_bytes())
+        _CODE_HASH = h.hexdigest()[:16]
+    return _CODE_HASH
+
+
 def _key(entry: BenchEntry, run: BenchRun) -> str:
     from softsim.config.loader import load_yaml
 
     resolved = load_yaml(entry.config)  # resolves `extends`, so a change in a parent config invalidates too
     blob = json.dumps({"config": resolved, "backend": run.backend, "overrides": run.overrides,
-                       "metric": entry.metric}, sort_keys=True, default=str)
+                       "metric": entry.metric, "code": code_hash()}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
@@ -246,7 +263,7 @@ def cached(entry: BenchEntry, run: BenchRun, cache_dir: Path) -> dict[str, Any] 
         return None
     rec = json.loads(path.read_text())
     if rec.get("key") != _key(entry, run):
-        return {**rec, "status": "stale"}
+        return {**_judge(rec, run), "status": "stale"}  # values kept, marked: config or code changed since
     return _judge(rec, run)
 
 
@@ -273,7 +290,7 @@ def _tol(entry: BenchEntry, run: BenchRun) -> str:
 def report(entries: list[BenchEntry], cache_dir: Path) -> str:
     """Markdown page of every entry x backend from the cache."""
     status_mark = {"pass": "✅ pass", "fail": "❌ fail", "error": "⚠️ error", "not run": "– not run",
-                   "stale": "… stale"}
+                   "stale": "… stale (re-run)"}
     lines = [
         "# Benchmarks",
         "",
@@ -283,7 +300,7 @@ def report(entries: list[BenchEntry], cache_dir: Path) -> str:
         "tetrahedra, which lock in bending ([actuation.md](actuation.md)); the `fem` reference is locking-free.",
         "",
         "Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU machine), then",
-        "`softsim bench --report-only`. A row marked *stale* has a cached result from an older config.",
+        "`softsim bench --report-only`. A row marked *stale* shows a result from an older config or older code: re-run it.",
         "",
     ]
     for tier in TIERS:
@@ -299,7 +316,7 @@ def report(entries: list[BenchEntry], cache_dir: Path) -> str:
             source = e.truth.get("source", "")
             for run in e.runs:
                 rec = cached(e, run, cache_dir)
-                if rec is None or rec.get("status") in ("not run",) or "value" not in rec:
+                if rec is None or "value" not in rec:
                     st = (rec or {}).get("status", "not run")
                     lines.append(f"| {e.name} | {e.quantity} | {truth} | {run.backend} | | | {_tol(e, run)} | "
                                  f"{status_mark.get(st, st)} | | | |")

@@ -169,6 +169,10 @@ schedule and is asked for the same palm path, but its palm follows about 6 mm be
 
 ## Limits
 
+- **The finite-element grasps here predate the friction default of 2026-11-11.** They ran with the reference's old
+  per-step friction smoothing, which lets a held grasp creep at a rate set by the time step; the default is now a slip
+  speed ([decisions.md](decisions.md), entry 6). They are to be re-run on the GPU machine; until then, reproduce them
+  with `--set contact.slip_speed=null`.
 - **Held on the map means held at 20 s**, not indefinitely, and every grasp is still creeping then (see above).
 - **The map is the fast model's prediction.** Two coarse finite-element grasps check it, the box at 25 kPa held at 10 g and
   dropped at 30 g, as the map says. Every other cell, and the cylinder and bottle entirely, are unchecked.

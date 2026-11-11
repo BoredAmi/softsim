@@ -1,0 +1,17 @@
+# Design optimisation example: how far off the axis must the cable run to bend the cantilever
+# (scenarios/actuation/cable_cantilever.yaml, 0.7 N) to a tip angle of 0.06 rad? One design variable, the
+# cable offset d (both path points, tied), one target. The angle grows with d, so there is one answer;
+# on the coarse 5 mm mesh MuJoCo's linear tets lock (0.084 rad at d = 3 mm instead of Euler-Bernoulli's
+# 0.28 rad), so the d found is the backend's, not the beam's (docs/design.md).
+#   softsim optimize jobs/cantilever_target_angle.yaml
+scenario: ../scenarios/actuation/cable_cantilever.yaml
+backend: mujoco
+overrides: [body.mesh.size=5mm]
+parameters:
+  "actuators[0].path[0][0]":
+    initial: 3 mm
+    bounds: [0.5 mm, 4.5 mm]
+    tie: ["actuators[0].path[1][0]"]
+objective: {metric: final_bend_angle, target: 0.06 rad}
+max_evaluations: 30
+output: ../runs/design/cantilever_target_angle

@@ -453,6 +453,37 @@ actuators:
 Reproduce: `python -m pytest tests/test_cable_finger.py`, or
 `softsim run scenarios/actuation/cable_finger.yaml --backend fem --set simulation.timestep=2ms`.
 
+## A body that touches itself
+
+`body.self_collision: true` makes a soft body's own faces collide (default `false`). MuJoCo turns on the flex's
+self-contact (`<contact selfcollide="auto">`); SOFA sets `selfCollision` on the body's triangle, line and point collision
+models. The fem and rod backends have no self-contact and refuse such a scene (`UnsupportedFeatureError`,
+capability `soft-body self-collision`); it is not implemented in the finite-element solver.
+
+The check is `scenarios/actuation/self_collision_finger.yaml`: a two-link cable finger (30 mm, one 2 mm slot) pulled to
+0.6 N, which closes the slot. The gauge `body.gaps: [{name: slot, between: [slot1_lower, slot1_upper]}]` outputs
+`slot_gap`, the signed gap between the slot's two walls (each wall's vertices against the other wall's triangles,
+`softsim.contact.gap`); the summary gives `slot_min_gap`. Shapes name regions: the cable finger gives `slot<i>_lower` and
+`slot<i>_upper` for each slot.
+
+| backend | self-collision | min gap, 200 ms | final bend angle |
+|---|---|---|---|
+| MuJoCo | on | +0.19 mm | 0.290 rad |
+| MuJoCo | off | -1.35 mm | 0.374 rad |
+| SOFA (0.5 ms step) | on | +0.10 mm | 0.309 rad |
+| SOFA (0.5 ms step) | off | -1.40 mm | 0.371 rad |
+
+With it off the walls pass through each other by 1.3-1.4 mm; with it on neither backend lets them overlap (the positive gap
+is the contact skin, 0.1 mm, plus MuJoCo's soft constraint). The test accepts down to -0.1 mm with it on and demands
+under -0.5 mm with it off.
+
+Limits: SOFA needs line collision models as well as points and triangles; with points and triangles only the walls still
+overlapped by 0.75 mm. Self-contact is frictionless unless the material has friction; only this one slot geometry is
+verified (a 2 mm mesh, so each wall is a few elements wide), not a general proof for folded or thin-walled bodies. The
+bend angle with self-collision on is not a clean comparison between backends (different time steps and solvers).
+
+Reproduce: `python -m pytest tests/test_self_collision.py` (the SOFA case is marked slow and needs `SOFA_ROOT`).
+
 ## A two-segment cable arm
 
 `scenarios/actuation/cable_arm.yaml` is a continuum arm made from features

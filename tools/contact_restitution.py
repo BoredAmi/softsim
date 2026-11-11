@@ -36,7 +36,10 @@ COMMON = [f"specimen.material={CARD}", "specimen.mesh.size=0.005", "ground.frict
           "drop.initial_speed=2.7", "drop.offset=[0.0, 0.0]", "simulation.duration=0.015", "simulation.output_rate=10000",
           "output.save_model=false"]
 REFERENCE = ["backend=fem", "simulation.timestep=0.00005"]
-FRICTIONLESS = ["specimen.material.friction.sliding=0.0", "ground.friction.sliding=0.0"]
+FRICTIONLESS = ["specimen.material.friction.sliding=0.0", "ground.friction.sliding=0.0"]  # the weight keeps its 0.5
+# every pair frictionless: SOFA applies the scene's largest coefficient to all pairs, so with the weight at 0.5 its
+# specimen-ground contact had 0.5 too, while the reference and MuJoCo (per pair) had 0 there
+ALL_FRICTIONLESS = [*FRICTIONLESS, "weight.friction.sliding=0.0"]
 FINE = ["simulation.timestep=1.25e-5", "contact.timeconst=0.1 ms"]
 EXTRA = {
     "reference_frictionless": [*REFERENCE, *FRICTIONLESS],
@@ -45,6 +48,8 @@ EXTRA = {
     "mujoco_frictionless_2.5mm": ["backend=mujoco", *FINE, *FRICTIONLESS, "specimen.mesh.size=0.0025"],
     "sofa": ["backend=sofa", "simulation.timestep=5e-5"],
     "sofa_frictionless": ["backend=sofa", "simulation.timestep=5e-5", *FRICTIONLESS],
+    "reference_all_frictionless": [*REFERENCE, *ALL_FRICTIONLESS],
+    "sofa_all_frictionless": ["backend=sofa", "simulation.timestep=5e-5", *ALL_FRICTIONLESS],
     "mujoco_elliptic": ["backend=mujoco", "simulation.timestep=2.5e-5", "contact.timeconst=0.1 ms", "contact.cone=elliptic"],
     "mujoco_elliptic_impratio10": ["backend=mujoco", "simulation.timestep=2.5e-5", "contact.timeconst=0.1 ms",
                                    "contact.cone=elliptic", "contact.impratio=10"],

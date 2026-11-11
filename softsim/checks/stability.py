@@ -40,15 +40,18 @@ def p_wave_speed(youngs: float, poisson: float, density: float) -> float:
 
 def check_scene(scene: Scene, estimates: Mapping[str, float] | None = None,
                 locking_free: bool = False, implicit_actuation: bool = False,
-                implicit_prony: bool = False) -> list[Finding]:
+                implicit_prony: bool = False, single_friction: bool = False) -> list[Finding]:
     """Return all findings for ``scene``; ``locking_free``: the backend's elements don't lock (no
     volumetric-locking findings); ``implicit_actuation``: it applies actuator loads implicitly (no
-    explicit-stability findings for them); ``implicit_prony``: likewise its Prony overstress."""
+    explicit-stability findings for them); ``implicit_prony``: likewise its Prony overstress;
+    ``single_friction``: it uses one friction coefficient, the largest, for every contact pair."""
     est = dict(estimates or {})
     sim, contact = scene.simulation, scene.contact
     dt = sim.timestep
     tc = contact.resolved_timeconst(dt)
     out: list[Finding] = []
+    if single_friction:
+        out += _single_friction_findings(scene)
 
     if tc * contact.dampratio < dt:
         out.append(Finding("warning", "contact-stiffer-than-step",
@@ -283,3 +286,21 @@ def _adhesion_findings(scene: Scene, body, dt: float) -> list[Finding]:
                         f"{body.name}: adhesion resolved with only omega*dt = {omega_dt:.2f}; results may depend "
                         "on the timestep")]
     return []
+
+
+def _single_friction_findings(scene: Scene) -> list[Finding]:
+    """A backend with one friction coefficient for the whole scene (SOFA) uses the largest for every pair."""
+    named = [(f"soft body {b.name}", b.material.friction.sliding) for b in scene.soft_bodies]
+    named += [(f"rigid body {b.name}", b.friction.sliding) for b in scene.rigid_bodies]
+    if scene.ground.enabled:
+        named.append(("ground", scene.ground.friction.sliding))
+    values = {round(float(v), 12) for _, v in named}
+    if len(values) < 2:
+        return []
+    top = max(v for _, v in named)
+    listed = ", ".join(f"{n} {v:g}" for n, v in named)
+    return [Finding("warning", "single-friction",
+                    f"this backend applies one friction coefficient to every contact pair, the scene's largest ({top:g}); "
+                    f"the scene has {listed}. Per-pair backends (MuJoCo, the reference) combine each pair by its maximum, "
+                    "so a pair of two low-friction surfaces differs: set the same coefficient everywhere to compare "
+                    "(docs/backends/sofa.md, frictionless impacts)")]

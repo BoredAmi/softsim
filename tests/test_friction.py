@@ -69,8 +69,7 @@ def _fem_creep(timestep: str, slip_speed: float | None) -> float:
     overrides = ["output.save_model=false", "body.mesh.size=10mm", f"simulation.timestep={timestep}",
                  "simulation.duration=200ms",
                  "actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [200 ms, 0.06 N]]"]
-    if slip_speed is not None:
-        overrides.append(f"contact.slip_speed={slip_speed}")
+    overrides.append(f"contact.slip_speed={'null' if slip_speed is None else slip_speed}")
     sim = Simulation(BLOCK, overrides, backend="fem")
     try:
         ts = sim.run().timeseries
@@ -85,7 +84,7 @@ def test_reference_stick_creep_is_set_by_slip_speed_not_by_the_step():
     """docs/decisions.md, entry 6. The reference smooths Coulomb friction with IPC's mollifier: below a slip ``eps`` the
     force is mu N (2 y - y^2), y = slip / eps, so a contact held at a fraction r of its limit slips y = 1 - sqrt(1 - r)
     of eps per step. With contact.slip_speed, eps = slip_speed x dt and the creep is y x slip_speed at any step;
-    without it, eps = 1 um and the creep is y x 1 um / dt. (Uniform r here; the push tilts the normal load, so the
+    with null (the old default), eps = 1 um and the creep is y x 1 um / dt. (Uniform r here; the push tilts the normal load, so the
     nodes' r and the measured creep spread around it.)"""
     pytest.importorskip("jax")
     r = 0.06 / (MU * MASS * G)  # 0.71 of the limit
@@ -96,3 +95,24 @@ def test_reference_stick_creep_is_set_by_slip_speed_not_by_the_step():
     per_step = [_fem_creep(dt, None) for dt in ("2.5ms", "5ms")]
     assert per_step[0] / per_step[1] == pytest.approx(2.0, rel=0.1)  # 1 / dt
     assert per_step[0] == pytest.approx(y * 1e-6 / 2.5e-3, rel=0.3)
+
+
+def test_single_friction_backends_warn_when_coefficients_differ():
+    """SOFA applies the scene's largest coefficient to every pair (docs/backends/sofa.md): a scene with different
+    coefficients gets a warning on such a backend, none on a per-pair one, and none when all are equal."""
+    from softsim.checks import check_scene
+    from softsim.config.loader import apply_overrides, load_yaml
+    from softsim.config.schema import validate
+    from softsim.scenarios.inflation import InflationConfig, InflationScenario
+
+    def scene(overrides=()):
+        raw = apply_overrides(load_yaml(BLOCK), list(overrides))
+        return InflationScenario(validate(InflationConfig, raw), BLOCK.parent).build_scene()
+
+    def codes(s, single):
+        return {f.code for f in check_scene(s, single_friction=single)}
+
+    mixed = scene(["ground.friction.sliding=0.8"])
+    assert "single-friction" in codes(mixed, True)
+    assert "single-friction" not in codes(mixed, False)
+    assert "single-friction" not in codes(scene(), True)  # block and ground both 0.5

@@ -34,9 +34,12 @@ Mapping:
       magnet is also a rigid cylinder (its outer one), fixed or prescribed along the magnet's path, its edges rounded by
       the magnet's ``edge`` (its field's chamfer too: 0.5 mm, the other rigid bodies' rounding, let a strip into the
       magnet's corner, where it was drawn).
+    * magnetic zones: zones with their own magneto-active card (or none), each element's magnetic energy its own
+      material's (e.g. two arms magnetised opposite ways); a soft-magnetic zone (``chi > 0``) gives its demagnetising
+      factors explicitly, since a zone's field is shaped by its neighbours, not by its own bounding block.
 Refused: several soft bodies, linear, StVK, Rayleigh/Kelvin-Voigt damping (use
-Prony), self-collision, torsional/rolling friction, open pressure regions; magneto-active material in zones (or a
-magneto-active body with zones of another material), a magnetic field with a moving or rotating mount.
+Prony), self-collision, torsional/rolling friction, open pressure regions; ``demagnetization: block`` on a
+soft-magnetic material of a body with zones, a magnetic field with a moving or rotating mount.
 """
 
 from __future__ import annotations
@@ -128,15 +131,17 @@ class FemBackend(Backend):
         out = rotating_mount_problems(scene)
         if len(scene.soft_bodies) != 1:
             out.append(f"exactly one soft body (got {len(scene.soft_bodies)})")
-        if any(b.self_collision for b in scene.soft_bodies):
-            out.append("soft-body self-collision")
         if any(b.plane_strain is not None and np.abs(np.asarray(b.pose.quaternion) - (1, 0, 0, 0)).max() > 1e-12
                for b in scene.soft_bodies):
             out.append("plane strain on a rotated body (the axis is a body axis; the reference holds world dofs)")
         body = scene.soft_bodies[0] if len(scene.soft_bodies) == 1 else None
-        if body is not None and body.zones and any(isinstance(m.elastic, MagnetoActive)
-                                                   for m in (body.material, *(z.material for z in body.zones))):
-            out.append("magneto-active material with material zones (the magnetic energy is the whole body's)")
+        if body is not None and body.zones:
+            for name, m in ((body.name, body.material), *((z.name, z.material) for z in body.zones)):
+                e = m.elastic
+                if isinstance(e, MagnetoActive) and e.demagnetization == "block" and e.chi > 0:
+                    out.append(f"magneto-active zone {name!r} (of a body with zones) with demagnetization 'block': a "
+                               "zone's demagnetising factors are not its bounding block's (its neighbours shape its "
+                               "field); give them, demagnetization: [N_along, N_normal, N_across]")
         solid = [m.name for m in scene.magnetic_field.magnets if m.solid] if scene.magnetic_field is not None else []
         clash = set(solid) & ({rb.name for rb in scene.rigid_bodies} | {GROUND_NAME})
         if clash:
@@ -248,24 +253,37 @@ class FemBackend(Backend):
                                   zones=tuple((elements, *from_material(m)[:2]) for m, elements in
                                               body.material_groups()[1:]),
                                   zone_pronys=tuple(from_material(m)[2] for m, _ in body.material_groups()[1:]),
-                                  magnetic=self._soft_magnet(body, rot))
+                                  **self._magnets(body, rot))
         self._names = names
         self._solver_cls = Solid3DSolver
         self.solver = self.attach(self._new_solver())
         self._prev_t = 0.0
 
-    def _soft_magnet(self, body, rot: np.ndarray):
-        """The body's softsim.fem.magnetic.SoftMagnet in the world frame, or None (not magnetic, or no field)."""
+    def _magnets(self, body, rot: np.ndarray) -> dict:
+        """Problem3D's ``magnetic`` (the body's SoftMagnet, without zones) or ``magnetic_zones`` (with zones: each
+        magneto-active material group's elements and its own SoftMagnet; a group of another material takes up no field)."""
+        if not body.zones:
+            return {"magnetic": self._soft_magnet(body.material, body.mesh.points, rot)}
+        groups = []
+        for material, elements in body.material_groups():
+            magnet = self._soft_magnet(material, body.mesh.points, rot)  # 'block' only without induced part (checked)
+            if magnet is not None and len(elements):
+                groups.append((np.asarray(elements, int), magnet))
+        return {"magnetic_zones": tuple(groups)}
+
+    def _soft_magnet(self, material, points: np.ndarray, rot: np.ndarray):
+        """``material``'s softsim.fem.magnetic.SoftMagnet in the world frame, or None (not magnetic, or no field);
+        ``points`` (body frame, at rest) bound the block of ``demagnetization: block``."""
         from softsim.fem.magnetic import SoftMagnet, prism_demagnetizing_factor
 
-        e = body.material.elastic
+        e = material.elastic
         field = self._scene.magnetic_field
         if not isinstance(e, MagnetoActive) or field is None or not field.active:
             return None
         along = np.asarray(e.along, float) / np.linalg.norm(e.along)
         normal = np.asarray(e.normal, float) / np.linalg.norm(e.normal)
         if e.demagnetization == "block":
-            extents = [np.ptp(body.mesh.points @ v) for v in (along, normal, np.cross(along, normal))]
+            extents = [np.ptp(points @ v) for v in (along, normal, np.cross(along, normal))]
             factors = [prism_demagnetizing_factor(*np.roll(extents, 2 - k)) for k in range(3)]
         else:
             factors = list(e.demagnetization)
@@ -319,7 +337,7 @@ class FemBackend(Backend):
         less under its centrifugal load, with 4.6 mm of lateral deflection. A rotating mount therefore uses
         the trapezoidal rule (no numerical damping, second order: 0.12 mm at half the step)."""
         solver = self._solver_cls(self._problem, numerical_damping=0.0 if self._scene.spin is not None else 0.25)
-        if self._problem.magnetic is not None:  # the field at rest; each step sets its end-of-step value
+        if self._problem.is_magnetic:  # the field at rest; each step sets its end-of-step value
             solver.magnetic_field = self._scene.magnetic_field.parameters(0.0)
         return solver
 
@@ -341,7 +359,7 @@ class FemBackend(Backend):
                     self.solver.tensions[k] = value
             for k, a in enumerate(self._forces):
                 self.solver.forces[k] = self.control(a.name, self.solver.t + dt)
-            if self._problem.magnetic is not None:
+            if self._problem.is_magnetic:
                 self.solver.magnetic_field = self._scene.magnetic_field.parameters(self.solver.t + dt)
             if self._scene.mount is not None and self._scene.spin is None:  # in the mount's frame (a rotating
                 # mount is simulated in the world instead, see _attach_spin); Newmark balances forces at the step's end

@@ -495,6 +495,14 @@ class Problem3D:
     zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
     zone_pronys: tuple[Prony | None, ...] = ()  # each zone's own series (None: undamped); empty: the body's ``prony``
     magnetic: SoftMagnetic | None = None  # the body takes up a field; ``Solid3DSolver.magnetic_field`` sets it
+    # magnetic zones: (elements, magnet) groups, each with its own SoftMagnet; their elements take it instead of
+    # ``magnetic`` (which, if given, is then the other elements'). Empty: ``magnetic`` is the whole body's.
+    magnetic_zones: tuple[tuple[np.ndarray, SoftMagnetic], ...] = ()
+
+    @property
+    def is_magnetic(self) -> bool:
+        """Whether any element takes up a field."""
+        return self.magnetic is not None or bool(self.magnetic_zones)
 
 
 # What a step changes: dofs and their rates, rotations, viscous memory, contact memory, the loads and the last residual.
@@ -700,10 +708,29 @@ class Solid3DSolver:
 
         self._dndx_j, self._wv_j = jnp.asarray(self._dndx), jnp.asarray(self._wv)
         self._elem_grad_hess, self._elem_energy, self._iso_stress = elem_grad_hess, elem_energy, iso_stress
-        if self.p.magnetic is not None:
-            self._mag_energy, self._mag_grad_hess = self._magnetic_chunked(*element_kernels(self.p.magnetic, self._shapes))
-            self._mag_x0 = jnp.asarray(self.p.mesh.nodes[self.p.mesh.tets].reshape(-1, 30))
+        self._mag_groups = self._magnetic_groups()
         self._build_load_kernels()
+
+    def _magnetic_groups(self) -> list[tuple[slice | np.ndarray, Callable, Callable, object]]:
+        """(elements, chunked energy, chunked gradient and Hessian, rest positions) per magnetic material: the body's
+        ``magnetic`` over all elements (one group, as before zones existed), or with ``magnetic_zones`` each zone's
+        magnet over its elements and ``magnetic`` over the rest. Each element's energy is its own magnet's."""
+        p = self.p
+        x0 = p.mesh.nodes[p.mesh.tets].reshape(-1, 30)
+        if not p.magnetic_zones:
+            pairs = [(slice(None), p.magnetic)] if p.magnetic is not None else []
+        else:
+            rest = np.ones(len(p.mesh.tets), bool)
+            for elements, _ in p.magnetic_zones:
+                elements = np.asarray(elements, int)
+                if not rest[elements].all():
+                    raise ValueError("magnetic zones overlap")
+                rest[elements] = False
+            pairs = [(np.asarray(e, int), m) for e, m in p.magnetic_zones if len(e)]
+            if p.magnetic is not None and rest.any():
+                pairs.insert(0, (np.nonzero(rest)[0], p.magnetic))
+        return [(idx, *self._magnetic_chunked(*element_kernels(m, self._shapes)), jnp.asarray(x0[idx]))
+                for idx, m in pairs]
 
     @staticmethod
     def _magnetic_chunked(energy, grad_hess):
@@ -1008,15 +1035,29 @@ class Solid3DSolver:
         return e
 
     def _magnetised(self) -> bool:
-        return self.p.magnetic is not None and bool(np.any(self.magnetic_field))
+        return bool(self._mag_groups) and bool(np.any(self.magnetic_field))
 
     def magnetic_energy(self, y: np.ndarray) -> float:
         """Energy [J] of the body in the field set by ``magnetic_field``: zero without one."""
         if not self._magnetised():
             return 0.0
-        u = y[:3 * self.n].reshape(self.n, 3)
-        return float(self._mag_energy(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._mag_x0, self._dndx, self._wv,
-                                      jnp.asarray(self.magnetic_field)))
+        ue = y[:3 * self.n].reshape(self.n, 3)[self.p.mesh.tets].reshape(-1, 30)
+        q = jnp.asarray(self.magnetic_field)
+        return sum(float(energy(jnp.asarray(ue[idx]), x0, self._dndx[idx], self._wv[idx], q))
+                   for idx, energy, _, x0 in self._mag_groups)
+
+    def _magnetic_grad_hess(self, ue: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Per-element magnetic gradient (E, 30) and Hessian (E, 30, 30), each element's from its own magnet (zero for
+        an element that has none)."""
+        q = jnp.asarray(self.magnetic_field)
+        if len(self._mag_groups) == 1 and isinstance(self._mag_groups[0][0], slice):
+            _, _, grad_hess, x0 = self._mag_groups[0]
+            return tuple(np.asarray(a) for a in grad_hess(jnp.asarray(ue), x0, self._dndx, self._wv, q))
+        ge, he = np.zeros((len(ue), 30)), np.zeros((len(ue), 30, 30))
+        for idx, _, grad_hess, x0 in self._mag_groups:
+            g, h = grad_hess(jnp.asarray(ue[idx]), x0, self._dndx[idx], self._wv[idx], q)
+            ge[idx], he[idx] = np.asarray(g), np.asarray(h)
+        return ge, he
 
     def _face_x(self, y: np.ndarray, k: int):
         """Current positions of pressure load ``k``'s face nodes, (K, 18)."""
@@ -1062,8 +1103,7 @@ class Solid3DSolver:
             if y[dof] < lowest:
                 hess[pat.diag[np.flatnonzero(self.free == dof)[0]]] += FLOOR_STIFFNESS
         if self._magnetised():
-            gm, hm = (np.asarray(a) for a in self._mag_grad_hess(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), self._mag_x0,
-                                                                 self._dndx, self._wv, jnp.asarray(self.magnetic_field)))
+            gm, hm = self._magnetic_grad_hess(u[self.p.mesh.tets].reshape(-1, 30))
             if project:
                 hm = self._project_psd(hm)
             grad += np.bincount(self._edofs.ravel(), weights=gm.ravel(), minlength=self.ndof)

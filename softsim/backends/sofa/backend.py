@@ -184,6 +184,7 @@ class SofaBackend(Backend):
     """SOFA FEM backend (hyperelastic tetrahedra, Lagrange-multiplier frictional contact)."""
 
     name: ClassVar[str] = "sofa"
+    single_friction: ClassVar[bool] = True  # CollisionResponse takes one mu (the scene's largest) for every pair
     capabilities: ClassVar[frozenset[Capability]] = frozenset({
         Capability.LINEAR_ELASTIC,
         Capability.STVK,
@@ -197,6 +198,7 @@ class SofaBackend(Backend):
         Capability.PINNED_VERTICES,
         Capability.RIGID_BODIES,
         Capability.CONTACT_FRICTION,
+        Capability.SELF_COLLISION,
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
         Capability.VISCOELASTIC_PRONY,
@@ -367,8 +369,13 @@ class SofaBackend(Backend):
         # pinned bodies don't collide with the ground: contact constraints on fixed vertices
         # (zero compliance) make the constraint solve singular (NaN); the pins hold them anyway
         groups = {"group": GROUND_GROUP} if body.pinned or body.prescribed else {}
+        # self-collision: models in one node collide with each other (and themselves) only with selfCollision,
+        # whatever their groups; with lines too (points and triangles alone let the slot's walls overlap ~0.75 mm)
+        groups["selfCollision"] = body.self_collision
         coll.addObject("TriangleCollisionModel", **groups)
-        coll.addObject("PointCollisionModel", **groups)  # line-line tests omitted: ~3x faster, same result here
+        if body.self_collision:
+            coll.addObject("LineCollisionModel", **groups)
+        coll.addObject("PointCollisionModel", **groups)
         coll.addObject("IdentityMapping")
         masses = body.vertex_masses()
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,

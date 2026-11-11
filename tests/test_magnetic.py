@@ -253,3 +253,104 @@ def test_a_hard_magnetic_cantilever_bends_under_its_distributed_couple():
     s.magnetic_field[:3] = (0, 0, -h)  # the other way
     assert s.advance(1.0)
     assert s.y[:3 * s.n].reshape(-1, 3)[tip, 2].mean() == pytest.approx(-want, rel=0.02)
+
+
+def zoned_bar(zones, magnet=None, size=0.005):
+    """The 30 x 10 x 4 mm bar with magnetic zones ``zones``: (selector on element centroids, SoftMagnet) pairs."""
+    p = bar(0.03, 0.01, 0.004, size, magnet)
+    centroids = p.mesh.nodes[p.mesh.tets[:, :4]].mean(axis=1)
+    groups = tuple((np.flatnonzero(select(centroids)), m) for select, m in zones)
+    assert all(len(e) for e, _ in groups)
+    return Problem3D(**{**p.__dict__, "magnetic_zones": groups})
+
+
+def test_opposite_remanence_zones_cancel_and_a_non_magnetic_zone_halves():
+    """Magnetic zones, each element with its own magnet. A bar split at mid-length (x = 0, the mesh is centred) into +M_r and -M_r along its length, in
+    a uniform field along it: the halves' energies -mu0 V/2 M_r H and +mu0 V/2 M_r H cancel, at rest, turned by any angle
+    and stretched. With the second half not magnetic, the energy is the first half's, -mu0 V/2 M_r H cos t: half the whole
+    bar's."""
+    m_r, h, v = 8e4, 2e3, 0.03 * 0.01 * 0.004
+    plus, minus = (SoftMagnet(0.0, 0.0, 0.0, remanence=(s * m_r, 0.0, 0.0)) for s in (1, -1))
+    left, right = (lambda c: c[:, 0] < 0.0), (lambda c: c[:, 0] > 0.0)
+    opposite = Solid3DSolver(zoned_bar([(left, plus), (right, minus)]), dynamic=False)
+    half = Solid3DSolver(zoned_bar([(left, plus)]), dynamic=False)
+    whole = Solid3DSolver(bar(0.03, 0.01, 0.004, 0.005, plus), dynamic=False)
+    scale = MU0 * v * m_r * h
+    for s in (opposite, half, whole):
+        s.magnetic_field[:3] = (h, 0, 0)
+    assert whole.magnetic_energy(np.zeros(3 * whole.n)) == pytest.approx(-scale, rel=1e-12)
+    for t in (0.0, 0.4, 2.5):
+        assert abs(opposite.magnetic_energy(rotated(opposite, t))) < 1e-12 * scale
+        assert half.magnetic_energy(rotated(half, t)) == pytest.approx(-0.5 * scale * np.cos(t), abs=1e-12 * scale)
+        assert half.magnetic_energy(rotated(half, t)) == pytest.approx(0.5 * whole.magnetic_energy(rotated(whole, t)),
+                                                                        abs=1e-12 * scale)
+    y = np.zeros((opposite.n, 3))  # stretched by 1.3 along x: each half's moment grows with it, still cancelling
+    y[:, 0] = 0.3 * opposite.p.mesh.nodes[:, 0]
+    assert abs(opposite.magnetic_energy(y.ravel())) < 1e-12 * scale
+    assert half.magnetic_energy(y.ravel()) == pytest.approx(-0.5 * scale * 1.3, rel=1e-9)
+
+
+def test_a_turned_two_zone_body_has_the_sum_of_its_zones_closed_forms():
+    """One zone hard (M_r along x), the other soft (chi_a along x, chi_n along z), turned by t about y in a field along x:
+    E = -mu0 V1 M_r H cos t - mu0 V2 H^2 / 2 (chi_a cos^2 t + chi_n sin^2 t), each zone's closed form over its own
+    volume (here a quarter and three quarters of the bar)."""
+    m_r, h, v = 8e4, 3e4, 0.03 * 0.01 * 0.004
+    hard, soft = SoftMagnet(0.0, 0.0, 0.0, remanence=(m_r, 0.0, 0.0)), SoftMagnet(0.9, 0.2, 0.4)
+    s = Solid3DSolver(zoned_bar([(lambda c: c[:, 0] < -0.0075, hard), (lambda c: c[:, 0] > -0.0075, soft)],
+                                size=0.0025), dynamic=False)
+    s.magnetic_field[:3] = (h, 0, 0)
+    v1, v2 = v / 4, 3 * v / 4
+    for t in (0.0, 0.3, 0.8, np.pi / 2, 2.0):
+        want = -MU0 * v1 * m_r * h * np.cos(t) - 0.5 * MU0 * v2 * h * h * (0.9 * np.cos(t) ** 2 + 0.2 * np.sin(t) ** 2)
+        assert s.magnetic_energy(rotated(s, t)) == pytest.approx(want, rel=1e-9)
+
+
+def test_zones_assemble_each_elements_own_gradient_and_hessian():
+    """Newton's magnetic gradient and Hessian with zones: (1) zones that all carry the body's magnet give exactly the
+    single-magnet body's; (2) with two different magnets, the gradient is the energy's slope and the Hessian the
+    gradient's derivative (central differences), on a deformed body in a dipole's uneven field."""
+    q = (2e4, 0, 1e4, 0, 0, 5.0, 0.015, 0.005, -0.03)
+    m = SoftMagnet(0.9, 0.2, 0.4, remanence=(3e4, 0, 1e4))
+    other = SoftMagnet(0.3, 0.6, 0.1, along=(0.0, 1.0, 0.0), normal=(1.0, 0.0, 0.0), remanence=(0, -5e4, 0))
+    left, right = (lambda c: c[:, 0] < 0.0), (lambda c: c[:, 0] > 0.0)
+    rng = np.random.default_rng(4)
+
+    def solver(p):
+        clamp = np.flatnonzero(np.isclose(p.mesh.nodes[:, 0], p.mesh.nodes[:, 0].min()))
+        s = Solid3DSolver(Problem3D(**{**p.__dict__, "pinned": clamp}), dynamic=False)
+        s.magnetic_field[:] = q
+        return s
+
+    whole, same = solver(bar(0.03, 0.01, 0.004, 0.005, m)), solver(zoned_bar([(left, m), (right, m)]))
+    x = whole.p.mesh.nodes
+    y = np.zeros(whole.ndof)
+    y[:3 * whole.n] = (0.1 * np.stack([x[:, 2], 0.2 * x[:, 0], x[:, 0]], 1)
+                       + 1e-4 * rng.standard_normal((whole.n, 3))).ravel()
+    ctx = whole._context(1e-3)
+    assert same.magnetic_energy(y) == pytest.approx(whole.magnetic_energy(y), rel=1e-12)
+    for a, b in zip(same._grad_hess(y, ctx), whole._grad_hess(y, ctx)):
+        np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-12 * np.abs(b).max())
+
+    s = solver(zoned_bar([(left, m), (right, other)]))
+
+    def magnetic(y):
+        s.magnetic_field = np.array(q, float)
+        g_on, h_on = s._grad_hess(y, ctx)
+        s.magnetic_field = np.zeros(len(q))
+        g_off, h_off = s._grad_hess(y, ctx)
+        return (g_on - g_off)[s.free], h_on - h_off
+
+    g, h = magnetic(y)
+    upper = s._pattern.matrix(h)
+    full = upper + upper.T - sp.diags(upper.diagonal())
+    d = np.zeros(s.ndof)
+    d[s.free] = rng.standard_normal(len(s.free))
+    eps = 1e-7
+    fd = (magnetic(y + eps * d)[0] - magnetic(y - eps * d)[0]) / (2 * eps)
+    np.testing.assert_allclose(full @ d[s.free], fd, rtol=0, atol=1e-5 * np.abs(fd).max())
+    s.magnetic_field = np.array(q, float)
+    slope = (s.magnetic_energy(y + eps * d) - s.magnetic_energy(y - eps * d)) / (2 * eps)
+    assert g @ d[s.free] == pytest.approx(slope, rel=1e-6)
+    s_whole_other = solver(bar(0.03, 0.01, 0.004, 0.005, other))  # and the zoned body is neither magnet's alone
+    assert s.magnetic_energy(y) not in (pytest.approx(whole.magnetic_energy(y)),
+                                        pytest.approx(s_whole_other.magnetic_energy(y)))

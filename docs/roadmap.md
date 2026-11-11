@@ -173,9 +173,9 @@ drop weights. See [materials.md](materials.md).
   the drop-only and the joint physical card, then new reference tracks and
   transfers.
 - **Whole bounce in 3D** (tack + support) for 20 and 50 g.
-- **SOFA contact fidelity:** frictionless impacts lose 58% of the energy
-  (e = 0.65 against 0.87, [backends/sofa.md](backends/sofa.md#known-limits)),
-  plus the M4 rim-flare penetration.
+- **SOFA contact fidelity:** the "58% loss" frictionless was a friction mismatch (SOFA uses one coefficient for every
+  pair); with every pair frictionless it loses 3.4% more than the reference and peaks 14% shallow (2026-11-11,
+  [backends/sofa.md](backends/sofa.md#known-limits)). Left: the M4 rim-flare penetration, and the frictionless plate.
 - **Rate data** below 1 s (DMA or impact tests) for silicones. Today's
   relaxation data start at 1 s, while impacts relax within milliseconds.
 - **500 g:** with the material excluded, check the setup and the measurement
@@ -339,7 +339,7 @@ rods that are not columns along z (curved or branched), PneuNet-like bodies bein
 
 N-finger gripper on a rigid palm. Grasp metrics (success, contact patch,
 forces, slip, pull-out). Contact quality work, including the M4 SOFA
-artefacts, finger self-collision and a friction benchmark. A grasp benchmark
+artefacts, finger self-collision (done for MuJoCo and SOFA, one geometry) and a friction benchmark. A grasp benchmark
 grid.
 
 Started 2026-11-06: two-finger gripper on the reference, a fast finger fitted to it, a local live page and a grasp map
@@ -352,6 +352,10 @@ gap, so the force cannot test the model (2026-11-11, [actuation.md](actuation.md
 `sticking_block.yaml`, `tests/test_friction.py`). A silicone block pushed across the ground against exact Coulomb
 sliding: all three backends within 0.8-0.94%. Below the limit, MuJoCo creeps at 0.13 mm/s (soft constraints) and the
 reference at a rate set by its time step (its friction smoothing is per step; [decisions.md](decisions.md), entry 6).
+
+2026-11-11: **self-collision** (`body.self_collision`, `tests/test_self_collision.py`). A finger pulled until its slot
+closes: with self-collision on, the slot's walls stay apart (MuJoCo +0.19 mm, SOFA +0.10 mm); off, they pass through by
+1.3 mm. fem and rod refuse it. Verified on one geometry only ([actuation.md](actuation.md#a-body-that-touches-itself)).
 
 ## M10: magnetic soft robots (MRE)
 
@@ -392,13 +396,27 @@ dipole's gradient and a cantilever's closed form up to buckling (`tests/test_mag
   - the finger against a gauge, once the set-up is known;
   - ~~a hard-magnetic model~~ done 2026-11-11: remanent magnetisation `-mu0 (F M_r) . H` (Zhao et al. 2019),
     checked against closed forms ([magnetic.md](magnetic.md)).
+  - ~~magnetic zones~~ done 2026-11-11: zones carry their own `magneto_active` card (hard, soft or none), the energy
+    assembled per element; two zones of opposite remanence cancel and a non-magnetic one halves the energy, to 1e-12;
+    a zone with induced magnetisation needs explicit demagnetising factors (`block` is refused);
+  - ~~a hard-magnetic gripper on the reference~~ done 2026-11-11: a U-shaped body with two oppositely magnetised
+    arms closes in a uniform field (`scenarios/magnetic/hard_magnetic_gripper.yaml`); the arm's bending is the
+    cantilever's under a distributed couple to 1.4% at 1 mm (0.5% at 0.75 mm), the tip 17-18% more because the palm
+    rotates at the root. Not yet: gripping an object (a GPU-machine job, [magnetic.md](magnetic.md)).
 
 ## M11: design and control toolkit
 
 Quasi-static inverse control (optimisation; SoftRobots.Inverse fast path on
-SOFA), reduced-order and Koopman surrogates for real-time ROS 2 control,
+SOFA; the optimisation part is done: `softsim inverse`, see [control.md](control.md)), reduced-order and Koopman surrogates for real-time ROS 2 control,
 design optimisation over parametric geometry (`softsim optimize`), and
 sim-to-real identification from short recorded motions.
+
+- **Design optimisation (done):** `softsim optimize <job.yaml>` ([design.md](design.md)). Nelder-Mead over
+  dotted design parameters (units, bounds, log, integer, tied keys), objective maximise/minimise/target on any
+  summary metric (or a ratio), constraints as penalties with the best chosen among feasible evaluations and
+  infeasibility reported, resumable evaluation log, parallel initial simplex. Checked on the cable cantilever
+  against a known maximum (the bound) and a bisection reference; the MuJoCo-locking bias of the optimum and
+  the `fem` check are documented. Open in M11: inverse control, surrogates, sim-to-real identification.
 
 ## M12: GPU backend and learning (GPU machine)
 

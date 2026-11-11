@@ -1,0 +1,66 @@
+# A hard-magnetic U gripper (docs/magnetic.md, "A hard-magnetic gripper"): ONE soft body, a 28 x 4 x 4 mm palm bar clamped
+# at its foot and two 4 x 4 x 40 mm arms standing on its ends, 20 mm apart (a STEP from cad/make_u_gripper.py, in mm).
+# The arms are material ZONES of the same elastomer (E = 200 kPa) with remanence 100 kA/m along the arm, opposite ways:
+# +z in the left arm, -z in the right one; the palm is not magnetic. A uniform field H along +x turns each arm's moment
+# towards it, the left arm to +x and the right to -x: the arms CLOSE, each tip by the small-field cantilever form
+# c L^3 / (3 E I), c = mu0 M_r H A, L = 40 mm from the palm's top: 1.005 mm per arm at 100 A/m for a clamped root.
+# Measured, the tips move 1.17-1.20 times that: the palm bends under the arms' couples (docs/magnetic.md).
+# Field reversed, they open. No gravity here (the arms' own weight is ~1 mm).
+# The field ramps smoothly (minimum jerk) over 1.5 s, six periods of an arm's first mode (4 Hz), then holds. ``tip_x`` is
+# the LEFT arm's tip (rest -12 mm, so it moves to +x); the right arm mirrors it. Gripping an object is not done yet
+# (docs/magnetic.md: a GPU-machine job).
+#   softsim run scenarios/magnetic/hard_magnetic_gripper.yaml
+scenario: actuation
+description: Hard-magnetic U gripper (two arms magnetised oppositely, as zones) closed by a 100 A/m field.
+backend: fem
+
+simulation:
+  timestep: 20 ms
+  duration: 2 s
+  output_rate: 50 Hz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: gripper
+  geometry:
+    type: mesh_file
+    path: cad/u_gripper.step
+    box_regions:
+      base: [[-15 mm, -3 mm, -0.5 mm], [15 mm, 3 mm, 0.5 mm]]
+      tip: [[-15 mm, -3 mm, 43.5 mm], [-9 mm, 3 mm, 44.5 mm]]   # the left arm's tip face
+  material:
+    density: 2000 kg/m^3
+    elastic: {model: neo_hookean, youngs_modulus: 200 kPa, poisson_ratio: 0.3}
+  zones:
+    - name: left_arm
+      box: [[-15 mm, -3 mm, 4 mm], [-9 mm, 3 mm, 45 mm]]
+      material:
+        density: 2000 kg/m^3
+        elastic:
+          model: magneto_active
+          matrix: {model: neo_hookean, youngs_modulus: 200 kPa, poisson_ratio: 0.3}
+          susceptibility: 0
+          remanent_magnetization: [0, 0, 100 kA/m]
+          along: [0, 0, 1]
+          normal: [1, 0, 0]
+    - name: right_arm
+      box: [[9 mm, -3 mm, 4 mm], [15 mm, 3 mm, 45 mm]]
+      material:
+        density: 2000 kg/m^3
+        elastic:
+          model: magneto_active
+          matrix: {model: neo_hookean, youngs_modulus: 200 kPa, poisson_ratio: 0.3}
+          susceptibility: 0
+          remanent_magnetization: [0, 0, -100 kA/m]
+          along: [0, 0, 1]
+          normal: [1, 0, 0]
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+
+actuators: []
+
+magnetic_field:
+  uniform: [[0 ms, [0.0000 A/m, 0, 0]], [150 ms, [0.8560 A/m, 0, 0]], [300 ms, [5.7920 A/m, 0, 0]], [450 ms, [16.3080 A/m, 0, 0]], [600 ms, [31.7440 A/m, 0, 0]], [750 ms, [50.0000 A/m, 0, 0]], [900 ms, [68.2560 A/m, 0, 0]], [1050 ms, [83.6920 A/m, 0, 0]], [1200 ms, [94.2080 A/m, 0, 0]], [1350 ms, [99.1440 A/m, 0, 0]], [1500 ms, [100.0000 A/m, 0, 0]]]   # minimum-jerk ramp to 100 A/m

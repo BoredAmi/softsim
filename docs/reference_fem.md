@@ -93,10 +93,11 @@ The formulation is the axisymmetric one, in 3D:
 - free and spring-mounted rigid bodies, and the ground;
 - friction: coefficients combine by maximum. 0 is frictionless, ≥ 1 is
   sticking (identical to μ = 1 statically, see below, and much faster for
-  Newton), and anything in between is Coulomb. Coulomb is smoothed (IPC's mollifier) below a slip of 1 um per
-  step, so a contact held below its limit creeps at a rate set by the step (0.23 mm/s at 2 ms at 0.71 of the limit,
-  `benchmarks/sticking_block.yaml`); `contact.slip_speed` makes the smoothing a speed instead, and the creep a fixed
-  fraction of it at any step ([decisions.md](decisions.md), entry 6);
+  Newton), and anything in between is Coulomb. Coulomb is smoothed (IPC's mollifier) below a slip speed
+  `contact.slip_speed` (default 1e-5 m/s), so a contact held below its limit creeps at a fraction of it, whatever the
+  step (0.005 mm/s at 0.71 of the limit, `benchmarks/sticking_block.yaml`). Before 2026-11-11 the smoothing was 1 um
+  per step (`slip_speed: null`), whose creep grows as the step shrinks (0.23 mm/s at 2 ms; [decisions.md](decisions.md),
+  entry 6);
 - adhesion from the material and the ground;
 - magneto-active (MRE) material in the scene's magnetic field, with solid magnets as rigid cylinders. See
   [magnetic.md](magnetic.md).

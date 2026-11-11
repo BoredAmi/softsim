@@ -87,11 +87,12 @@ def _cmd_check(args: argparse.Namespace) -> int:
     try:
         backend_cls = get_backend(config.backend)
         locking_free, implicit_actuation = backend_cls.locking_free, backend_cls.implicit_actuation
-        implicit_prony = backend_cls.implicit_prony
+        implicit_prony, single_friction = backend_cls.implicit_prony, backend_cls.single_friction
     except ConfigError:  # unknown or uninstalled backend: reported under "backend support"
-        locking_free = implicit_actuation = implicit_prony = False
+        locking_free = implicit_actuation = implicit_prony = single_friction = False
     findings = check_scene(scene, scenario.estimates(), locking_free=locking_free,
-                           implicit_actuation=implicit_actuation, implicit_prony=implicit_prony)
+                           implicit_actuation=implicit_actuation, implicit_prony=implicit_prony,
+                           single_friction=single_friction)
     for f in findings:
         print(" ", f)
     print("backend support:")
@@ -420,11 +421,26 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_optimize(args: argparse.Namespace) -> int:
+    from softsim.design import Optimization
+
+    report = Optimization(args.job, jobs=args.jobs).run()
+    print(json.dumps(report, indent=2, default=float))
+    return 0 if report["feasible"] else 2
+
+
 def _cmd_transfer(args: argparse.Namespace) -> int:
     from softsim.transfer import Transfer
 
     report = Transfer(args.transfer).run()
     print(json.dumps(report, indent=2, default=float))
+    return 0
+
+
+def _cmd_inverse(args: argparse.Namespace) -> int:
+    from softsim.control.inverse import run_job
+
+    print(json.dumps(run_job(args.job), indent=2, default=float))
     return 0
 
 
@@ -580,9 +596,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-plots", action="store_true")
     p.set_defaults(func=_cmd_calibrate)
 
+    p = sub.add_parser("optimize", help="design optimisation over parametric geometry (docs/design.md)")
+    p.add_argument("job", help="job YAML, e.g. jobs/cantilever_target_angle.yaml")
+    p.add_argument("--jobs", type=int, default=1, help="designs simulated in parallel (the initial simplex)")
+    p.set_defaults(func=_cmd_optimize)
+
     p = sub.add_parser("transfer", help="fit a fast backend's effective card to the reference (docs/actuation.md)")
     p.add_argument("transfer", help="transfer YAML, e.g. calibrations/transfer_inflation_mujoco.yaml")
     p.set_defaults(func=_cmd_transfer)
+
+    p = sub.add_parser("inverse", help="quasi-static inverse control: actuator values that reach target outputs "
+                                       "(docs/control.md)")
+    p.add_argument("job", help="job YAML, e.g. jobs/inverse_cable_cantilever.yaml")
+    p.set_defaults(func=_cmd_inverse)
 
     p = sub.add_parser("fit", help="fit a scenario's parameters to a measured table (softsim.experiments.fit)")
     p.add_argument("fit", help="fit YAML with a `data:` section, e.g. calibrations/pneunet_fit.yaml")

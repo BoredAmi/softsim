@@ -172,4 +172,5 @@ dt 2 ms and 0.0053 mm/s at 4 ms; sliding unchanged (70.45 mm). `tests/test_frict
   docs/gripper.md may move.
 - **Keep the per-step default**, and state the creep rate with every finite-element grasp.
 
-**Decision:** open.
+**Decision:** make `slip_speed` 1e-5 m/s the default (2026-11-11, agreed with you). `contact.slip_speed: null` restores
+the old per-step smoothing. Still to do: re-run the finite-element grasps on the GPU machine and update docs/gripper.md.

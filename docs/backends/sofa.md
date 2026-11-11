@@ -64,26 +64,30 @@ these laws can be projected onto one SOFA has (`softsim material project`).
   through contact comes out 7% stiffer than analytic, with too much lateral
   spreading, while the same FEM without contact matches. This looks like a
   contact artifact in that configuration and is not resolved.
-- **Frictionless impacts lose too much energy.** With purely elastic cards,
-  the centred 50 g drop at 2.7 m/s against the locking-free 3D reference
-  (`tools/contact_restitution.py`; restitution e = rebound speed / impact
-  speed):
+- **Frictionless impacts: compare with every pair frictionless.** With purely elastic cards, the centred 50 g
+  drop at 2.7 m/s against the locking-free 3D reference (`tools/contact_restitution.py`; restitution e = rebound
+  speed / impact speed):
 
   | Contact | Reference | SOFA, 5 mm | MuJoCo, 5 mm |
   | --- | --- | --- | --- |
   | Sticking, μ = 1 | 0.905 | 0.794 | 0.73–0.75 |
-  | Frictionless | 0.869 | **0.650** (peak 5.1 mm vs 7.5, contact 11.9 vs 10.5 ms) | 0.791 |
+  | Every pair frictionless | 0.823, peak 7.53 mm | **0.795** (−3.4%), peak 6.45 mm (−14%) | – |
+  | Specimen and ground frictionless, the weight at 0.5 | 0.869 | 0.650, peak 5.1 mm (not a like-for-like case) | 0.791 |
 
-  With sticking friction SOFA loses less than MuJoCo. That is why its
-  transfer of the physical card needs less extra relaxation (g 0.77 against
-  0.94, [experiments.md](../experiments.md)). Frictionless, it loses 58% of the
-  energy and is much too stiff, like the frictionless plate test below.
+  The last row was long read as "SOFA loses 58% of the energy frictionless". It doesn't: SOFA applies the scene's
+  largest friction coefficient to every pair, so the weight's 0.5 also acted between specimen and ground, where the
+  reference and MuJoCo (friction per pair) had none. With every pair frictionless SOFA loses 3.4% more than the
+  reference, and its peak is 14% shallow, the linear tetrahedra's stiffness at 5 mm. Halving the step (0.784) or
+  tightening the constraint tolerance to 1e-9 does not change that. Keep one friction coefficient per scene on SOFA.
+  With sticking friction SOFA loses less than MuJoCo. That is why its transfer of the physical card needs less extra
+  relaxation (g 0.77 against 0.94, [experiments.md](../experiments.md)).
 - **Contact fails at extreme rim flaring.** In the 500 g drop with the fitted
   Ogden material, the specimen's rim spreads to 45 mm radius (from 20 mm) and
   rim vertices then pass up to 8.5 mm through the ground, without any
   inverted element. Calibration histories record `ground_penetration` per
   case to catch this.
-- **One friction coefficient** (the largest in the scene) applies to all pairs.
+- **One friction coefficient** (the largest in the scene) applies to all pairs; `softsim check` and every run warn
+  (`single-friction`) when the scene's coefficients differ.
   MuJoCo's contact compliance settings (`contact.timeconst`, `dampratio`,
   `solimp`) don't apply here: SOFA contacts are hard constraints.
   `simulation.integrator` and `solver` are MuJoCo settings and are ignored.

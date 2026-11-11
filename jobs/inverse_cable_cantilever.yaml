@@ -1,0 +1,12 @@
+# Quasi-static inverse control (docs/control.md):
+#   softsim inverse jobs/inverse_cable_cantilever.yaml
+# Find the cable tension that bends the cantilever's tip face by 2 degrees at equilibrium.
+config: ../scenarios/actuation/cable_cantilever.yaml
+backend: mujoco
+overrides: [body.mesh.size=4mm]         # coarse: fast; the value is that of this mesh
+targets:
+  bend_angle: 2 deg                     # any scenario output; unit strings as in the configs
+actuators:                              # the unknowns and their bounds
+  cable: [0 N, 0.7 N]
+tolerance: 0.05                         # largest scaled residual (angles: 0.01 rad per unit)
+max_evaluations: 30

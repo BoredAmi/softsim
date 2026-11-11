@@ -1,0 +1,17 @@
+# Design optimisation example: the slot geometry of the cable finger (scenarios/actuation/cable_finger.yaml)
+# that curls it most under the scenario's 0.2 N pull, subject to a limit on how far the cable may travel
+# (stroke <= 4 mm). Design variables: slot depth
+# and width (both linear). Coarse mesh and a short run for speed; check the winner on the fem backend
+# (docs/design.md).
+#   softsim optimize jobs/cable_finger_slots.yaml
+scenario: ../scenarios/actuation/cable_finger.yaml
+backend: mujoco
+overrides: [body.mesh.size=3mm]
+parameters:
+  body.geometry.slot_depth: {initial: 3 mm, bounds: [1 mm, 4 mm]}   # the tendon (4.5 mm in) must stay in the web
+  body.geometry.slot_width: {initial: 3 mm, bounds: [1 mm, 5 mm]}
+objective: {metric: final_bend_angle, goal: maximize}
+constraints:
+  - {metric: cable_stroke, max: 4 mm}
+max_evaluations: 30
+output: ../runs/design/cable_finger_slots

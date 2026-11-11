@@ -17,7 +17,9 @@ through its via points ``<name>_length`` [m] (a stroke-controlled cable also giv
 command ``<name>_command`` [m]; its tension follows from its length); each region force its
 force ``<name>_force`` [N] and its region's displacement along it ``<name>_displacement`` [m]
 (area-weighted centroid); each prescribed region's reaction ``<region>_reaction_<axis>`` [N] and
-centroid motion ``<region>_displacement_<axis>`` [m] along its held axes; and the body's extent (``max_z``,
+centroid motion ``<region>_displacement_<axis>`` [m] along its held axes; each gap gauge (``body.gaps``) the signed
+gap between its two regions ``<name>_gap`` [m] (negative: interpenetration; ``body.self_collision`` makes the body's
+own faces collide); and the body's extent (``max_z``,
 ``min_z``, ``max_radius`` about the body's axis). Shapes with a ``tip`` (else
 ``top``) region also give the tip: that face's area-weighted centroid (``tip_x``,
 ``tip_y``, ``tip_z``) and its rotation from its rest orientation (``bend_angle``
@@ -40,6 +42,7 @@ from softsim.actuation import (CableActuator, CableActuatorConfig, ForceActuator
                                cable_length, cable_rows, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
+from softsim.contact.gap import region_gap
 from softsim.config.units import Angle, AngularVelocity, Length, Mass, Time
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution
@@ -102,6 +105,15 @@ class MountRotationConfig(StrictModel):
                      tuple[Annotated[Time, Field(ge=0)], Angle, AngularVelocity]]]
 
 
+class GapConfig(StrictModel):
+    """A gauge of the signed gap between two surface regions of the body (softsim.contact.gap.region_gap), e.g. the
+    two walls of a slot the body closes on itself: ``{name: slot1, between: [slot1_lower, slot1_upper]}``. Outputs
+    ``<name>_gap`` [m], negative when one face has gone through the other; the summary gives ``<name>_min_gap``."""
+
+    name: str
+    between: tuple[str, str]
+
+
 class InflatedBodyConfig(StrictModel):
     name: str = "body"
     geometry: SoftShape
@@ -116,6 +128,8 @@ class InflatedBodyConfig(StrictModel):
     mount_path: list[tuple[Annotated[Time, Field(ge=0)], tuple[Length, Length, Length]]] = []
     prescribed: list[PrescribedRegionConfig] = []  # regions moved along paths (displacement control)
     mount_rotation: MountRotationConfig | None = None  # the fixed regions turn about an axis
+    self_collision: bool = False  # the body's own faces collide (a finger closing on itself); MuJoCo and SOFA only
+    gaps: list[GapConfig] = []  # signed gaps between pairs of its surface regions, e.g. a slot's walls
 
 
 class InflationConfig(ScenarioConfig):
@@ -187,10 +201,17 @@ class InflationScenario(Scenario):
         try:
             body = SoftBodySpec(name=cfg.name, mesh=mesh, material=self.load_material(cfg.material),
                                 pose=Pose(tuple(cfg.position)), mass=cfg.mass, pinned=tuple(pinned), regions=regions,
-                                zones=tuple(zones), prescribed=tuple(prescribed),
+                                zones=tuple(zones), prescribed=tuple(prescribed), self_collision=cfg.self_collision,
                                 plane_strain=None if cfg.plane_strain is None else "xyz".index(cfg.plane_strain))
         except ValueError as exc:
             raise ConfigError(f"body: {exc}") from None
+        for g in cfg.gaps:
+            for r in g.between:
+                if r not in regions:
+                    raise ConfigError(f"body.gaps ({g.name}): no region {r!r}; {type(cfg.geometry).__name__} has "
+                                      f"{sorted(regions)}")
+            if any(len(regions[r]) == 0 for r in g.between):
+                raise ConfigError(f"body.gaps ({g.name}): region {g.between} has no triangles on this mesh")
         configs = []
         for a in self.config.actuators:  # ``path: geometry``: the shape's own tendon path
             if isinstance(a, CableActuatorConfig) and a.path == "geometry" and hasattr(cfg.geometry, "tendon_path"):
@@ -278,6 +299,8 @@ class InflationScenario(Scenario):
                 if axes[k]:
                     out[f"{region}_reaction_{axis}"] = float(force[k])
                     out[f"{region}_displacement_{axis}"] = float(moved[k])
+        for g in self._gaps():
+            out[f"{g.name}_gap"] = region_gap(x, self._regions[g.between[0]], self._regions[g.between[1]])
         if self._spin is not None:
             out["mount_angle"] = self._spin.angle(state.time)
         if self._tip is not None:
@@ -291,6 +314,11 @@ class InflationScenario(Scenario):
         out["min_z"] = float(x[:, 2].min())
         out["max_radius"] = float(np.hypot(*(x[:, :2] - self._axis).T).max())
         return out
+
+    def _gaps(self) -> list:
+        """The body's gap gauges (none for a config without a ``body``, e.g. a summary built from a bare table)."""
+        body = getattr(self.config, "body", None)
+        return list(getattr(body, "gaps", []) or [])
 
     def summarize(self, ts: pd.DataFrame) -> dict[str, float]:
         out: dict[str, float] = {}
@@ -312,6 +340,9 @@ class InflationScenario(Scenario):
             for k, axis in enumerate("xyz"):
                 if axes[k]:
                     out[f"{region}_final_reaction_{axis}"] = float(ts[f"{region}_reaction_{axis}"].iloc[-1])
+        for g in self._gaps():
+            out[f"{g.name}_min_gap"] = float(ts[f"{g.name}_gap"].min())
+            out[f"{g.name}_final_gap"] = float(ts[f"{g.name}_gap"].iloc[-1])
         if "bend_angle" in ts:
             out["final_bend_angle"] = float(ts["bend_angle"].iloc[-1])
             out["final_tip_x"] = float(ts["tip_x"].iloc[-1])

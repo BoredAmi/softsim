@@ -424,7 +424,8 @@ class SoftCableFinger(StrictModel):
     With one segment the finger is a plain beam. Meshed with gmsh.
 
     Regions: ``base`` (z = 0), ``top`` (z = length), ``side`` (|y| = depth / 2), ``cable_side`` (the +x
-    face and the slots' walls)."""
+    face and the slots' walls), and each slot's two walls, ``slot<i>_lower`` (its z-min wall, facing +z) and
+    ``slot<i>_upper`` (z-max, facing -z), counted from the base: the faces that meet when a slot closes."""
 
     type: Literal["cable_finger"] = "cable_finger"
     length: PositiveLength
@@ -500,8 +501,14 @@ class SoftCableFinger(StrictModel):
                 on_floor |= ((np.abs(p[:, 2] - z0) < tol) | (np.abs(p[:, 2] - z1) < tol)) & (p[:, 0] > hx - depth - tol)
             return on_face | on_floor
 
+        def flank(z):  # one wall of a slot: the plane z, from the slot's floor to the +x face
+            return lambda p: (np.abs(p[:, 2] - z) < tol) & (p[:, 0] > hx - depth - tol)
+
+        flanks = {}
+        for i, (z0, z1) in enumerate(slots, start=1):
+            flanks[f"slot{i}_lower"], flanks[f"slot{i}_upper"] = flank(z0), flank(z1)
         return _resolve(mesh, {"base": lambda p: p[:, 2] < tol, "top": lambda p: p[:, 2] > self.length - tol,
-                               "side": lambda p: np.abs(p[:, 1]) > hy - tol, "cable_side": cable_side})
+                               "side": lambda p: np.abs(p[:, 1]) > hy - tol, "cable_side": cable_side, **flanks})
 
 
 Box = tuple[tuple[Length, Length, Length], tuple[Length, Length, Length]]

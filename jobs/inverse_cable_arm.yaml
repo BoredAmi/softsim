@@ -1,0 +1,19 @@
+# Two cables, two targets: tip x and z of the two-segment arm (docs/control.md).
+#   softsim inverse jobs/inverse_cable_arm.yaml
+# The arm's first bending mode is ~1 Hz, so it needs strong damping to settle (stiffness-proportional only on
+# MuJoCo) and a coarse mesh and step to keep each equilibrium to ~10 s.
+config: ../scenarios/actuation/cable_arm.yaml
+backend: mujoco
+overrides: [body.mesh.size=6mm, simulation.timestep=0.5ms, simulation.iterations=100]
+settle_damping: {model: rayleigh, beta: 0.15 s}
+scales: {tip_z: 0.2 mm}                 # z moves little: judge it to 0.2 mm, not 1 mm
+settle_tol: 0.005                       # settled: outputs move < 0.5% of their scale (1 mm) over 0.1 s
+max_settle: 3 s
+targets:
+  tip_x: 3.994 mm                       # the arm's tip at cable tensions 0.45 N and 0.15 N, same settings: reachable
+  tip_z: 118.515 mm                     # (z carries the second degree of freedom: S- against C-shaped bending)
+actuators:
+  cable_a: [0 N, 0.5 N]
+  cable_b: [0 N, 0.5 N]
+tolerance: 0.1                          # largest scaled residual: 0.1 mm in x, 0.02 mm in z
+max_evaluations: 30

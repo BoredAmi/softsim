@@ -14,11 +14,9 @@ runs:
   - backend: fem
     overrides: [simulation.timestep=2ms, "actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [300 ms, 0.06 N]]"]
     tolerance: 5.0e-5
-    known_failure: true
     note: >-
-      the reference's Coulomb law is smoothed below a slip of 1 um per step, so a stuck contact creeps at a rate
-      set by the step (0.233 mm/s at 2 ms, 0.117 mm/s at 4 ms, measured); contact.slip_speed fixes it
-      (docs/decisions.md, entry 6)
+      creeps at about 0.005 mm/s with the default contact.slip_speed (1e-5 m/s); the old per-step smoothing
+      (slip_speed null) crept 0.233 mm/s at 2 ms (docs/decisions.md, entry 6)
   - backend: mujoco
     overrides: ["actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [300 ms, 0.06 N]]"]
     tolerance: 5.0e-5

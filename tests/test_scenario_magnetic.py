@@ -228,3 +228,65 @@ def test_the_cards_remanence_reaches_the_reference_in_the_world_frame():
     m = fem._problem.magnetic
     np.testing.assert_allclose(m.remanence, (0, 0, 9e4))
     assert m.chi_along == m.chi_normal == 0.0
+
+
+GRIPPER = SCENARIO.with_name("hard_magnetic_gripper.yaml")
+
+
+def gripper(overrides=()):
+    sim = Simulation(load_yaml(GRIPPER), list(overrides), base_dir=GRIPPER.parent)
+    fem = FemBackend()
+    fem.build(sim.scenario.build_scene())
+    return fem
+
+
+def test_each_zones_card_reaches_the_reference():
+    """The gripper's arms are zones with remanence +z and -z (body frame, which is the world's), the palm has none: the
+    problem holds one magnet per arm over exactly that zone's elements, and none for the rest."""
+    fem = gripper(["body.mesh.size=2mm"])
+    p = fem._problem
+    assert p.magnetic is None and len(p.magnetic_zones) == 2
+    centroids = p.mesh.nodes[p.mesh.tets[:, :4]].mean(axis=1)
+    for (elements, magnet), side in zip(sorted(p.magnetic_zones, key=lambda g: centroids[g[0], 0].mean()), (-1, 1)):
+        np.testing.assert_allclose(magnet.remanence, (0, 0, -side * 1e5))  # left (x < 0): +z, right: -z
+        assert side * centroids[elements, 0].min() > 0.009 and centroids[elements, 2].min() > 0.0035
+        assert len(elements) == int(np.sum((side * centroids[:, 0] > 0.009) & (centroids[:, 2] > 0.004)))
+    assert fem.solver.magnetic_field is not None and fem._problem.is_magnetic
+
+
+def test_the_arms_of_a_hard_magnetic_gripper_close_by_the_cantilever_closed_form():
+    """Opposite arms in one uniform field along x, 100 A/m: each bends towards the other like a cantilever under the
+    distributed couple c = mu0 M_r H A (c L^3 / 3EI = 1.005 mm at the arm's 40 mm). Checked as the arm's own bending:
+    the cubic of the arm's centre line has u''' = c / EI (1.034 at a 1.5 mm mesh, 1.005 at 0.75 mm), whatever the palm
+    does under it; and the tip, which also rides the palm's rotation, is the cantilever's plus that root slope times
+    the arm. The field reversed opens them by the same amount."""
+    fem = gripper(["body.mesh.size=1.5mm"])
+    x = fem._problem.mesh.nodes
+    e_mod, inertia, area, h = 2e5, 4e-3 * 4e-3 ** 3 / 12, 16e-6, 100.0
+    couple = MU0 * 1e5 * h * area
+    top = np.isclose(x[:, 2], x[:, 2].max())
+    for sign in (1, -1):
+        s = Solid3DSolver(fem._problem, dynamic=False)
+        s.magnetic_field[:3] = (sign * h, 0, 0)
+        assert s.advance(1.0)
+        u = s.y[:3 * s.n].reshape(-1, 3)
+        for side in (1, -1):  # side = +1: the left arm, which closes towards +x
+            arm = (-side * x[:, 0] > 0.009) & (x[:, 2] > 0.010)
+            fit = np.polyfit(x[arm, 2], side * u[arm, 0], 3)
+            assert 6 * fit[0] == pytest.approx(-sign * couple / (e_mod * inertia), rel=0.05)
+            tip = side * u[top & (-side * x[:, 0] > 0), 0].mean()
+            cantilever = couple * 0.04 ** 3 / (3 * e_mod * inertia)
+            assert tip == pytest.approx(sign * cantilever + np.polyval(np.polyder(fit), 0.004) * 0.04, rel=0.05)
+            assert sign * tip > 0.9 * cantilever  # closes (sign 1) or opens (-1)
+
+
+def test_a_soft_magnetic_zone_needs_its_demagnetising_factors():
+    """A zone's field is shaped by its neighbours, not by its own bounding block: 'block' on a zone with induced
+    magnetisation is refused (explicit factors, or a purely hard zone, are not)."""
+    sim_raw = load_yaml(GRIPPER)
+    for key, value in (("susceptibility", 1.0), ("demagnetization", "block")):
+        sim_raw["body"]["zones"][0]["material"]["elastic"][key] = value
+    with pytest.raises(UnsupportedFeatureError, match="demagnetization"):
+        Simulation(sim_raw, [], base_dir=GRIPPER.parent)
+    sim_raw["body"]["zones"][0]["material"]["elastic"]["demagnetization"] = [0.2, 0.4, 0.4]
+    Simulation(sim_raw, [], base_dir=GRIPPER.parent)  # explicit factors: allowed

@@ -86,6 +86,20 @@ w = -mu0 / 2 (chi_a (a.H)^2 + chi_n (n.H)^2 + chi_b (H.H - (a.H)^2 - (n.H)^2))
   Checks: a turned body's energy `-mu0 V M_r H cos t`, a stretched one's `-mu0 V s M_r H` (the deformation gradient,
   not its rotation), and a cantilever magnetised along its length in a field across it, whose tip deflects by
   Euler-Bernoulli's `c L^3 / (3 E I)`, `c = mu0 M_r H A` (+1.1% at a 1 mm mesh, converging at second order).
+- **Magnetic zones.** `body.zones` may carry their own `magneto_active` card, or none: the body's magnetic energy is the
+  sum over its elements, each with its own material's susceptibility, remanence, axes and saturation (a zone of a
+  non-magnetic material takes up no field; a non-magnetic body can have magnetic zones). The single-material path is
+  unchanged. Two arms of one body magnetised in opposite directions are two zones whose cards differ in the sign of
+  `remanent_magnetization` (`scenarios/magnetic/hard_magnetic_gripper.yaml`). A zone with induced magnetisation
+  (`susceptibility > 0`) must give its demagnetising factors, `demagnetization: [N_along, N_normal, N_across]`: `block`
+  (the body's own bounding block) is refused in a body with zones, because a zone's field is shaped by its neighbours,
+  not by its own block (decision 2026-11-11). A purely hard zone needs no factors. Checks (`tests/test_magnetic.py`,
+  `tests/test_scenario_magnetic.py`): a bar of two zones with remanence `+M` and `-M` along its length has zero energy
+  in a uniform field along it, at rest, turned and stretched (below 1e-12 of `mu0 V M H`); with the second zone
+  non-magnetic, exactly half the whole bar's; a turned body with one hard and one soft zone has the sum of the two
+  closed forms (1e-9); the assembled gradient and Hessian equal the single-magnet body's when all zones share a card
+  (1e-12) and agree with central differences of the energy and the gradient when they differ (1e-6); each zone's card
+  reaches the solver over exactly its own elements.
 - **Saturation is a tanh law, not a measured curve.** With the card's `saturation_magnetization` M_s set (0 keeps the linear
   law), the energy is `-mu0 M_s^2 / chi_r ln cosh(sqrt(2 chi_r q) / M_s)`, with `-mu0 q` the linear energy and `chi_r` the
   largest axis susceptibility. Along the easiest axis that is exactly `M = M_s tanh(chi H / M_s)`; the other axes saturate
@@ -93,6 +107,43 @@ w = -mu0 / 2 (chi_a (a.H)^2 + chi_n (n.H)^2 + chi_b (H.H - (a.H)^2 - (n.H)^2))
   fields, `|M| <= M_s` in any direction, a bar's energy from below to well above saturation, and a saturated piece pulled
   up a dipole's gradient by `mu0 V M dH/dz` (3.0 times weaker than the linear law at `chi H / M_s` = 3). A measured B-H
   curve would replace the tanh.
+
+## A hard-magnetic gripper
+
+`scenarios/magnetic/hard_magnetic_gripper.yaml` is one soft body, a U: a 28 x 4 x 4 mm palm bar clamped at its foot and
+two 4 x 4 x 40 mm arms on its ends, 20 mm apart (a STEP from `scenarios/magnetic/cad/make_u_gripper.py`, loaded with
+`mesh_file`). The arms are zones of the same 200 kPa elastomer with remanence 100 kA/m along the arm, `+z` in the left
+one and `-z` in the right; the palm is not magnetic. A uniform field along `+x` turns each moment towards it, so the
+arms close; reversed, they open. Run it with `softsim run scenarios/magnetic/hard_magnetic_gripper.yaml` (a 1.5 mm
+mesh, 2 s, 2 min on 2 threads). Its field ramps to 100 A/m, a small angle for the closed form below.
+
+Measured against the cantilever under a uniform distributed couple `c = mu0 M_r H A`, whose tip moves
+`c L^3 / (3 E I)` (L = 40 mm, 1.005 mm at 100 A/m); static solutions at 100 A/m, both arms:
+
+| Mesh | Arm bending `u'''` against `c / EI` | Tip against `c L^3 / 3EI` | Root slope times L, of that |
+| --- | --- | --- | --- |
+| 2 mm (2.6k nodes) | +7% (left), +10% (right) | 1.24, 1.26 | |
+| 1.5 mm | +3.4% | 1.198 | 0.162 |
+| 1 mm (17.5k nodes) | +1.4% | 1.176 | |
+| 0.75 mm (35.6k nodes) | +0.5% | 1.168 | 0.159 |
+
+- **The arm itself follows the closed form.** `u'''` is the cubic coefficient of the arm's centre line over 10-44 mm
+  (the part away from the palm), which a distributed couple fixes whatever happens at the root. It converges to the
+  closed form, like the 4 x 4 x 60 mm cantilever (+1.1% at 1 mm).
+- **The tip does not, and should not.** The arm stands on a palm of its own thickness that bends and shears under the
+  arms' couples; the arm's slope at its root times its 40 mm accounts for 0.16 of the closed form, converged with the
+  mesh, so the tip is 17-18% over a clamped-root cantilever's at 0.75-1 mm. A stiffer palm would shrink that term. The
+  test (`test_the_arms_of_a_hard_magnetic_gripper_close_by_the_cantilever_closed_form`) therefore checks the tip as
+  the cantilever's plus that root slope times the arm, to 5%, and the arm's own bending to 5% at 1.5 mm.
+- **Linearity.** The tip changes by under 1% against the closed form between 30 and 300 A/m at 1 mm (3 mm at 300 A/m,
+  7.5% of the arm length).
+- **Symmetry.** At 1 mm the two arms agree to 0.1%; at 2 mm they differ by 2% (the unstructured mesh is not mirrored).
+
+No object is gripped yet, and nothing here was run for one. Closing on a light rigid object needs a `grasp` scenario
+with a rigid body between the arms (`scenarios/grasp/box.yaml` is the pattern for a box and contact) and the field held
+after the arms touch it. The arms must travel several millimetres, so the closed form above no longer applies and the
+field and the contact steps have to be found by running it: a job for the GPU machine, at 1 mm (17.5k nodes) or finer,
+not for two laptop threads.
 
 ## Checks
 
@@ -114,6 +165,9 @@ Every check is against something that does not share the code it checks.
 | Bar across a field, to 70% of buckling | Closed form of `E I t'' + K (t + e) = 0` | 2.2% at 1 mm (11% at 2 mm) | `test_magnetic.py`, `test_scenario_magnetic.py` |
 | Strip rolled onto a ring magnet | Energy per radian of its cross-section (the field is axisymmetric), by quadrature | 0.09% at 0.5 mm | `test_magnet_field.py` |
 | Config to solver | The card's per-axis `chi`; a turned body in a turned field keeps its energy; the field at each step's end; a solid magnet's cylinder, turn and path | 1e-12 | `test_scenario_magnetic.py` |
+| Opposite-remanence zones; one zone non-magnetic | Zero energy; half the bar's `-mu0 V M H cos t` | 1e-12 | `test_magnetic.py` |
+| Turned two-zone body | Sum of each zone's closed form | 1e-9 | `test_magnetic.py` |
+| Hard-magnetic gripper's arms (zones) | Cantilever under a distributed couple, the arm's `u'''` | 3.4% at 1.5 mm, 1.4% at 1 mm, 0.5% at 0.75 mm | `test_scenario_magnetic.py` |
 | Solid magnet | A strip pulled onto its rim lies on it, not in it, with a contact force | microns | `test_scenario_magnetic.py` |
 
 **Mutations.** `python tools/mutate_magnetic.py` (about 25 min) breaks the model in 32 plausible ways, one at a time, on
@@ -214,7 +268,7 @@ does not give.
 - **Hard-magnetic particles: checked, not yet validated.** `remanent_magnetization` [A/m, body frame] adds Zhao et al.'s
   (2019) energy `-mu0 (F M_r) . H`; checked against a turned and a stretched body's energy and a cantilever's tip
   deflection (`tests/test_magnetic.py`), not yet against a measured hard-magnetic robot.
-- **One magnetic body.** No magnetic zones, and no field on a moving or rotating mount: move the magnets along their
-  `path` instead.
+- **One magnetic body.** Several magnetic zones of it are allowed (above), but no field on a moving or rotating mount:
+  move the magnets along their `path` instead. A zone's induced magnetisation needs explicit demagnetising factors.
 - **Solid magnets are full cylinders.** A ring's contact solid is its outer disc, so nothing enters the hole; the
   contact rounds its edges by the magnet's `edge`, as its field does.

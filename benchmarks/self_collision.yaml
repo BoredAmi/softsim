@@ -1,0 +1,16 @@
+name: self_collision
+description: >-
+  A two-link cable finger (Ecoflex 00-30, one 2 mm slot) whose tendon pulls the slot shut: with self-collision on, the
+  slot's two walls must not pass through each other. The quantity is the smallest signed gap between the walls over the
+  run (negative: one inside the other); the truth is contact, a gap of zero, and the tolerance the contact skin.
+  Without self-collision the walls pass 1.3-1.4 mm through each other (tests/test_self_collision.py).
+config: ../scenarios/actuation/self_collision_finger.yaml
+tier: quick
+quantity: smallest wall gap [m]
+metric: {summary: slot_min_gap, absolute: true}
+truth:
+  value: 0.0
+  source: contact (the walls touch, neither goes through)
+runs:
+  - {backend: mujoco, tolerance: 3.0e-4, note: the gap left is MuJoCo's contact margin}
+  - {backend: sofa, overrides: [simulation.timestep=0.5ms], tolerance: 3.0e-4, note: the gap left is the contact distance}

@@ -63,9 +63,9 @@ class ContactSettings(StrictModel):
     ``impratio`` 10-100 lets soft bodies slip less under sticking friction, which
     otherwise costs impact energy (docs/backends/mujoco.md). ``slip_speed`` is the
     reference's (``fem``) Coulomb smoothing as a slip speed: below it friction acts as a
-    spring, so a stuck contact at a fraction ``F / (mu N)`` of its limit creeps at that
-    fraction of ``slip_speed``, whatever the step. Left out, the smoothing is 1 um of slip
-    per step and the creep scales with 1 / dt (docs/decisions.md, entry 6).
+    spring, so a stuck contact creeps at a fraction of ``slip_speed`` (``1 - sqrt(1 - r)`` at
+    a fraction ``r`` of its limit), whatever the step. ``null`` restores the old smoothing,
+    1 um of slip per step, whose creep scales with 1 / dt (docs/decisions.md, entry 6).
     """
 
     timeconst: Union[Annotated[Time, Field(gt=0)], Literal["auto"]] = "auto"
@@ -75,7 +75,7 @@ class ContactSettings(StrictModel):
     active_layers: Annotated[int, Field(ge=1)] = 1
     cone: Literal["pyramidal", "elliptic"] = "pyramidal"
     impratio: Annotated[float, Field(ge=1)] = 1.0
-    slip_speed: Optional[Annotated[Velocity, Field(gt=0)]] = None
+    slip_speed: Optional[Annotated[Velocity, Field(gt=0)]] = 1e-5
 
     def resolved_timeconst(self, timestep: float) -> float:
         return 2.0 * timestep if self.timeconst == "auto" else float(self.timeconst)
