@@ -231,7 +231,8 @@ def _cmd_material_show(args: argparse.Namespace) -> int:
             print(f"  {key:18s} {_fmt_si(value)}")
     try:
         from softsim.materials.homogeneous import curve
-    except ImportError:
+    except (ImportError, SoftSimError):  # softsim.fem says it needs JAX with a SoftSimError
+        print("  (no stress curve: install the fem extra)")
         return 0
     try:
         stretches = (0.7, 1.5, 2.0, 3.0)
@@ -427,8 +428,35 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bench(args: argparse.Namespace) -> int:
+    from softsim.bench import load_entries, report, run_bench
+
+    entries = load_entries(args.dir)
+    cache = Path(args.cache)
+    failed = False
+    if not args.report_only:
+        records = run_bench(entries, cache, tier=args.tier, only=args.only or None, backends=args.backend or None,
+                            force=args.force)
+        failed = any(r["status"] == "error" or (r["status"] == "fail" and not r.get("known_failure"))
+                     for r in records)
+    if args.out:
+        Path(args.out).write_text(report(entries, cache))
+        print(f"wrote {args.out}")
+    return 1 if failed else 0
+
+
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("softsim")
+    except PackageNotFoundError:
+        return "unknown (not installed)"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="softsim", description=__doc__)
+    parser.add_argument("--version", action="version", version=f"softsim {_version()}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("run", help="run a scenario and save results")
@@ -551,6 +579,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("fit", help="fit a scenario's parameters to a measured table (softsim.experiments.fit)")
     p.add_argument("fit", help="fit YAML with a `data:` section, e.g. calibrations/pneunet_fit.yaml")
     p.set_defaults(func=_cmd_fit)
+
+    p = sub.add_parser("bench", help="run the benchmark cases (benchmarks/*.yaml) and write the table")
+    p.add_argument("--dir", default="benchmarks", help="folder of benchmark entries")
+    p.add_argument("--tier", choices=["quick", "full"], default="quick", help="quick: minutes; full: every case")
+    p.add_argument("--only", action="append", default=[], metavar="NAME", help="run only this case (repeatable)")
+    p.add_argument("--backend", action="append", default=[], help="run only this backend (repeatable)")
+    p.add_argument("--force", action="store_true", help="re-run cases whose result is cached")
+    p.add_argument("--cache", default="runs/bench", help="result cache folder")
+    p.add_argument("--out", default="docs/benchmarks.md", help="report page ('' to skip)")
+    p.add_argument("--report-only", action="store_true", help="rebuild the page from the cache, run nothing")
+    p.set_defaults(func=_cmd_bench)
 
     p = sub.add_parser("view", help="interactive MuJoCo viewer (loops the scenario)")
     _add_config_args(p)

@@ -1,0 +1,26 @@
+name: wang_finger
+description: >-
+  Cast ribbed pneumatic finger of Wang et al., Actuators 15(9), 488 (2026), CC BY 4.0: geometry from the paper's
+  Abaqus mesh, Yeoh card from its tensile data, plane strain as in the paper; chord angle against the eight
+  measured points, 5-40 kPa (one finger, one ascending sequence; reading uncertainty about 1 deg).
+config: ../scenarios/actuation/ribbed_finger.yaml
+tier: full
+quantity: chord angle [deg] vs pressure
+metric: {curve: {x: cavity_pressure, x_scale: 1.0e-3, y: chord_angle, y_scale: 57.29577951308232}}
+truth:
+  dataset: {file: ../datasets/wang2026_finger.yaml, key: table, x: 0, y: 1}
+  source: measured, Wang et al. 2026 Table 5 (doi:10.3390/act15090488)
+runs:
+  - backend: fem
+    overrides: [body.mesh.size=1.5mm, simulation.timestep=10ms, simulation.output_rate=100Hz]
+    tolerance: 1.0
+  - backend: mujoco
+    overrides: [body.material.preset=posilicone_a20_wang2026_nh]
+    tolerance: 2.0
+    known_failure: true
+    note: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md)
+  - backend: sofa
+    overrides: [body.material.preset=posilicone_a20_wang2026_nh, simulation.timestep=2ms]
+    tolerance: 2.0
+    known_failure: true
+    note: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md)

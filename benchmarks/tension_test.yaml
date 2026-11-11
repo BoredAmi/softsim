@@ -1,0 +1,21 @@
+name: tension_test
+description: >-
+  Roller tension test, 10 x 10 x 20 mm Neo-Hookean bar (E 100 kPa, nu 0.45) pulled 10% by prescribed motion; the
+  pull at the hold is the homogeneous uniaxial stress times the area, which linear and quadratic tetrahedra both
+  represent exactly. MuJoCo and SOFA run the stable Neo-Hookean of Smith et al., 0.9% stiffer at 10%.
+config: ../scenarios/actuation/tension_test.yaml
+tier: quick
+quantity: pull [N]
+metric: {summary: top_final_reaction_z}
+truth:
+  analytic:
+    function: uniaxial_force
+    args:
+      material: {density: 1070, elastic: {model: neo_hookean, youngs_modulus: 100000, poisson_ratio: 0.45}}
+      stretch: 1.1
+      area: 1.0e-4
+  source: exact homogeneous uniaxial stress (softsim.analytic.uniaxial_force)
+runs:
+  - {backend: fem, overrides: [simulation.timestep=5ms], tolerance: 0.001}
+  - {backend: mujoco, tolerance: 0.015, note: stable Neo-Hookean is 0.9% stiffer than the split form at 10%}
+  - {backend: sofa, tolerance: 0.015, note: stable Neo-Hookean is 0.9% stiffer than the split form at 10%}

@@ -84,3 +84,13 @@ def cantilever_tip_deflection(force: float, length: float, youngs: float, poisso
     shear = youngs / (2 * (1 + poisson))
     k = 10 * (1 + poisson) / (12 + 11 * poisson)
     return force * length**3 / (3 * youngs * inertia) + force * length / (k * shear * width * height)
+
+
+def uniaxial_force(material: dict, stretch: float, area: float) -> float:
+    """Pull [N] on a bar of cross-section ``area`` [m^2] held in homogeneous uniaxial stress at ``stretch``
+    (the nominal stress of :func:`softsim.materials.homogeneous.curve`, exact at finite strain; needs the
+    fem extra). ``material`` is a card mapping or preset name."""
+    from softsim.materials import load_material
+    from softsim.materials.homogeneous import curve
+
+    return float(curve(load_material(material), "uniaxial", [stretch]).stress.iloc[0] * area)

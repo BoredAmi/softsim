@@ -1,0 +1,22 @@
+name: cable_cantilever
+description: >-
+  10 x 10 x 60 mm beam (E 500 kPa) bent by a cable 3 mm off its axis, anchored 5 mm below the top, 0.7 N: a pure
+  moment, so Euler-Bernoulli gives the tip rotation exactly at any angle (with the Neo-Hookean tangent under the
+  cable's pre-compression).
+config: ../scenarios/actuation/cable_cantilever.yaml
+tier: quick
+quantity: tip angle [rad]
+metric: {summary: final_bend_angle}
+truth:
+  analytic:
+    function: cable_beam_tip_angle
+    args: {tension: 0.7, cable_x: 0.003, length: 0.055, youngs: [500000.0], edges: [-0.005, 0.005], width: 0.01}
+  source: Euler-Bernoulli, pure moment (softsim.analytic.cable_beam_tip_angle)
+runs:
+  - {backend: fem, overrides: [simulation.timestep=2ms], tolerance: 0.02}
+  - backend: rod
+    overrides: [simulation.timestep=1ms]
+    tolerance: 0.04
+    note: a materially linear beam, so it misses the 2.8% Neo-Hookean stiffening under the cable pre-compression (2T/EA)
+  - {backend: mujoco, tolerance: 0.35, note: linear tetrahedra lock in bending, about -30% at 2 mm}
+  - {backend: sofa, tolerance: 0.35, note: linear tetrahedra lock in bending, about -30% at 2 mm}

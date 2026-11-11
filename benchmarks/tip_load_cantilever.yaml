@@ -1,0 +1,16 @@
+name: tip_load_cantilever
+description: >-
+  The same beam under a 5 mN dead load along +x spread over its top face. Euler-Bernoulli F L^3 / (3 E I) =
+  0.864 mm; the reference converges to it (Timoshenko's 2.4% shear is offset by the fully clamped root).
+config: ../scenarios/actuation/tip_load_cantilever.yaml
+tier: quick
+quantity: tip deflection [m]
+metric: {summary: tip_force_final_displacement}
+truth:
+  value: 8.64e-4
+  source: Euler-Bernoulli F L^3 / (3 E I)
+runs:
+  - {backend: fem, overrides: [simulation.timestep=2ms], tolerance: 0.03}
+  - {backend: rod, overrides: [simulation.timestep=1ms], tolerance: 0.02}
+  - {backend: mujoco, tolerance: 0.35, note: linear tetrahedra lock in bending, about -30% at 2 mm}
+  - {backend: sofa, tolerance: 0.35, note: linear tetrahedra lock in bending, about -30% at 2 mm}
