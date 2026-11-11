@@ -30,15 +30,7 @@ from pydantic import Field, model_validator
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel, validate
 from softsim.config.units import (
-    Density,
-    Length,
-    Pressure,
-    Rate,
-    StrainRate,
-    Temperature,
-    Time,
-    Viscosity,
-    parse_quantity,
+    Density, FieldStrength, Length, Pressure, Rate, StrainRate, Temperature, Time, Viscosity, parse_quantity,
 )
 
 PoissonRatio = Annotated[float, Field(gt=-1.0, lt=0.5)]
@@ -349,8 +341,11 @@ class MagnetoActive(StrictModel):
     ``3 phi / (1 - phi)`` from ``particle_volume_fraction``), ``N`` the body's demagnetising factor along the axis, by
     default that of the rectangular block bounding the body at rest along ``along``, ``normal`` and across (exact,
     Aharoni 1998: right for strips and plates, approximate for other shapes); or give ``demagnetization`` as
-    ``[N_along, N_normal, N_across]``. Linear: keep the induced magnetisation ``chi H`` well below the composite's
-    ``saturation_magnetization`` (recorded for that check, not used by the model). The field comes from the scene's
+    ``[N_along, N_normal, N_across]``. With ``saturation_magnetization`` M_s > 0 the induced magnetisation saturates,
+    ``M = M_s tanh(chi H / M_s)`` along the easiest axis (softsim.fem.magnetic); 0 (the default) keeps the linear law,
+    right while ``chi H`` is well below the composite's saturation. ``remanent_magnetization`` [A/m, body frame] is a
+    fixed magnetisation from hard-magnetic particles (NdFeB), carried by the deformation: energy ``-mu0 (F M_r) . H``
+    (Zhao et al. 2019); a purely hard-magnetic composite has ``susceptibility: 0``. The field comes from the scene's
     ``magnetic_field`` (softsim.magnetism).
     """
 
@@ -358,7 +353,8 @@ class MagnetoActive(StrictModel):
     matrix: HyperelasticMatrix
     susceptibility: Annotated[float, Field(ge=0)] | None = None
     particle_volume_fraction: Annotated[float, Field(ge=0, lt=1)] | None = None
-    saturation_magnetization: Annotated[float, Field(ge=0)] = 0.0  # A/m
+    saturation_magnetization: Annotated[FieldStrength, Field(ge=0)] = 0.0  # A/m (units allowed: "400 kA/m")
+    remanent_magnetization: tuple[FieldStrength, FieldStrength, FieldStrength] = (0.0, 0.0, 0.0)  # A/m, body frame
     demagnetization: Literal["block"] | tuple[Annotated[float, Field(ge=0, le=1)], Annotated[float, Field(ge=0, le=1)],
                                               Annotated[float, Field(ge=0, le=1)]] = "block"
     along: tuple[float, float, float] = (1.0, 0.0, 0.0)

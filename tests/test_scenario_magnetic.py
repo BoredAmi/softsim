@@ -42,6 +42,12 @@ def test_the_card_gives_each_axis_its_blocks_susceptibility():
     assert m.chi_across == pytest.approx(1 / (1 + n_across), rel=1e-12)
     np.testing.assert_allclose(m.along, (0, 0, 1))
     np.testing.assert_allclose(m.normal, (1, 0, 0))
+    assert m.saturation == 0.0  # the card sets none: linear
+
+
+def test_the_cards_saturation_reaches_the_reference():
+    _, fem = build(["body.material.elastic.saturation_magnetization=4e5"])
+    assert fem._problem.magnetic.saturation == 4e5
 
 
 def test_a_bar_from_the_config_bends_by_the_closed_form():
@@ -213,3 +219,12 @@ def test_prony_limits_only_the_backends_that_add_it_explicitly():
     codes = {cls.name: {f.code for f in check_scene(scene, implicit_prony=cls.implicit_prony)}
              for cls in (FemBackend, MujocoBackend)}
     assert "prony-unstable" in codes["mujoco"] and "prony-unstable" not in codes["fem"]
+
+
+def test_the_cards_remanence_reaches_the_reference_in_the_world_frame():
+    """The card's remanence is in the body frame; the bar's body frame is the world's here, and a purely hard-magnetic
+    card has susceptibility 0."""
+    _, fem = build(["body.material.elastic.remanent_magnetization=[0, 0, 9e4]", "body.material.elastic.susceptibility=0"])
+    m = fem._problem.magnetic
+    np.testing.assert_allclose(m.remanence, (0, 0, 9e4))
+    assert m.chi_along == m.chi_normal == 0.0

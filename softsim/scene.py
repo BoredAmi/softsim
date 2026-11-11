@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, Literal, Union
+from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 
 import numpy as np
 from pydantic import Field
@@ -16,7 +16,7 @@ from pydantic import Field
 from softsim.actuation import Actuator, CableActuator, ForceActuator, PressureActuator, cable_rows
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
-from softsim.config.units import Frequency, Length, Time
+from softsim.config.units import Frequency, Length, Time, Velocity
 from softsim.geometry.rigid import Part
 from softsim.materials.models import Adhesion, Friction, Material
 from softsim.meshing import TetMesh
@@ -61,7 +61,11 @@ class ContactSettings(StrictModel):
     ``cone`` and ``impratio`` are MuJoCo's friction cone and frictional-to-normal
     impedance ratio (other backends ignore them): an elliptic cone with
     ``impratio`` 10-100 lets soft bodies slip less under sticking friction, which
-    otherwise costs impact energy (docs/backends/mujoco.md).
+    otherwise costs impact energy (docs/backends/mujoco.md). ``slip_speed`` is the
+    reference's (``fem``) Coulomb smoothing as a slip speed: below it friction acts as a
+    spring, so a stuck contact at a fraction ``F / (mu N)`` of its limit creeps at that
+    fraction of ``slip_speed``, whatever the step. Left out, the smoothing is 1 um of slip
+    per step and the creep scales with 1 / dt (docs/decisions.md, entry 6).
     """
 
     timeconst: Union[Annotated[Time, Field(gt=0)], Literal["auto"]] = "auto"
@@ -71,6 +75,7 @@ class ContactSettings(StrictModel):
     active_layers: Annotated[int, Field(ge=1)] = 1
     cone: Literal["pyramidal", "elliptic"] = "pyramidal"
     impratio: Annotated[float, Field(ge=1)] = 1.0
+    slip_speed: Optional[Annotated[Velocity, Field(gt=0)]] = None
 
     def resolved_timeconst(self, timestep: float) -> float:
         return 2.0 * timestep if self.timeconst == "auto" else float(self.timeconst)
@@ -317,8 +322,11 @@ class RigidBodySpec:
 class MountMotion:
     """Prescribed translation of the soft body's fixed (pinned) vertices: a moving mount, e.g. a finger
     on a robot arm. ``positions[i]`` [m] is the mount's displacement from rest at ``times[i]`` [s] (the
-    first is zero). Between waypoints it moves point to point with minimum jerk (quintic, at rest at
-    every waypoint: continuous acceleration, no overshoot); before and after it is held.
+    first is zero). Between waypoints it moves with minimum jerk (quintic): at rest at every waypoint by
+    default (continuous acceleration, no overshoot), or passing waypoint ``i`` at speed ``velocities[i]``
+    [m/s] (quintic Hermite, zero acceleration at the waypoints: two waypoints ``v T`` apart that both carry
+    ``v`` are a constant speed exactly). Before the first waypoint it is at rest (its speed must be zero);
+    after the last it keeps the last waypoint's speed (held, by default).
 
     Backends simulate in the mount's frame, which is exact for a translation: the pinned vertices stay
     put and every element feels the inertial body force ``-rho a(t)``, i.e. gravity ``g - a(t)``
@@ -326,6 +334,7 @@ class MountMotion:
 
     times: tuple[float, ...]
     positions: tuple[tuple[float, float, float], ...]
+    velocities: tuple[tuple[float, float, float], ...] | None = None
 
     def __post_init__(self) -> None:
         t = np.asarray(self.times, float)
@@ -333,19 +342,34 @@ class MountMotion:
             raise ValueError("mount motion needs two or more waypoints at increasing times")
         if np.any(np.asarray(self.positions[0], float) != 0):
             raise ValueError("mount motion: the first waypoint is the rest position, displacement [0, 0, 0]")
+        if self.velocities is not None:
+            if len(self.velocities) != len(t):
+                raise ValueError("mount motion: one speed per waypoint")
+            if np.any(np.asarray(self.velocities[0], float) != 0):
+                raise ValueError("mount motion: the first waypoint is at rest (speed 0)")
+
+    def _speed(self, i: int) -> np.ndarray:
+        return np.zeros(3) if self.velocities is None else np.asarray(self.velocities[i], float)
 
     def _eval(self, t: float, nu: int) -> np.ndarray:
         """``nu``-th time derivative of the displacement at ``t``."""
         times = self.times
-        if t <= times[0] or t >= times[-1]:
-            return np.asarray(self.positions[-1 if t >= times[-1] else 0], float) * (nu == 0)
+        if t <= times[0]:
+            return np.zeros(3)
+        if t >= times[-1]:
+            v = self._speed(-1)
+            return (np.asarray(self.positions[-1], float) + v * (t - times[-1]), v, np.zeros(3))[nu]
         i = int(np.searchsorted(times, t, side="right")) - 1
         span = times[i + 1] - times[i]
         u = (t - times[i]) / span
-        step = np.asarray(self.positions[i + 1], float) - np.asarray(self.positions[i], float)
-        s = (10 * u**3 - 15 * u**4 + 6 * u**5, (30 * u**2 - 60 * u**3 + 30 * u**4) / span,
-             (60 * u - 180 * u**2 + 120 * u**3) / span**2)[nu]
-        return (np.asarray(self.positions[i], float) if nu == 0 else 0.0) + s * step
+        p0, p1 = np.asarray(self.positions[i], float), np.asarray(self.positions[i + 1], float)
+        v0, v1 = self._speed(i) * span, self._speed(i + 1) * span  # per unit u
+        # quintic Hermite basis with zero end accelerations: value, d/du, d2/du2
+        h0 = (1 - 10 * u**3 + 15 * u**4 - 6 * u**5, -30 * u**2 + 60 * u**3 - 30 * u**4, -60 * u + 180 * u**2 - 120 * u**3)
+        h1 = (u - 6 * u**3 + 8 * u**4 - 3 * u**5, 1 - 18 * u**2 + 32 * u**3 - 15 * u**4, -36 * u + 96 * u**2 - 60 * u**3)
+        h4 = (-4 * u**3 + 7 * u**4 - 3 * u**5, -12 * u**2 + 28 * u**3 - 15 * u**4, -24 * u + 84 * u**2 - 60 * u**3)
+        h5 = (10 * u**3 - 15 * u**4 + 6 * u**5, 30 * u**2 - 60 * u**3 + 30 * u**4, 60 * u - 180 * u**2 + 120 * u**3)
+        return (h0[nu] * p0 + h1[nu] * v0 + h4[nu] * v1 + h5[nu] * p1) / span**nu
 
     def position(self, t: float) -> np.ndarray:
         return self._eval(t, 0)
@@ -361,8 +385,10 @@ class MountMotion:
 class MountSpin:
     """Prescribed rotation of the mount about a fixed axis, e.g. a finger on a spinning arm: the fixed
     vertices turn about ``axis`` (a unit vector) through the point ``center`` [m] (rest frame) by
-    ``angles[i]`` [rad] at ``times[i]`` [s] (the first is zero), minimum jerk between waypoints (at rest at
-    each, like :class:`MountMotion`, whose translation it composes with: ``x_world = R (x - c) + c + p``).
+    ``angles[i]`` [rad] at ``times[i]`` [s] (the first is zero), minimum jerk between waypoints, at rest at
+    each or turning at ``rates[i]`` [rad/s] (a constant rate between two waypoints that carry it; after the
+    last the last rate is kept), like :class:`MountMotion`, whose translation it composes with:
+    ``x_world = R (x - c) + c + p``.
 
     In the mount's frame a point feels, per unit mass, gravity ``R^T (g - p'')`` and the fictitious
     accelerations ``-alpha x r - omega x (omega x r) - 2 omega x v`` (Euler, centrifugal, Coriolis), with
@@ -373,11 +399,16 @@ class MountSpin:
     center: tuple[float, float, float]
     times: tuple[float, ...]
     angles: tuple[float, ...]
+    rates: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         if abs(np.linalg.norm(np.asarray(self.axis, float)) - 1.0) > 1e-9:
             raise ValueError("mount rotation: the axis must be a unit vector")
-        object.__setattr__(self, "_path", MountMotion(tuple(self.times), tuple((a, 0.0, 0.0) for a in self.angles)))
+        if self.rates is not None and len(self.rates) != len(self.times):
+            raise ValueError("mount rotation: one rate per waypoint")
+        speeds = None if self.rates is None else tuple((w, 0.0, 0.0) for w in self.rates)
+        object.__setattr__(self, "_path", MountMotion(tuple(self.times), tuple((a, 0.0, 0.0) for a in self.angles),
+                                                      speeds))
 
     def angle(self, t: float) -> float:
         return float(self._path.position(t)[0])

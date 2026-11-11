@@ -17,6 +17,14 @@ Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU 
 | cable_cantilever | tip angle [rad] | 0.2696 | mujoco | 0.188 | -30.3% | ±35% | ✅ pass | 2 mm (4500 tets) | 51 | 2026-11-11 13c59f4+dirty |
 | cable_cantilever | tip angle [rad] | 0.2696 | sofa | 0.188 | -30.3% | ±35% | ✅ pass | 2 mm (4500 tets) | 432 | 2026-11-11 13c59f4+dirty |
 | | *truth: Euler-Bernoulli, pure moment (softsim.analytic.cable_beam_tip_angle)* | | | | | | | | | |
+| sliding_block | travel at 300 ms [m] | 0.06979 | fem | 0.07045 | +0.9% | ±3% | ✅ pass | 5 mm (768 tets) | 50 | 2026-11-11 9484a62+dirty |
+| sliding_block | travel at 300 ms [m] | 0.06979 | mujoco | 0.07035 | +0.8% | ±3% | ✅ pass | 5 mm (768 tets) | 14 | 2026-11-11 9484a62+dirty |
+| sliding_block | travel at 300 ms [m] | 0.06979 | sofa | 0.07039 | +0.9% | ±3% | ✅ pass | 5 mm (768 tets) | 398 | 2026-11-11 9484a62+dirty |
+| | *truth: Coulomb friction, rigid block (softsim.analytic.sliding_block_travel)* | | | | | | | | | |
+| sticking_block | travel at 300 ms [m] | 0 | fem | 7.287e-05 | +7.29e-05 | ±5e-05 | ❌ fail (known) | 5 mm (768 tets) | 36 | 2026-11-11 9484a62+dirty |
+| sticking_block | travel at 300 ms [m] | 0 | mujoco | 4.296e-05 | +4.3e-05 | ±5e-05 | ✅ pass | 5 mm (768 tets) | 15 | 2026-11-11 9484a62+dirty |
+| sticking_block | travel at 300 ms [m] | 0 | sofa | 3.123e-05 | +3.12e-05 | ±5e-05 | ✅ pass | 5 mm (768 tets) | 364 | 2026-11-11 9484a62+dirty |
+| | *truth: Coulomb friction, sticking (F < mu m g)* | | | | | | | | | |
 | tension_test | pull [N] | 0.9089 | fem | 0.9089 | -0.0% | ±0.1% | ✅ pass | 2.5 mm (768 tets) | 7 | 2026-11-11 13c59f4+dirty |
 | tension_test | pull [N] | 0.9089 | mujoco | 0.9173 | +0.9% | ±1.5% | ✅ pass | 2.5 mm (768 tets) | 5 | 2026-11-11 13c59f4+dirty |
 | tension_test | pull [N] | 0.9089 | sofa | 0.9174 | +0.9% | ±1.5% | ✅ pass | 2.5 mm (768 tets) | 36 | 2026-11-11 13c59f4+dirty |
@@ -31,6 +39,8 @@ Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU 
 
 | Case | Quantity | Truth | Backend | Value | Error | Tolerance | Status | Mesh | Wall [s] | Run |
 |---|---|---|---|---|---|---|---|---|---|---|
+| hard_magnetic_cantilever | tip deflection [m] | 0.001018 | fem | 0.001033 | +1.5% | ±2% | ✅ pass | 1 mm (5760 tets) | 557 | 2026-11-11 9484a62+dirty |
+| | *truth: Euler-Bernoulli under a uniform couple c = mu0 M_r H A* | | | | | | | | | |
 | wang_finger | chord angle [deg] vs pressure | 8 points | fem | | | ≤1 RMS | – not run | | | |
 | wang_finger | chord angle [deg] vs pressure | 8 points | mujoco | | | ≤2 RMS | – not run | | | |
 | wang_finger | chord angle [deg] vs pressure | 8 points | sofa | | | ≤2 RMS | – not run | | | |
@@ -39,6 +49,9 @@ Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU 
 ## Cases
 
 - **cable_cantilever**: 10 x 10 x 60 mm beam (E 500 kPa) bent by a cable 3 mm off its axis, anchored 5 mm below the top, 0.7 N: a pure moment, so Euler-Bernoulli gives the tip rotation exactly at any angle (with the Neo-Hookean tangent under the cable's pre-compression). Notes: rod: a materially linear beam, so it misses the 2.8% Neo-Hookean stiffening under the cable pre-compression (2T/EA); mujoco: linear tetrahedra lock in bending; sofa: linear tetrahedra lock in bending.
+- **hard_magnetic_cantilever**: A 4 x 4 x 60 mm bar magnetised along its length (100 kA/m, hard-magnetic) in a 30 A/m field across it: the couple mu0 M_r x H bends it by Euler-Bernoulli's c L^3 / (3 E I), c = mu0 M_r H A. Reference only (MuJoCo and SOFA have no magnetism). Notes: fem: +1.1% at a 1 mm mesh in tests/test_magnetic.py (second order).
+- **sliding_block**: A 40 x 40 x 10 mm silicone block (17.1 g) on the ground, friction 0.5, pushed by 0.12 N spread over its top face (ramped over 50 ms, then held): Coulomb sliding, a = (F - mu m g) / m. The travel after 300 ms against the rigid block's exact travel (the block's own shear adds about 0.01 mm).
+- **sticking_block**: The same block pushed by 0.06 N, 0.71 of the friction limit (0.084 N): Coulomb says it sticks, so the top face moves only by the block's shear (about 0.005 mm). MuJoCo's friction is a soft constraint and creeps at a steady rate instead (about 0.13 mm/s here), which is what a held grasp does on MuJoCo; the tolerance is that creep over 300 ms. Notes: fem: the reference's Coulomb law is smoothed below a slip of 1 um per step, so a stuck contact creeps at a rate set by the step (0.233 mm/s at 2 ms, 0.117 mm/s at 4 ms, measured); contact.slip_speed fixes it (docs/decisions.md, entry 6); mujoco: soft-constraint friction creeps at about 0.13 mm/s while sticking.
 - **tension_test**: Roller tension test, 10 x 10 x 20 mm Neo-Hookean bar (E 100 kPa, nu 0.45) pulled 10% by prescribed motion; the pull at the hold is the homogeneous uniaxial stress times the area, which linear and quadratic tetrahedra both represent exactly. MuJoCo and SOFA run the stable Neo-Hookean of Smith et al., 0.9% stiffer at 10%. Notes: mujoco: stable Neo-Hookean is 0.9% stiffer than the split form at 10%; sofa: stable Neo-Hookean is 0.9% stiffer than the split form at 10%.
 - **tip_load_cantilever**: The same beam under a 5 mN dead load along +x spread over its top face. Euler-Bernoulli F L^3 / (3 E I) = 0.864 mm; the reference converges to it (Timoshenko's 2.4% shear is offset by the fully clamped root). Notes: mujoco: linear tetrahedra lock in bending; sofa: linear tetrahedra lock in bending.
 - **wang_finger**: Cast ribbed pneumatic finger of Wang et al., Actuators 15(9), 488 (2026), CC BY 4.0: geometry from the paper's Abaqus mesh, Yeoh card from its tensile data, plane strain as in the paper; chord angle against the eight measured points, 5-40 kPa (one finger, one ascending sequence; reading uncertainty about 1 deg). Notes: mujoco: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md); sofa: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md).

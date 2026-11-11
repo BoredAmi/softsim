@@ -171,9 +171,12 @@ class FemBackend(Backend):
         law, kappa, prony = from_material(body.material)
         mat = body.material
 
+        speed = scene.contact.slip_speed
+        slip_tolerance = SLIP_TOLERANCE if speed is None else float(speed) * scene.simulation.timestep
+
         def contact(mu: float, adhesion) -> ContactSettings:
             return ContactSettings(stiffness=CONTACT_STIFFNESS, stick=mu >= STICK_MU,
-                                   friction=0.0 if mu >= STICK_MU else mu, slip_tolerance=SLIP_TOLERANCE,
+                                   friction=0.0 if mu >= STICK_MU else mu, slip_tolerance=slip_tolerance,
                                    adhesion_strength=adhesion.strength if adhesion else 0.0,
                                    adhesion_range=adhesion.range if adhesion else 3e-4)
 
@@ -267,7 +270,9 @@ class FemBackend(Backend):
         else:
             factors = list(e.demagnetization)
         chi = [e.chi / (1.0 + n * e.chi) for n in factors]
-        return SoftMagnet(*chi, along=tuple(rot @ along), normal=tuple(rot @ normal))
+        return SoftMagnet(*chi, along=tuple(rot @ along), normal=tuple(rot @ normal),
+                          saturation=float(e.saturation_magnetization),
+                          remanence=tuple(float(v) for v in rot @ np.asarray(e.remanent_magnetization, float)))
 
     def attach(self, solver):
         """Give ``solver`` (one built on this backend's problem, e.g. a static one) its prescribed motion:

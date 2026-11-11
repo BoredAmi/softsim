@@ -187,6 +187,16 @@ class Simulation:
             rows, spent, first = saved.rows, saved.wall_time, saved.sample + 1
             verts = {k: list(v) for k, v in saved.vertices.items()} if record_vertices else {}
         start = last_save = time.perf_counter()
+        try:
+            self._run_samples(first, n_samples, rows, verts, controller, progress, path, mark, spent, start, last_save)
+        except Exception as exc:
+            # keep what was computed: the caller (softsim run) saves it, marked incomplete
+            if rows:
+                exc.partial = self.make_result(rows, spent + time.perf_counter() - start, verts)
+            raise
+        return self.make_result(rows, spent + time.perf_counter() - start, verts)
+
+    def _run_samples(self, first, n_samples, rows, verts, controller, progress, path, mark, spent, start, last_save):
         for i in range(first, n_samples + 1):
             if i:
                 self.step()
@@ -203,7 +213,6 @@ class Simulation:
                 write_checkpoint(path, Saved(mark, i, spent + now - start, rows, {k: np.stack(v) for k, v in verts.items()},
                                              self.backend.checkpoint()))
                 last_save = now
-        return self.make_result(rows, spent + time.perf_counter() - start, verts)
 
     def make_result(self, rows: list[dict[str, float]], wall_time: float,
                     vertices: Mapping[str, list[np.ndarray]] | None = None) -> RunResult:

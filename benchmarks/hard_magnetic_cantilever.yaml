@@ -1,0 +1,14 @@
+name: hard_magnetic_cantilever
+description: >-
+  A 4 x 4 x 60 mm bar magnetised along its length (100 kA/m, hard-magnetic) in a 30 A/m field across it: the couple
+  mu0 M_r x H bends it by Euler-Bernoulli's c L^3 / (3 E I), c = mu0 M_r H A. Reference only (MuJoCo and SOFA have no
+  magnetism).
+config: ../scenarios/magnetic/hard_magnetic_cantilever.yaml
+tier: full
+quantity: tip deflection [m]
+metric: {summary: final_tip_x}
+truth:
+  value: 1.01788e-3
+  source: Euler-Bernoulli under a uniform couple c = mu0 M_r H A
+runs:
+  - {backend: fem, tolerance: 0.02, note: +1.1% at a 1 mm mesh in tests/test_magnetic.py (second order)}

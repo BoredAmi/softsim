@@ -276,8 +276,8 @@ Done so far ([actuation.md](actuation.md)):
   (a PI loop holding a cable beam's tip angle is a test).
 
 Still to do:
-- **More actuators:** a constant-rate rotating mount (today every waypoint is at
-  rest).
+- ~~**More actuators:** a constant-rate rotating mount~~ done 2026-11-11: waypoints `[time, angle, rate]`
+  ([actuation.md](actuation.md#rotating-mount)).
 - **Backend mappings (optional, for speed or stability):** tried and not shipped.
   SoftRobots' `CableConstraint` (plugin present in the SOFA v26.06 install; load
   it with `RequiredPlugin SoftRobots`, via points as a `BarycentricMapping`
@@ -345,7 +345,13 @@ grid.
 Started 2026-11-06: two-finger gripper on the reference, a fast finger fitted to it, a local live page and a grasp map
 ([gripper.md](gripper.md)). Two finite-element grasps with Coulomb friction (10 g held, 30 g dropped) agree with the fast
 finger and play in the page's Truth tab. The finite-element finger's tip force is about 5.5 times below the measurement
-([actuation.md](actuation.md#tip-force-a-test-it-fails)); that gap is open.
+with its tip sliding on the gauge, and about twice above with its tip stuck to it: the unrecorded contact explains the
+gap, so the force cannot test the model (2026-11-11, [actuation.md](actuation.md#tip-force-a-test-it-fails)).
+
+2026-11-11: **friction benchmark** (`scenarios/actuation/sliding_block.yaml`, `benchmarks/sliding_block.yaml` and
+`sticking_block.yaml`, `tests/test_friction.py`). A silicone block pushed across the ground against exact Coulomb
+sliding: all three backends within 0.8-0.94%. Below the limit, MuJoCo creeps at 0.13 mm/s (soft constraints) and the
+reference at a rate set by its time step (its friction smoothing is per step; [decisions.md](decisions.md), entry 6).
 
 ## M10: magnetic soft robots (MRE)
 
@@ -381,9 +387,11 @@ dipole's gradient and a cantilever's closed form up to buckling (`tests/test_mag
   - the 15 mm strip, whose overhanging flaps snap onto the magnet's poles;
   - the strip closing from a gap: it hits the magnet at metres per second.
 - **Next:**
-  - saturation, using the card's `saturation_magnetization`;
+  - ~~saturation~~ done 2026-11-11: a tanh law from the card's `saturation_magnetization` (0 keeps the linear law),
+    checked against the closed forms ([magnetic.md](magnetic.md));
   - the finger against a gauge, once the set-up is known;
-  - a hard-magnetic model.
+  - ~~a hard-magnetic model~~ done 2026-11-11: remanent magnetisation `-mu0 (F M_r) . H` (Zhao et al. 2019),
+    checked against closed forms ([magnetic.md](magnetic.md)).
 
 ## M11: design and control toolkit
 

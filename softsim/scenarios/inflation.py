@@ -40,7 +40,7 @@ from softsim.actuation import (CableActuator, CableActuatorConfig, ForceActuator
                                cable_length, cable_rows, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
-from softsim.config.units import Angle, Length, Mass, Time
+from softsim.config.units import Angle, AngularVelocity, Length, Mass, Time
 from softsim.errors import ConfigError
 from softsim.geometry import MeshSettings, SoftShape, check_resolution
 from softsim.scenarios.base import Scenario, ScenarioConfig
@@ -91,12 +91,15 @@ class PrescribedRegionConfig(StrictModel):
 class MountRotationConfig(StrictModel):
     """The fixed regions turn about ``axis`` through ``center`` (softsim.scene.MountSpin): ``path`` is
     ``[[time, angle], ...]`` from rest (the first angle is zero), minimum jerk between waypoints, held
-    after the last. Composes with ``mount_path``. Region forces and prescribed regions are refused (their
+    after the last; a waypoint ``[time, angle, rate]`` is passed turning at ``rate`` instead of at rest,
+    so ``[[0 ms, 0 rad], [100 ms, 3 rad, 60 rad/s], [500 ms, 27 rad, 60 rad/s]]`` spins up and then turns
+    at a constant 60 rad/s, and keeps turning after the last waypoint. Composes with ``mount_path``. Region forces and prescribed regions are refused (their
     directions would turn with the mount's frame). Outputs ``mount_angle`` [rad]."""
 
     axis: tuple[float, float, float]
     center: tuple[Length, Length, Length] = (0.0, 0.0, 0.0)
-    path: list[tuple[Annotated[Time, Field(ge=0)], Angle]]
+    path: list[Union[tuple[Annotated[Time, Field(ge=0)], Angle],
+                     tuple[Annotated[Time, Field(ge=0)], Angle, AngularVelocity]]]
 
 
 class InflatedBodyConfig(StrictModel):
@@ -232,7 +235,9 @@ class InflationScenario(Scenario):
             if rotation and not np.linalg.norm(axis) > 0:
                 raise ValueError("mount_rotation: the axis must be non-zero")
             spin = (MountSpin(tuple(axis / np.linalg.norm(axis)), tuple(rotation.center),
-                              tuple(t for t, _ in rotation.path), tuple(a for _, a in rotation.path))
+                              tuple(w[0] for w in rotation.path), tuple(w[1] for w in rotation.path),
+                              tuple(w[2] if len(w) > 2 else 0.0 for w in rotation.path)
+                              if any(len(w) > 2 for w in rotation.path) else None)
                     if rotation else None)
             self._spin = spin
             return Scene(soft_bodies=(body,), simulation=self.config.simulation, contact=self.config.contact,

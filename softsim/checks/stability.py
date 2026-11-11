@@ -165,8 +165,9 @@ def _spin_findings(scene: Scene, body, dt: float) -> list[Finding]:
     if spin is None:
         return []
     out = []
-    # minimum jerk peaks at 1.875 x the mean rate of its segment
-    peak = max(1.875 * abs(b - a) / (t1 - t0) for a, b, t0, t1 in zip(spin.angles, spin.angles[1:], spin.times, spin.times[1:]))
+    # the path's peak rate, sampled (a rest-to-rest segment peaks at 1.875 x its mean; one with waypoint rates anywhere)
+    samples = np.linspace(spin.times[0], spin.times[-1], 64 * len(spin.times) + 1)
+    peak = max(abs(spin.rate(t)) for t in samples)
     if peak * dt > 0.15:
         out.append(Finding("warning", "spin-step",
                            f"{body.name}: the mount turns {peak * dt:.2f} rad per step at its peak rate "

@@ -153,3 +153,103 @@ def test_the_magnetic_kernels_in_chunks_are_the_same(monkeypatch):
     assert parts.magnetic_energy(y) == pytest.approx(whole.magnetic_energy(y), rel=1e-12)
     for a, b in zip(parts._grad_hess(y, ctx), whole._grad_hess(y, ctx)):
         np.testing.assert_allclose(a, b, rtol=1e-12, atol=1e-12 * np.abs(b).max())
+
+
+def _magnetisation(material, h):
+    """M = -dw/d(mu0 H) [A/m] at rest (F = I)."""
+    import jax
+
+    from softsim.fem.magnetic import density_in
+
+    return -np.asarray(jax.grad(lambda hh: density_in(jnp.eye(3), hh, material))(jnp.asarray(h, float))) / MU0
+
+
+def test_saturation_is_a_tanh_along_the_easy_axis_and_bounded_everywhere():
+    """M = M_s tanh(chi H / M_s) along the easiest axis, chi H at small fields (the linear law), never above M_s in
+    any direction; M_s = 0 is exactly the linear law."""
+    m_s, chi = 4e5, 2.0
+    sat = SoftMagnet(chi, 0.5, 0.8, saturation=m_s)
+    lin = SoftMagnet(chi, 0.5, 0.8)
+    for h in (1.0, 1e3, 5e4, 2e5, 1e6, 1e8):
+        assert _magnetisation(sat, (h, 0, 0))[0] == pytest.approx(m_s * np.tanh(chi * h / m_s), rel=1e-9)
+    small = (30.0, -20.0, 10.0)
+    np.testing.assert_allclose(_magnetisation(sat, small), _magnetisation(lin, small), rtol=1e-6)
+    np.testing.assert_allclose(_magnetisation(lin, small), [chi * 30, 0.8 * -20, 0.5 * 10], rtol=1e-12)
+    rng = np.random.default_rng(0)
+    for _ in range(50):
+        h = rng.normal(size=3) * 10 ** rng.uniform(2, 8)
+        assert np.linalg.norm(_magnetisation(sat, h)) <= m_s * (1 + 1e-9)
+    assert np.all(np.isfinite(_magnetisation(sat, (0.0, 0.0, 0.0))))
+    with pytest.raises(ValueError, match="saturation"):
+        SoftMagnet(1, 1, 1, saturation=-1)
+
+
+def test_a_saturated_body_has_the_energy_of_its_tanh_law():
+    """A uniform field along the bar's easy axis: E = -mu0 V M_s^2 / chi_a ln cosh(chi_a H / M_s), from below to well
+    above saturation."""
+    m_s = 2e4
+    s = Solid3DSolver(bar(0.03, 0.01, 0.004, 0.005, SoftMagnet(0.9, 0.2, 0.4, saturation=m_s)), dynamic=False)
+    v = 0.03 * 0.01 * 0.004
+    for h in (1e3, 3e4, 3e5):
+        s.magnetic_field[:3] = (h, 0, 0)
+        want = -MU0 * v * m_s ** 2 / 0.9 * np.log(np.cosh(0.9 * h / m_s))
+        assert s.magnetic_energy(np.zeros(3 * s.n)) == pytest.approx(want, rel=1e-9)
+
+
+def test_a_saturated_piece_is_pulled_by_its_saturation_not_its_susceptibility():
+    """The small piece of the gradient test, in a dipole strong enough to saturate it (chi H / M_s = 3): F_z =
+    mu0 V M dH/dz with M = M_s tanh(chi H / M_s), not the linear chi H, which would pull 3.0 times harder."""
+    chi, m_s, r = 0.5, 1e3, 0.1
+    s = Solid3DSolver(bar(0.002, 0.002, 0.002, 0.001, SoftMagnet(chi, chi, chi, saturation=m_s)), dynamic=False)
+    centre = jnp.asarray(s.p.mesh.nodes.min(axis=0) + 0.001)
+    h_target = 3 * m_s / chi
+    moment = h_target * 4 * np.pi * r ** 3 / 2
+    s.magnetic_field[:] = (0, 0, 0, 0, 0, moment, *np.asarray(centre + jnp.array([0, 0, -r])))
+    h, dh = 2 * moment / (4 * np.pi * r ** 3), -6 * moment / (4 * np.pi * r ** 4)
+    want = MU0 * 0.002 ** 3 * m_s * np.tanh(chi * h / m_s) * dh
+    d = 1e-6
+    y = np.zeros(3 * s.n)
+    y[2::3] = d
+    got = -(s.magnetic_energy(y) - s.magnetic_energy(-y)) / (2 * d)
+    assert got == pytest.approx(want, rel=2e-3)
+    assert abs(MU0 * 0.002 ** 3 * chi * h * dh / got) == pytest.approx(3 / np.tanh(3), rel=2e-3)
+
+
+def test_a_hard_magnetic_body_turns_and_stretches_with_its_remanence():
+    """Remanence M_r along x, uniform H: E = -mu0 V (F M_r) . H. Turned by t about y, F M_r = M_r (cos t, 0, -sin t);
+    stretched by s along x, F M_r = s M_r x (F, not its rotation: the magnetised material carries the moment)."""
+    m_r, h, v = 8e4, 2e3, 0.03 * 0.01 * 0.004
+    s = Solid3DSolver(bar(0.03, 0.01, 0.004, 0.005, SoftMagnet(0.0, 0.0, 0.0, remanence=(m_r, 0.0, 0.0))), dynamic=False)
+    for t in (0.0, 0.4, np.pi / 2, 2.5):
+        s.magnetic_field[:3] = (h, 0, 0)
+        assert s.magnetic_energy(rotated(s, t)) == pytest.approx(-MU0 * v * m_r * h * np.cos(t), abs=1e-12 * MU0 * v * m_r * h)
+        s.magnetic_field[:3] = (0, 0, h)
+        assert s.magnetic_energy(rotated(s, t)) == pytest.approx(MU0 * v * m_r * h * np.sin(t), abs=1e-12 * MU0 * v * m_r * h)
+    s.magnetic_field[:3] = (h, 0, 0)
+    for stretch in (1.1, 1.5):
+        y = np.zeros((s.n, 3))
+        y[:, 0] = (stretch - 1) * s.p.mesh.nodes[:, 0]
+        assert s.magnetic_energy(y.ravel()) == pytest.approx(-MU0 * v * m_r * h * stretch, rel=1e-9)
+
+
+@pytest.mark.slow
+def test_a_hard_magnetic_cantilever_bends_under_its_distributed_couple():
+    """Magnetised along its length, in a small field across it: the couple mu0 M_r x H, c = mu0 M_r H A per length, gives
+    Euler-Bernoulli's tip deflection c L^3 / (3 E I) towards the field (the moment turns to follow it). For a uniform
+    remanence the energy -mu0 M_r H du_z/dX integrates to the fibres' end displacements, so the load sits on the end
+    face (the same tip deflection as the couple's); the coarse mesh reads it locally soft: +5.5% at 2 mm, +2.1% at
+    1.33 mm, +1.1% at 1 mm (second order)."""
+    length, side, m_r, h = 0.06, 0.004, 1e5, 30.0
+    s = Solid3DSolver(bar(length, side, side, side / 4, SoftMagnet(0.0, 0.0, 0.0, remanence=(m_r, 0.0, 0.0)),
+                          pinned=True), dynamic=False)
+    s.magnetic_field[:3] = (0, 0, h)
+    assert s.advance(1.0)
+    nodes = s.p.mesh.nodes
+    tip = np.flatnonzero(np.isclose(nodes[:, 0], nodes[:, 0].max()))
+    couple = MU0 * m_r * h * side ** 2
+    want = couple * length ** 3 / (3 * E_MOD * side ** 4 / 12)
+    assert want == pytest.approx(1e-3, rel=0.05)  # about a millimetre: small deflection
+    assert s.y[:3 * s.n].reshape(-1, 3)[tip, 2].mean() == pytest.approx(want, rel=0.02)
+    s.magnetic_field[:3] = (0, 0, -h)  # the other way
+    assert s.advance(1.0)
+    assert s.y[:3 * s.n].reshape(-1, 3)[tip, 2].mean() == pytest.approx(-want, rel=0.02)

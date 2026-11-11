@@ -80,7 +80,19 @@ w = -mu0 / 2 (chi_a (a.H)^2 + chi_n (n.H)^2 + chi_b (H.H - (a.H)^2 - (n.H)^2))
 - **The field is applied, not solved for.** The strip's own field is not computed: the model is first order in `chi`,
   with only the demagnetising factors correcting for shape. The factors stay at their rest values as the body bends.
 - **Interactions.** Bodies do not magnetise one another, and magnets feel no force back.
-- **Saturation.** The model is linear: keep `chi H` below the composite's saturation magnetisation.
+- **Hard-magnetic particles** (NdFeB, magnetised before use): the card's `remanent_magnetization` M_r [A/m, body
+  frame] adds `w_r = -mu0 (F M_r) . H` per unit reference volume (Zhao, Kim, Yuk and Zhao, J. Mech. Phys. Solids 124,
+  2019), the magnetised material carried by the deformation; with `susceptibility: 0` the composite is purely hard.
+  Checks: a turned body's energy `-mu0 V M_r H cos t`, a stretched one's `-mu0 V s M_r H` (the deformation gradient,
+  not its rotation), and a cantilever magnetised along its length in a field across it, whose tip deflects by
+  Euler-Bernoulli's `c L^3 / (3 E I)`, `c = mu0 M_r H A` (+1.1% at a 1 mm mesh, converging at second order).
+- **Saturation is a tanh law, not a measured curve.** With the card's `saturation_magnetization` M_s set (0 keeps the linear
+  law), the energy is `-mu0 M_s^2 / chi_r ln cosh(sqrt(2 chi_r q) / M_s)`, with `-mu0 q` the linear energy and `chi_r` the
+  largest axis susceptibility. Along the easiest axis that is exactly `M = M_s tanh(chi H / M_s)`; the other axes saturate
+  with it, an approximation. Checks (`tests/test_magnetic.py`): the tanh along the easy axis, the linear law at small
+  fields, `|M| <= M_s` in any direction, a bar's energy from below to well above saturation, and a saturated piece pulled
+  up a dipole's gradient by `mu0 V M dH/dz` (3.0 times weaker than the linear law at `chi H / M_s` = 3). A measured B-H
+  curve would replace the tanh.
 
 ## Checks
 
@@ -197,9 +209,11 @@ does not give.
 
 ## Limits
 
-- **Linear and reduced.** No saturation (the card's `saturation_magnetization` is recorded, not used); the strip's own field is not solved; demagnetising factors from the body's
-  rest block.
-- **Soft-magnetic only.** No remanent (hard-magnetic) particles yet.
+- **Reduced.** The strip's own field is not solved; demagnetising factors from the body's rest block. Saturation is an
+  isotropic tanh law, off by default (`saturation_magnetization: 0`); no card has a measured value yet.
+- **Hard-magnetic particles: checked, not yet validated.** `remanent_magnetization` [A/m, body frame] adds Zhao et al.'s
+  (2019) energy `-mu0 (F M_r) . H`; checked against a turned and a stretched body's energy and a cantilever's tip
+  deflection (`tests/test_magnetic.py`), not yet against a measured hard-magnetic robot.
 - **One magnetic body.** No magnetic zones, and no field on a moving or rotating mount: move the magnets along their
   `path` instead.
 - **Solid magnets are full cylinders.** A ring's contact solid is its outer disc, so nothing enters the hole; the

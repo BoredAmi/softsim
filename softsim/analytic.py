@@ -94,3 +94,18 @@ def uniaxial_force(material: dict, stretch: float, area: float) -> float:
     from softsim.materials.homogeneous import curve
 
     return float(curve(load_material(material), "uniaxial", [stretch]).stress.iloc[0] * area)
+
+
+def sliding_block_travel(times: list[float], forces: list[float], mass: float, friction: float, t: float,
+                         gravity: float = 9.81, samples: int = 200001) -> float:
+    """Travel [m] at time ``t`` of a rigid block of ``mass`` on a level floor (Coulomb, static = kinetic
+    ``friction``), starting at rest and pushed horizontally by the piecewise-linear force ``forces`` at ``times``
+    (a schedule). It sticks while ``F <= mu m g`` and accelerates at ``(F - mu m g) / m`` otherwise; for a force
+    that never decreases the block never slows, so this is exact (integrated numerically on ``samples`` points)."""
+    if np.any(np.diff(forces) < 0):
+        raise ValueError("sliding_block_travel: the force must not decrease (the block would decelerate)")
+    s = np.linspace(0.0, t, samples)
+    a = np.maximum(np.interp(s, times, forces) - friction * mass * gravity, 0.0) / mass
+    ds = s[1] - s[0]
+    v = np.concatenate([[0.0], np.cumsum(0.5 * (a[1:] + a[:-1]) * ds)])
+    return float(np.sum(0.5 * (v[1:] + v[:-1]) * ds))

@@ -579,6 +579,8 @@ body:
     axis: [0, 1, 0]                    # normalised
     center: [0, 0, 0]                  # a point of the axis (rest frame)
     path: [[0 ms, 0 deg], [300 ms, 90 deg], [800 ms, 0 deg]]   # angle from rest, minimum jerk
+    # or turning steadily: a waypoint [time, angle, rate] is passed at that rate
+    # path: [[0 ms, 0 rad], [200 ms, 6 rad, 60 rad/s], [500 ms, 24 rad, 60 rad/s]]   # spin up, then 60 rad/s on
 ```
 
 The fixed regions turn about an axis, such as a finger on a spinning arm or a
@@ -594,8 +596,15 @@ used by every backend). Positions and velocities are reported in the world.
 | SOFA | the mount's | the same, in a `ConstantForceField`, at the step's end like gravity |
 | fem (reference) | the **world** | the pinned nodes follow `R (X - c) + c + p` exactly: no fictitious forces to get wrong. Trapezoidal rule |
 
-Only waypoint paths are available (the rate is zero at every waypoint), so no
-constant-rpm spin yet. Region forces and prescribed regions are refused with a
+**Constant rate.** A waypoint may carry a rate, `[time, angle, rate]`. Between waypoints the path is a quintic
+Hermite with zero acceleration at both ends, so two waypoints `w T` apart that both carry `w` are exactly a
+constant rate; after the last waypoint the mount keeps its last rate. Without rates every waypoint is at rest,
+as before (`mount_path` takes the same rule through `softsim.scene.MountMotion.velocities`). Check
+(`tests/test_rotating_mount.py`): spun up in 200 ms, then turned at 60 rad/s, MuJoCo's beam settles to a steady
+stretch 3.0% below the rotating rod's `rho w^2 L^3 / (3 E)` and stays straight to 0.003 mm. The spin-up whips the
+beam, so the check damps it (Rayleigh, which cannot change a steady spin's state).
+
+Region forces and prescribed regions are refused with a
 rotating mount: their directions are world directions and would have to turn
 with the frame.
 
@@ -954,17 +963,35 @@ FE of it. Nothing here was fitted to it. Holding the tip face in z (a roller) an
 | free width, card 2.8x stiffer | 3.15 deg | 0.53 / 0.55 / 0.54 (0.247 / 0.423 / 0.521 N) |
 | free width, card 4x stiffer | 4.53 deg (bends too little) | 0.48 / 0.49 / 0.48 |
 
-**The validated finger pushes about 5.5 times too weakly**, at every pressure. Releasing the width does most of the
-change; stiffening the card does not close the rest, and no model here matches both bending and force. The card is not
-the obvious suspect: the paper's raw tensile data fits it (168/166/159 kPa against 163 at 100% strain), though that strain
-is crosshead travel over 40 mm and may read soft. The paper doesn't record where the tip met the gauge or at what angle,
-which could account for a factor of about 2. Read the chord-angle agreement as a check of the bending, not of the force.
-The gripper's held and dropped limits inherit this (docs/gripper.md).
+**Held across only, the validated finger pushes about 5.5 times too weakly**, at every pressure. Releasing the width does
+most of the change; stiffening the card does not close the rest, and no model here matches both bending and force that way.
+
+**Update 2026-11-11: the gap is the gauge, not the finger.** Held across only is a frictionless gauge that the tip slides
+along. A tip that sticks to the gauge (held along the finger and across it) pushes far harder, mostly along the finger,
+because the inflated finger tries to lengthen:
+
+| p [kPa] | held across only (sliding) | stuck: along / across / total | measured |
+|---|---|---|---|
+| 20 | 0.085 N | 1.02 / 0.19 / 1.04 N | 0.47 N |
+| 30 | 0.146 N | 1.14 / 0.33 / 1.19 N | 0.77 N |
+
+The same validated finger reads anything from 0.085 to 1.04 N at 20 kPa depending on how its tip meets the gauge, and the
+measurement lies inside that range: a gauge whose normal is tilted 17 deg (20 kPa) to 25 deg (30 kPa) from the bending
+direction, with the tip stuck, reads it; the tilt growing with pressure fits a finger curling onto the gauge. The paper
+records neither the contact point nor the direction, so **the tip force cannot test this model**: it neither confirms nor
+contradicts it. A beam check agrees: a blocked bending actuator pushes about 1.5 M / L, nearly independent of its
+stiffness, so a transverse force 5.5 times higher at the same bend angle would need 5.5 times the pressure's bending moment,
+which no linear-elastic finger of this shape has. Read the chord-angle agreement as the validation, and the force as
+unchecked. The gripper's held and dropped limits (docs/gripper.md) use the sliding contact, the conservative case.
 
     softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --out runs/wang/blocked_1p5mm \
         --set simulation.timestep=10ms --set simulation.duration=900ms \
         --set "body.prescribed=[{region: tip, path: [[0 ms, [null, null, 0 mm]], [900 ms, [null, null, 0 mm]]]}]"   # about 16 min
     python tools/compare_wang_tip_force.py runs/wang/blocked_1p5mm
+    # the tip stuck to the gauge (held along and across; about 35 min on the laptop, Newton fails past ~34 kPa):
+    softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --out runs/wang/stuck_tip_1p5mm \
+        --set simulation.timestep=20ms --set simulation.output_rate=50Hz --set simulation.duration=650ms \
+        --set "body.prescribed=[{region: tip, path: [[0 ms, [0 mm, null, 0 mm]], [650 ms, [0 mm, null, 0 mm]]]}]"
     # free width, card S times stiffer: add these to the run above (blocked) and to one without the prescribed tip (bending)
     #   --set body.plane_strain=null --set body.material.elastic.c10=<44163*S> \
     #   --set body.material.elastic.c20=<530.71*S> --set body.material.elastic.c30=<16.251*S>

@@ -1,0 +1,39 @@
+# A hard-magnetic elastomer bar (NdFeB-filled, magnetised along its length) in a field across it: the verification case
+# for remanent magnetisation (docs/magnetic.md). A 4 x 4 x 60 mm bar clamped at its base, no gravity, remanence
+# 100 kA/m along its length (z), purely hard (susceptibility 0). A field H along x turns the moment towards it: the couple
+# mu0 M_r x H, c = mu0 M_r H A per length, bends the bar like Euler-Bernoulli's c L^3 / (3 E I) = 1.018 mm at 30 A/m.
+# The field ramps smoothly (minimum jerk) over 2 s, 3.6 periods of the bar's first mode (1.8 Hz), so it leaves the bar
+# nearly at rest, and holds; the tip's x at the end is the check.
+#   softsim run scenarios/magnetic/hard_magnetic_cantilever.yaml
+scenario: actuation
+description: Hard-magnetic bar (4 x 4 x 60 mm, E = 200 kPa, M_r = 100 kA/m along it) bent by a 30 A/m field across it.
+backend: fem
+
+simulation:
+  timestep: 20 ms
+  duration: 3 s
+  output_rate: 50 Hz
+  gravity: [0, 0, 0]
+
+ground:
+  enabled: false
+
+body:
+  name: bar
+  geometry: {type: box, size: [4 mm, 4 mm, 60 mm]}
+  material:
+    density: 2000 kg/m^3
+    elastic:
+      model: magneto_active
+      matrix: {model: neo_hookean, youngs_modulus: 200 kPa, poisson_ratio: 0.3}
+      susceptibility: 0
+      remanent_magnetization: [0, 0, 100 kA/m]
+      along: [0, 0, 1]
+      normal: [1, 0, 0]
+  mesh: {size: 1 mm, method: structured}
+  fixed: [base]
+
+actuators: []
+
+magnetic_field:
+  uniform: [[0 ms, [0.0000 A/m, 0, 0]], [200 ms, [0.2568 A/m, 0, 0]], [400 ms, [1.7376 A/m, 0, 0]], [600 ms, [4.8924 A/m, 0, 0]], [800 ms, [9.5232 A/m, 0, 0]], [1000 ms, [15.0000 A/m, 0, 0]], [1200 ms, [20.4768 A/m, 0, 0]], [1400 ms, [25.1076 A/m, 0, 0]], [1600 ms, [28.2624 A/m, 0, 0]], [1800 ms, [29.7432 A/m, 0, 0]], [2000 ms, [30.0000 A/m, 0, 0]]]   # minimum-jerk ramp to 30 A/m

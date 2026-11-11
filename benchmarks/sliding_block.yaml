@@ -1,0 +1,18 @@
+name: sliding_block
+description: >-
+  A 40 x 40 x 10 mm silicone block (17.1 g) on the ground, friction 0.5, pushed by 0.12 N spread over its top face
+  (ramped over 50 ms, then held): Coulomb sliding, a = (F - mu m g) / m. The travel after 300 ms against the rigid
+  block's exact travel (the block's own shear adds about 0.01 mm).
+config: ../scenarios/actuation/sliding_block.yaml
+tier: quick
+quantity: travel at 300 ms [m]
+metric: {summary: push_final_displacement}
+truth:
+  analytic:
+    function: sliding_block_travel
+    args: {times: [0.0, 0.05, 0.3], forces: [0.0, 0.12, 0.12], mass: 0.01712, friction: 0.5, t: 0.3}
+  source: Coulomb friction, rigid block (softsim.analytic.sliding_block_travel)
+runs:
+  - {backend: fem, overrides: [simulation.timestep=2ms], tolerance: 0.03}
+  - {backend: mujoco, tolerance: 0.03}
+  - {backend: sofa, tolerance: 0.03}

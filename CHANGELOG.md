@@ -22,4 +22,12 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Robots (M7-M10):** PneuNet and the Wang et al. ribbed finger (reference within 0.8 deg RMS of the
   measurements), cable finger and arm, a two-finger gripper with finite-element grasps and a live page,
   soft-magnetic elastomers (MRE) on the reference.
-- **Release (M13):** `softsim bench` and the benchmark table, CI, a docs site.
+- **Friction:** a sliding-block benchmark against exact Coulomb sliding (all backends within 0.8-0.94%) and its sticking
+  case; `contact.slip_speed` makes the reference's friction smoothing a speed, so its stick creep no longer depends on
+  the time step (opt-in; docs/decisions.md, entry 6).
+- **Mounts:** a rotating mount can turn at a constant rate (waypoints `[time, angle, rate]`).
+- **Magnetic:** saturation of the induced magnetisation (a tanh law from the card's `saturation_magnetization`) and
+  hard-magnetic particles (`remanent_magnetization`, Zhao et al. 2019), both on the reference.
+- **Runs:** a run that fails partway saves the samples it computed (`summary.yaml` → `metadata.incomplete`).
+- **Release (M13):** `softsim bench` and the benchmark table, CI, a docs site with tutorials, a test that every command
+  in the README and tutorials parses and its config validates, `softsim --version`.

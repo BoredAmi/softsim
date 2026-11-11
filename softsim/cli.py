@@ -35,13 +35,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
             last[0] = pct // 10
             print(f"  {pct:3d}%  t={sim.time * 1e3:8.2f} ms", file=sys.stderr)
 
-    try:
-        result = sim.run(duration=args.duration, record_vertices=args.vertices or None, progress=progress)
-    finally:
-        sim.close()
     name = sim.config.name or Path(args.config).stem
     out = Path(args.out) if args.out else Path(sim.config.output.directory) / (
         f"{name}_{_dt.datetime.now():%Y%m%d_%H%M%S}")
+    try:
+        result = sim.run(duration=args.duration, record_vertices=args.vertices or None, progress=progress)
+    except Exception as exc:
+        partial = getattr(exc, "partial", None)
+        if partial is not None:  # keep what was computed before the failure
+            partial.metadata["incomplete"] = f"{type(exc).__name__}: {exc}"
+            partial.save(out, sim.config.output.format)
+            print(f"the run stopped at t = {float(partial.timeseries['t'].iloc[-1]) * 1e3:.2f} ms; the samples up to "
+                  f"there are in {out} (summary.yaml: metadata.incomplete)", file=sys.stderr)
+        raise
+    finally:
+        sim.close()
     result.save(out, sim.config.output.format)
     print(json.dumps({k: float(f"{float(v):.6g}") if math.isfinite(v) else None for k, v in result.summary.items()},
                      indent=2))  # 6 significant digits: volumes [m^3] and forces alike

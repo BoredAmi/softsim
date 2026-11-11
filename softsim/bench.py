@@ -17,7 +17,8 @@ it is checked against and, per backend, the overrides and the tolerance that bac
       - {backend: mujoco, tolerance: 0.35, note: linear-tet locking at 2 mm}
 
 Metrics:
-    * ``{summary: key}``: a scalar of the run's summary; the error is relative, ``sim / truth - 1``.
+    * ``{summary: key}``: a scalar of the run's summary; the error is relative, ``sim / truth - 1``, or with
+      ``absolute: true`` the difference ``sim - truth`` in the quantity's units (for a truth of zero).
     * ``{curve: {x: column, y: column, x_scale: s, y_scale: s}}``: a timeseries column read at the truth's
       x values along the rising part of ``x`` (a quasi-static ramp); the error is the RMS difference in
       the truth's units (``y_scale`` converts, e.g. rad to deg).
@@ -152,6 +153,8 @@ def error(entry: BenchEntry, value: np.ndarray) -> float:
     """Relative error (scalar) or RMS difference (curve) against the truth."""
     _, truth = truth_values(entry)
     if entry.kind == "scalar":
+        if entry.metric.get("absolute"):
+            return float(value[0] - truth[0])
         return float(value[0] / truth[0] - 1.0)
     return float(np.sqrt(np.mean((value - truth) ** 2)))
 
@@ -255,12 +258,16 @@ def _fmt(x: float) -> str:
 
 def _cell_value(entry: BenchEntry, rec: dict[str, Any]) -> tuple[str, str]:
     if entry.kind == "scalar":
+        if entry.metric.get("absolute"):
+            return _fmt(rec["value"][0]), f"{rec['error']:+.3g}"
         return _fmt(rec["value"][0]), f"{100 * rec['error']:+.1f}%"
     return "curve", f"{rec['error']:.2f} RMS"
 
 
 def _tol(entry: BenchEntry, run: BenchRun) -> str:
-    return f"±{100 * run.tolerance:.2g}%" if entry.kind == "scalar" else f"≤{run.tolerance:g} RMS"
+    if entry.kind == "scalar":
+        return f"±{run.tolerance:.3g}" if entry.metric.get("absolute") else f"±{100 * run.tolerance:.2g}%"
+    return f"≤{run.tolerance:g} RMS"
 
 
 def report(entries: list[BenchEntry], cache_dir: Path) -> str:
@@ -334,7 +341,10 @@ def run_bench(entries: list[BenchEntry], cache_dir: Path, tier: str = "quick", o
             rec = run_one(e, run, cache_dir, force=force)
             shown = ""
             if "error" in rec:
-                shown = f"{100 * rec['error']:+.2f}%" if e.kind == "scalar" else f"{rec['error']:.3f} RMS"
+                if e.kind == "curve" or e.metric.get("absolute"):
+                    shown = f"{rec['error']:+.3g}"
+                else:
+                    shown = f"{100 * rec['error']:+.2f}%"
             echo(f"{e.name:28s} {run.backend:7s} {rec['status']:8s} {shown:>12s}  "
                  f"{rec.get('wall_time_s', 0):6.0f} s  {rec.get('reason', '')}")
             out.append(rec)

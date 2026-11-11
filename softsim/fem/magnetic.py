@@ -11,10 +11,26 @@ effective susceptibilities along them, ``chi_i = chi / (1 + N_i chi)`` for a com
 ``H(x)`` [A/m] is the applied field at the deformed position: a uniform part, a point dipole and any number of permanent
 magnets, each an axially magnetised cylinder in closed form (a ring is a cylinder minus its hole; :func:`field`).
 
+**Saturation** (``SoftMagnet.saturation`` = M_s > 0; 0 keeps the linear law). With ``q`` the bracket above over 2 (the
+linear energy is ``-mu0 q``) and ``chi_r`` the largest ``chi_i``,
+
+    w = -mu0 M_s^2 / chi_r  ln cosh( sqrt(2 chi_r q) / M_s ),
+
+which is ``-mu0 q`` for small fields and gives ``M = M_s tanh(chi_r H / M_s)`` exactly for a field along the easiest axis
+(an isotropic tanh law on the induced magnetisation; the other axes saturate with it, an approximation).
+
+**Hard-magnetic particles** (``SoftMagnet.remanence`` = M_r [A/m], a vector in the rest frame; zero by default): a fixed
+remanent magnetisation carried by the deformation adds, per unit reference volume (Zhao, Kim, Yuk, Zhao, J. Mech. Phys.
+Solids 124, 244 (2019)),
+
+    w_r = -mu0 (F M_r) . H,
+
+the energy of the magnetised material turning and stretching in the applied field: a body couple ``mu0 M x H`` and, in a
+gradient, a force. It adds to the induced part above (both, for a composite of hard and soft particles).
+
 **What this leaves out.** Each piece of the body feels the applied field through the shape of the whole, a reduced model: the
-field is not solved for, so ``N_i`` stay at their reference values as the strip bends, nothing magnetises anything else
-(no finger-to-finger force, no pull on the magnet), and the response is linear, without saturation. It is meant for
-fields well below the filler's saturation. Exact derivatives come from JAX.
+field is not solved for, so ``N_i`` stay at their reference values as the strip bends, and nothing magnetises anything else
+(no finger-to-finger force, no pull on the magnet). Exact derivatives come from JAX.
 """
 
 from __future__ import annotations
@@ -41,10 +57,14 @@ class SoftMagnet:
     chi_across: float
     along: tuple[float, float, float] = (1.0, 0.0, 0.0)
     normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
+    saturation: float = 0.0  # M_s [A/m]; 0: linear
+    remanence: tuple[float, float, float] = (0.0, 0.0, 0.0)  # M_r [A/m], rest frame; hard-magnetic particles
 
     def __post_init__(self):
         if abs(float(np.dot(self.along, self.normal))) > 1e-12:
             raise ValueError("along and normal must be perpendicular")
+        if self.saturation < 0:
+            raise ValueError("saturation must be >= 0 (0: linear)")
 
 
 def prism_demagnetizing_factor(a: float, b: float, c: float) -> float:
@@ -164,7 +184,26 @@ def density_in(f, h, material: SoftMagnet):
     a, n = a / jnp.linalg.norm(a), n / jnp.linalg.norm(n)
     ha, hn = jnp.dot(a, h), jnp.dot(n, h)
     across = jnp.dot(h, h) - ha ** 2 - hn ** 2
-    return -0.5 * MU0 * (material.chi_along * ha ** 2 + material.chi_normal * hn ** 2 + material.chi_across * across)
+    q = 0.5 * (material.chi_along * ha ** 2 + material.chi_normal * hn ** 2 + material.chi_across * across)
+    if material.saturation <= 0:
+        w = -MU0 * q
+    else:
+        chi_r = max(material.chi_along, material.chi_normal, material.chi_across)
+        m_s = material.saturation
+        w = -MU0 * m_s ** 2 / chi_r * _log_cosh_sqrt(2.0 * chi_r * q / m_s ** 2)
+    if any(material.remanence):
+        w = w - MU0 * jnp.dot(f @ jnp.asarray(material.remanence, float), h)
+    return w
+
+
+def _log_cosh_sqrt(s):
+    """``ln cosh(sqrt(s))`` for ``s >= 0``, smooth through 0 (series there) and without overflow (for large ``s``,
+    ``u + ln(1 + exp(-2u)) - ln 2``), with gradients that stay finite in the branch not taken."""
+    small = s < 1e-6
+    safe = jnp.where(small, 1.0, s)
+    u = jnp.sqrt(safe)
+    big = u + jnp.log1p(jnp.exp(-2.0 * u)) - jnp.log(2.0)
+    return jnp.where(small, 0.5 * s - s * s / 12.0, big)
 
 
 def field_jets(x, q):

@@ -172,13 +172,14 @@ schedule and is asked for the same palm path, but its palm follows about 6 mm be
 - **Held on the map means held at 20 s**, not indefinitely, and every grasp is still creeping then (see above).
 - **The map is the fast model's prediction.** Two coarse finite-element grasps check it, the box at 25 kPa held at 10 g and
   dropped at 30 g, as the map says. Every other cell, and the cylinder and bottle entirely, are unchecked.
-- **Nothing here reproduces a physical grasp, and the real finger is stronger than this model.** Wang et al. measured a
-  tip force of 0.47, 0.77 and 0.96 N at 20, 30 and 35 kPa (Table 7, not used in any fit here) and showed four fingers holding
-  objects up to 364 g, in single demonstrations with pressure unrecorded. The validated finger itself, with its tip held,
-  pushes 0.085, 0.146 and 0.165 N: about 5.5 times too weakly, although it bends within 0.76 deg of the measurements
-  ([docs/actuation.md](actuation.md#tip-force-a-test-it-fails)). The fast finger is fitted to that finite-element finger, so
-  it inherits the gap: it grips at 0.16 N per finger at 35 kPa and carries about 26 g on two fingers. Its held and dropped
-  limits are the model's, not the real gripper's, and the cause of the gap is open.
+- **Nothing here reproduces a physical grasp, and the grip is the conservative case.** Wang et al. measured a tip force of
+  0.47, 0.77 and 0.96 N at 20, 30 and 35 kPa (Table 7, not used in any fit here) and showed four fingers holding objects up
+  to 364 g, in single demonstrations with pressure unrecorded. The validated finger with its tip sliding on a gauge pushes
+  0.085, 0.146 and 0.165 N; with its tip stuck to it, 1.04 N at 20 kPa and 1.19 N at 30 kPa: the measurement lies between,
+  and the paper doesn't record the contact, so the force cannot check the model
+  ([docs/actuation.md](actuation.md#tip-force-a-test-it-fails)). The fast finger is fitted to the sliding case: it grips at
+  0.16 N per finger at 35 kPa and carries about 26 g on two fingers. Its held and dropped limits are the model's, not the
+  real gripper's.
 - The chain does not deform around an object.
 - Two fingers are the fitted case. Three and four fingers on the page are extrapolations, and the validated finger is
   plane strain, so FE grasps can only be two fingers.

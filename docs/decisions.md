@@ -151,3 +151,25 @@ All eight points are within 0.5 deg of the measurement, and the peak and the fal
 **Update 2026-11-06, SOFA at 1 mm.** Same run as SOFA 1.5 mm at `body.mesh.size=1mm` (73 min, `runs/wang/sofa_1mm`, read with `python tools/compare_wang_finger.py runs/wang/sofa_1mm runs/wang/sofa_1p5mm runs/wang/fem_1p5mm`): 8.14 deg RMS against the measurements, from 10.24 at 1.5 mm; the curve keeps rising to 40 kPa (27.5 deg) and shows no fall-off after 35 kPa. Past the 8 deg line set in the gripper plan, so SOFA stays out of the gripper.
 
 **Update 2026-11-06, the reference with the fast backends' card: the mesh claim holds, with a floor added.** The 8-16 deg errors above could have been the Neo-Hookean card, not the mesh, so the reference ran that card itself (`--set body.material.preset=posilicone_a20_wang2026_nh --set body.material.elastic.youngs_modulus=268000 --set body.material.elastic.poisson_ratio=0.45`, 1.5 mm, 10 ms, `runs/wang/fem_nh_1p5mm`, read with `python tools/compare_wang_finger.py runs/wang/fem_nh_1p5mm runs/wang/sofa_1mm runs/wang/fem_1p5mm`). Over 5-35 kPa it is 3.18 deg RMS from the measurement, bending too much (+2.8 to +4.6 deg at 10-30 kPa), against 0.79 deg for the Yeoh card and 8.22 deg for SOFA at 1 mm, which bends too little. SOFA is 10.4 deg RMS below the reference on the same card, so the card does not explain SOFA's error: the under-bending is the discretisation, as claimed above. Two things change. A fast backend on this card cannot do better than about 3 deg even with a perfect mesh. And the card has no stiffening at large stretch: past about 35 kPa the reference's bend collapses (28.7 deg at 0.78 s, 12.1 deg at 0.85 s, 38.6 kPa) and Newton stops converging at 0.867 s even at 0.6 ms substeps, so that run ends at 0.85 s; the compare table's 40 kPa row shows the last frame and its overall 8.61 deg should not be read. SOFA's and MuJoCo's lack of a fall-off there is therefore not evidence of accuracy.
+
+## 6. The reference's static friction creeps, at a rate set by the time step
+
+The `fem` backend smooths Coulomb friction with IPC's mollifier below a slip of `SLIP_TOLERANCE` = 1 um **per step**
+(`softsim/backends/fem/backend.py`): below that, friction is `mu N (2 y - y^2)` with `y` = slip / 1 um, a spring rather
+than a stick. A contact held at a fraction `r = F / (mu N)` of its limit slips `y = 1 - sqrt(1 - r)` um every step, so it
+creeps at `y x 1 um / dt`. Measured on the sliding-block benchmark at r = 0.71 (`benchmarks/sticking_block.yaml`):
+0.233 mm/s at dt 2 ms and 0.117 mm/s at 4 ms (uniform-r prediction 0.233 and 0.116). MuJoCo, known for soft-constraint
+creep, creeps less on this case (0.13 mm/s); SOFA least. Sliding is unaffected: all three backends are within
+0.8-0.94% of exact Coulomb sliding (`benchmarks/sliding_block.yaml`). The finite-element grasps (docs/gripper.md) hold
+for seconds with the same smoothing, so part of their sink is this creep.
+
+**Done meanwhile (no default changed):** `contact.slip_speed` makes the tolerance a speed (`slip_speed x dt`, the IPC
+convention), so the creep is `y x slip_speed` at any step. Measured, 5 mm block, `slip_speed` 1e-5 m/s: 0.0052 mm/s at
+dt 2 ms and 0.0053 mm/s at 4 ms; sliding unchanged (70.45 mm). `tests/test_friction.py` checks both behaviours.
+
+- **Make `slip_speed` 1e-5 m/s the default (recommended).** Creep 45x lower at dt 2 ms and independent of the step. Cost:
+  the finite-element grasps (about an hour each on the GPU machine) should be re-run, and their numbers in
+  docs/gripper.md may move.
+- **Keep the per-step default**, and state the creep rate with every finite-element grasp.
+
+**Decision:** open.

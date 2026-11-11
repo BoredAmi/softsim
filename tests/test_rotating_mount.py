@@ -318,3 +318,51 @@ def test_spin_checks_warn_about_step_and_centrifugal_strain():
     assert "spin-centrifugal" in codes([across % ("50 ms", 12)])       # 450 rad/s: 51%
     assert "spin-centrifugal" not in codes([across % ("1000 ms", 32)])  # 60 rad/s: 0.9%
     assert "spin-centrifugal" not in codes([])                          # about its own axis, 45 rad/s
+
+
+def test_waypoint_rates_give_a_constant_rate_and_consistent_derivatives():
+    """A waypoint may carry a rate: two waypoints w T apart that both carry w are exactly a constant rate, after the last
+    the rate is kept, and the angle, rate and acceleration are each other's derivatives everywhere (quintic Hermite)."""
+    from softsim.scene import MountMotion
+
+    w = 60.0
+    spin = MountSpin((0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.1, 0.5), (0.0, 3.0, 3.0 + 0.4 * w), (0.0, w, w))
+    for t in (0.1, 0.2, 0.37, 0.5, 0.8):
+        assert spin.rate(t) == pytest.approx(w, rel=1e-12) and spin.acceleration(t) == pytest.approx(0.0, abs=1e-9)
+    assert spin.angle(0.8) == pytest.approx(3.0 + 0.7 * w, rel=1e-12)
+    h = 1e-6
+    for t in np.linspace(0.003, 0.097, 9):  # the spin-up
+        assert spin.rate(t) == pytest.approx((spin.angle(t + h) - spin.angle(t - h)) / (2 * h), rel=1e-6)
+        assert spin.acceleration(t) == pytest.approx((spin.rate(t + h) - spin.rate(t - h)) / (2 * h), rel=1e-5, abs=1e-6)
+    # without rates: rest to rest, as before (peak 1.875 x the mean rate at mid-segment)
+    assert MountSpin((0.0, 0.0, 1.0), (0.0, 0.0, 0.0), (0.0, 1.0), (0.0, 2.0)).rate(0.5) == pytest.approx(3.75)
+    with pytest.raises(ValueError, match="at rest"):
+        MountMotion((0.0, 1.0), ((0, 0, 0), (1, 0, 0)), ((1, 0, 0), (1, 0, 0)))
+    with pytest.raises(ValueError, match="one rate per waypoint"):
+        MountSpin((0.0, 0.0, 1.0), (0.0, 0.0, 0.0), (0.0, 1.0), (0.0, 2.0), (0.0,))
+
+
+@pytest.mark.slow
+def test_a_beam_turning_at_a_constant_rate_stretches_like_the_rotating_rod():
+    """Spun up in 200 ms, then turned at a constant 60 rad/s (config waypoints with rates): from 350 ms on the tip's
+    stretch is steady at -3.0% of the rotating rod's rho w^2 L^3 / (3 E) = 0.555 mm (the mid-spin-up check gives -1.6%
+    at one instant), and with no angular acceleration the beam is straight (0.003 mm). The spin-up whips the beam; Rayleigh damping settles it, and cannot change the steady state,
+    which has no motion in the mount's frame."""
+    pytest.importorskip("mujoco")
+    from softsim.runner import run_config
+
+    path = "[[0 ms, 0 rad], [200 ms, 6 rad, 60 rad/s], [500 ms, 24 rad, 60 rad/s]]"
+    ts = run_config(SPIN_SCENARIO, ["backend=mujoco", "output.save_model=false", "simulation.gravity=[0, 0, 0]",
+                                    "simulation.duration=0.6", "simulation.timestep=0.1ms",
+                                    "body.material.damping={model: rayleigh, alpha: 0, beta: 10 ms}",
+                                    f"body.mount_rotation={{axis: [0, 1, 0], center: [0, 0, 0], path: {path}}}"]).timeseries
+    spin = MountSpin((0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.2, 0.5), (0.0, 6.0, 24.0), (0.0, 60.0, 60.0))
+    late = ts[ts.t >= 0.35]
+    local = np.array([spin.rotation(t).T @ np.array([x, y, z]) for t, x, y, z in
+                      zip(late.t, late.tip_x, late.tip_y, late.tip_z)])
+    assert late.mount_angle.iloc[-1] == pytest.approx(spin.angle(0.6), rel=1e-9)  # turning past the last waypoint
+    expected = 1070.0 * 60.0**2 * 0.06**3 / (3 * 500e3)
+    stretch = (local[:, 2] - 0.06) / expected - 1.0
+    assert stretch.mean() == pytest.approx(0.0, abs=0.045)
+    assert np.ptp(stretch) < 0.005  # steady
+    assert np.hypot(local[:, 0], local[:, 1]).max() < 2e-5

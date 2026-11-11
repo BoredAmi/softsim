@@ -1,0 +1,28 @@
+name: sticking_block
+description: >-
+  The same block pushed by 0.06 N, 0.71 of the friction limit (0.084 N): Coulomb says it sticks, so the top face moves only by
+  the block's shear (about 0.005 mm). MuJoCo's friction is a soft constraint and creeps at a steady rate instead
+  (about 0.13 mm/s here), which is what a held grasp does on MuJoCo; the tolerance is that creep over 300 ms.
+config: ../scenarios/actuation/sliding_block.yaml
+tier: quick
+quantity: travel at 300 ms [m]
+metric: {summary: push_final_displacement, absolute: true}
+truth:
+  value: 0.0
+  source: Coulomb friction, sticking (F < mu m g)
+runs:
+  - backend: fem
+    overrides: [simulation.timestep=2ms, "actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [300 ms, 0.06 N]]"]
+    tolerance: 5.0e-5
+    known_failure: true
+    note: >-
+      the reference's Coulomb law is smoothed below a slip of 1 um per step, so a stuck contact creeps at a rate
+      set by the step (0.233 mm/s at 2 ms, 0.117 mm/s at 4 ms, measured); contact.slip_speed fixes it
+      (docs/decisions.md, entry 6)
+  - backend: mujoco
+    overrides: ["actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [300 ms, 0.06 N]]"]
+    tolerance: 5.0e-5
+    note: soft-constraint friction creeps at about 0.13 mm/s while sticking
+  - backend: sofa
+    overrides: ["actuators[0].schedule=[[0 ms, 0 N], [50 ms, 0.06 N], [300 ms, 0.06 N]]"]
+    tolerance: 5.0e-5
