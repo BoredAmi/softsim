@@ -406,8 +406,8 @@ dipole's gradient and a cantilever's closed form up to buckling (`tests/test_mag
 
 ## M11: design and control toolkit
 
-Quasi-static inverse control (optimisation; SoftRobots.Inverse fast path on
-SOFA; the optimisation part is done: `softsim inverse`, see [control.md](control.md)), reduced-order and Koopman surrogates for real-time ROS 2 control,
+Quasi-static inverse control (done: `softsim inverse` by repeated equilibrium solves, and the SoftRobots.Inverse
+fast path on SOFA, `--method sofa-qp`; see [control.md](control.md)), reduced-order and Koopman surrogates for real-time ROS 2 control,
 design optimisation over parametric geometry (`softsim optimize`), and
 sim-to-real identification from short recorded motions.
 
@@ -416,7 +416,16 @@ sim-to-real identification from short recorded motions.
   summary metric (or a ratio), constraints as penalties with the best chosen among feasible evaluations and
   infeasibility reported, resumable evaluation log, parallel initial simplex. Checked on the cable cantilever
   against a known maximum (the bound) and a bisection reference; the MuJoCo-locking bias of the optimum and
-  the `fem` check are documented. Open in M11: inverse control, surrogates, sim-to-real identification.
+  the `fem` check are documented. Open in M11: surrogates, sim-to-real identification.
+- **SOFA fast path for inverse control (done):** `softsim/control/sofa_inverse.py`, `softsim inverse --method sofa-qp`
+  ([control.md](control.md#sofa-fast-path-softrobotsinverse-method-sofa-qp)). The SoftRobots.Inverse plugin loads and
+  works in the v26.06 binary (`QPInverseProblemSolver`, `CableActuator`, `PositionEffector`). The scene is built beside
+  the SOFA backend, not inside it (no backend change). Cantilever tension within 0.6-1.2% of the repeated solve on the
+  same backend and 7-11 times faster (1 s); the two-cable arm in 2.8 s where the repeated solve on SOFA does not settle
+  (336 s, `stalled`, the explicit cable force oscillates); a target beyond the bounds gives the bounded solution, flagged.
+  The cable bounds go in as `force * dt` and the tension is read as `lambda / dt` (the M6 note on impulses). Open:
+  orientation effectors, stroke-controlled cables, pressure actuators (`SurfacePressureActuator`), the cause of the
+  explicit cable's limit cycle on the arm.
 
 ## M12: GPU backend and learning (GPU machine)
 
@@ -425,6 +434,11 @@ and differentiability, and implement the best behind the same interface with a
 batched API. Gymnasium environments per robot, with domain randomisation over
 the calibrated error bars. Run the deferred long calibrations (bulk-modulus
 refit, finer meshes).
+
+**CPU groundwork done:** Gymnasium environments on the MuJoCo CPU backend (`softsim.envs`, extra `rl`):
+a generic reach-task env from YAML, two registered examples (cable beam, two-cable arm), domain randomisation over
+the card's `uncertainty` and config ranges, `SyncVectorEnv` compatible; see [envs.md](envs.md). Open: the batched GPU
+backend, further robots (pneumatic, gripper) as envs, training baselines.
 
 ## M13: benchmarks, docs, release (ongoing)
 

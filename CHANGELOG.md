@@ -17,6 +17,8 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Materials (M5):** physical and effective cards with validity, uncertainty and references; Gent and
   Arruda-Boyce; homogeneous tests; `fit-material` on public data (Marechal 2021, Roels 2025); 25 fitted silicone
   cards; Prony viscoelasticity on every backend; `softsim transfer` with error bars; sensitivity and sampling.
+- **Gymnasium environments (M12 groundwork):** `softsim.envs` (extra `rl`), `softsim/CableBeamReach-v0` and
+  `softsim/CableArmReach-v0`, YAML-defined reach tasks with domain randomisation over the cards' uncertainty.
 - **Actuation (M6):** pressure, cable (tension or stroke), and region-force actuators; material zones with their
   own density and damping; bodies from STEP/STL/OBJ/msh; moving and rotating mounts; prescribed region
   motion; closed-loop control from Python.
@@ -38,6 +40,9 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Design and control (M11, first pieces):** `softsim optimize` (design optimisation over parametric geometry, a
   resumable evaluation log, constraints with an honest infeasible flag) and `softsim inverse` (quasi-static inverse
   control: the actuator values that reach target outputs), both checked on MuJoCo; values are the backend's own.
+  `softsim inverse --method sofa-qp` is the SOFA fast path with SoftRobots.Inverse (`QPInverseProblemSolver`,
+  `CableActuator`, `PositionEffector`): same tensions as the repeated solve to 1%, 7-11 times faster on the cantilever,
+  and it solves the two-cable arm where the repeated solve on SOFA does not settle.
 - **Runs:** a run that fails partway saves the samples it computed (`summary.yaml` → `metadata.incomplete`).
 - **Release (M13):** `softsim bench` and the benchmark table, CI, a docs site with tutorials, a test that every command
   in the README and tutorials parses and its config validates, `softsim --version`.

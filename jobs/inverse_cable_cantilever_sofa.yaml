@@ -1,0 +1,11 @@
+# The same inverse problem as inverse_cable_cantilever.yaml, solved by SOFA's QP inverse solver
+# (SoftRobots.Inverse, docs/control.md "SOFA fast path"):
+#   softsim inverse jobs/inverse_cable_cantilever_sofa.yaml          (or --method sofa-qp on any inverse job)
+config: ../scenarios/actuation/cable_cantilever.yaml
+method: sofa-qp
+overrides: [body.mesh.size=4mm]         # coarse, as the repeated-solve job: the tension is that of this mesh
+targets:
+  bend_angle: 2 deg                     # an angle is reached by a secant iteration on the effector goal
+actuators:
+  cable: [0 N, 0.7 N]                   # minForce / maxForce of the CableActuator
+tolerance: 0.05                         # largest scaled residual (angles: 0.01 rad per unit)

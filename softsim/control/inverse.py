@@ -320,13 +320,27 @@ def _solve(sim, targets, actuators, bounds, initial, tolerance, max_evaluations,
                          eq.steps, eq.unsettled, time.perf_counter() - t0, history)
 
 
-def run_job(path: str | Path) -> dict[str, Any]:
-    """Run a job file (see ``jobs/inverse_cable_cantilever.yaml``) and return the result as a dict."""
+METHODS = ("repeated", "sofa-qp")
+
+
+def run_job(path: str | Path, method: str | None = None) -> dict[str, Any]:
+    """Run a job file (see ``jobs/inverse_cable_cantilever.yaml``) and return the result as a dict.
+
+    ``method`` (or the job's ``method:`` key; default ``repeated``) selects the repeated equilibrium solve of this
+    module or ``sofa-qp``, SOFA's QP inverse solver (:mod:`softsim.control.sofa_inverse`)."""
     path = Path(path).resolve()
     job = yaml.safe_load(path.read_text()) or {}
     for key in ("config", "targets", "actuators"):
         if key not in job:
             raise ConfigError(f"{path}: missing {key!r}")
+    method = method or job.pop("method", "repeated")
+    job.pop("method", None)
+    if method not in METHODS:
+        raise ConfigError(f"{path}: unknown method {method!r}; choose from {list(METHODS)}")
+    if method == "sofa-qp":
+        from softsim.control.sofa_inverse import run_job_sofa
+
+        return run_job_sofa(path, job)
     known = {"config", "overrides", "backend", "targets", "actuators", "initial", "tolerance", "max_evaluations", "scales",
              "settle_damping", "settle_tol", "settle_window", "max_settle", "warm_start", "jacobian_step"}
     extra = set(job) - known

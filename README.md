@@ -7,8 +7,10 @@ package; ROS 2 integration is a thin layer on top (milestone M2).
 **Status (v0.1.0, unreleased):** the core, the ROS 2 layer, video tracking and calibration, and the SOFA
 backend are done. Soft-material fidelity (M5) and the robot foundations (M6: pressure, cables, forces,
 material zones, CAD import, mounts) are nearly done. The pneumatic finger (M7), the cable finger and rods (M8)
-are validated. The gripper (M9) and magnetic soft materials (M10) are in progress. Every validated case on every
-backend is in one table: [docs/benchmarks.md](docs/benchmarks.md) (`softsim bench`).
+are validated. The gripper (M9, with self-collision and a friction benchmark) and magnetic soft materials (M10:
+soft- and hard-magnetic, saturation, magnetic zones) are in progress, and the design and control tools (M11)
+have started: `softsim optimize` and `softsim inverse`. Every validated case on every backend is in one table:
+[docs/benchmarks.md](docs/benchmarks.md) (`softsim bench`).
 
 Backends:
 
@@ -190,6 +192,8 @@ softsim sensitivity scenarios/drop_test/cases/w050.yaml --metric peak_indentatio
     --param "specimen.material.elastic.youngs_modulus=30 kPa:150 kPa" --param "drop.height=0.2:0.4"
 softsim export scenarios/drop_test/cases/w020.yaml --out model.xml
 softsim bench --tier quick                                       # validated cases x backends -> docs/benchmarks.md
+softsim optimize jobs/cantilever_target_angle.yaml               # design optimisation over parametric geometry
+softsim inverse jobs/inverse_cable_cantilever.yaml               # actuator values that reach a target pose
 softsim track datasets/czopek2026_ecoflex_drop.yaml --jobs 5       # video tracking (needs the dataset zips)
 softsim calibrate calibrations/ecoflex_00_10_drop.yaml --jobs 3    # fit E and damping to the recordings
 softsim fetch datasets/roels2025_elastomers.yaml                   # public material-test data (checksummed)
@@ -285,7 +289,8 @@ tests/
 - [Actuation: pressure and cable actuators, verified against the exact thick sphere and a cable-bent cantilever](docs/actuation.md)
 - [Soft gripper: the live demo, the fast finger and what it can hold](docs/gripper.md)
 - [Soft drop bench: drop things on the Ecoflex cylinder, beside the film](docs/drop.md)
-- [Magnetic soft materials (MRE): the model, its checks, and Bernat et al.'s gripper](docs/magnetic.md)
+- [Magnetic soft materials (MRE): soft and hard magnetic, zones, a hard-magnetic gripper, Bernat et al.'s gripper](docs/magnetic.md)
+- [Design optimisation (`softsim optimize`)](docs/design.md) and [inverse control (`softsim inverse`)](docs/control.md)
 - [Moving to a faster machine: setup, data to copy, long jobs](docs/new_machine.md)
 
 ## Data and citation

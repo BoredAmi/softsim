@@ -38,9 +38,10 @@ video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
 fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # reference solvers (softsim.fem, backend "fem"); float64 on CPU
 fast = ["pypardiso>=0.4"]   # MKL PARDISO for the 3D reference's linear solves (x86-64; ~35x faster than SuperLU)
+rl = ["gymnasium>=0.29"]   # softsim.envs: Gymnasium environments (docs/envs.md)
 docs = ["mkdocs-material>=9.5", "pymdown-extensions>=10"]
 all = ["softsim[mujoco,mesh,calib,fem,media]"]
-dev = ["pytest>=7", "ruff>=0.5", "softsim[mujoco,mesh,calib]"]
+dev = ["pytest>=7", "ruff>=0.5", "softsim[mujoco,mesh,calib,rl]"]
 
 [project.urls]
 Homepage = "https://github.com/BoredAmi/softsim"
@@ -53,6 +54,9 @@ softsim = "softsim.cli:main"
 # Third-party packages can register scenarios / backends without touching the core.
 [project.entry-points."softsim.scenarios"]
 drop_test = "softsim.scenarios.drop_test:DropTestScenario"
+
+[project.entry-points."gymnasium.envs"]
+softsim = "softsim.envs:register_envs"
 
 [project.entry-points."softsim.backends"]
 mujoco = "softsim.backends.mujoco:MujocoBackend"
@@ -73,7 +77,7 @@ markers = ["slow: long-running physics checks (deselect with -m 'not slow')"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["build", "install", "log", "runs", "data"]
+extend-exclude = ["build", "install", "log", "runs", "data", ".claude"]
 
 [tool.ruff.lint]
 # errors only: syntax, undefined names, unused imports/variables; style is left to review

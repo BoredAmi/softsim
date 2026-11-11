@@ -236,7 +236,7 @@ and 2 ms. With a 5 mm mesh:
 - MuJoCo reproduces the card within 3–10% using E0 = 66 kPa, g = 0.94,
   τ = 5.5 ms;
 - SOFA within 3–7% using 79.6 kPa, 0.77 and 2.7 ms
-([experiments.md](experiments.md#a-physical-card-on-the-3d-reference---backend-fem)).
+([experiments.md](experiments.md#a-physical-card-on-the-3d-reference-fem-backend)).
 
 A transferred card is only valid for loads like the ones it was transferred
 on. The MuJoCo card above (fitted on 20 and 50 g) relaxes 94% within a few

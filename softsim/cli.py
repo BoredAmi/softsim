@@ -440,7 +440,7 @@ def _cmd_transfer(args: argparse.Namespace) -> int:
 def _cmd_inverse(args: argparse.Namespace) -> int:
     from softsim.control.inverse import run_job
 
-    print(json.dumps(run_job(args.job), indent=2, default=float))
+    print(json.dumps(run_job(args.job, args.method), indent=2, default=float))
     return 0
 
 
@@ -608,6 +608,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("inverse", help="quasi-static inverse control: actuator values that reach target outputs "
                                        "(docs/control.md)")
     p.add_argument("job", help="job YAML, e.g. jobs/inverse_cable_cantilever.yaml")
+    p.add_argument("--method", choices=["repeated", "sofa-qp"], default=None,
+                   help="repeated equilibrium solves (default, any backend) or SOFA's QP inverse solver "
+                        "(SoftRobots.Inverse; cables and tip position/angle targets); overrides the job's `method:`")
     p.set_defaults(func=_cmd_inverse)
 
     p = sub.add_parser("fit", help="fit a scenario's parameters to a measured table (softsim.experiments.fit)")

@@ -1,0 +1,17 @@
+# The two-cable arm of inverse_cable_arm.yaml with SOFA's QP inverse solver: one run finds both tensions.
+#   softsim inverse jobs/inverse_cable_arm_sofa.yaml
+config: ../scenarios/actuation/cable_arm.yaml
+method: sofa-qp
+overrides: [body.mesh.size=6mm]
+timestep: 5 ms                          # SOFA is implicit: far larger than the explicit solvers' step
+settle_damping: {model: rayleigh, beta: 0.15 s}   # the arm's ~1 Hz mode needs strong damping to settle
+settle_window: 0.2 s
+max_settle: 4 s
+scales: {tip_z: 0.2 mm}
+targets:
+  tip_x: 3.994 mm
+  tip_z: 118.515 mm
+actuators:
+  cable_a: [0 N, 0.5 N]
+  cable_b: [0 N, 0.5 N]
+tolerance: 0.1

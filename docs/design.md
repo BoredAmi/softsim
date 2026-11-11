@@ -107,7 +107,19 @@ the tendon offset, those evaluations were reported as `FAILED` with the reason, 
 The width optimum is not sharp: the bend angle jitters by about 0.01 rad between neighbouring widths
 (4.0 mm: 0.260, 4.5 mm: 0.271, 4.625 mm: 0.258, 4.75 mm: 0.276, 5.0 mm: 0.270) because each design is
 re-meshed, so the optimiser sees mesh noise of about 4 % and the width is determined only to about 0.3 mm.
-The winner has not been checked on the `fem` reference (a 3D finger run there takes much longer).
+**Checked on the `fem` reference** (2 mm mesh, 2 ms step, the scenario's 0.2 N; about 20 min each on the laptop):
+
+| Design (depth / width) | MuJoCo, 3 mm | Reference, 2 mm |
+| --- | --- | --- |
+| start, 3 / 3 mm | 0.160 rad | 0.267 rad |
+| optimised, 4 / 4.875 mm | 0.278 rad | 0.488 rad (stroke 2.63 mm, within the 4 mm limit) |
+| gain | +74% | +83% |
+
+The ranking transfers: the design MuJoCo chose is better on the reference by a similar (slightly larger) factor,
+while MuJoCo's absolute angles are about 1.7 times too small (linear tetrahedra lock). Use the fast backend to rank
+designs, the reference to state how far the winner bends. Reproduce:
+`softsim run scenarios/actuation/cable_finger.yaml --backend fem --set simulation.timestep=2ms --set body.mesh.size=2mm
+--set body.geometry.slot_depth=4mm --set body.geometry.slot_width=4.875mm`.
 
 ## Limits
 

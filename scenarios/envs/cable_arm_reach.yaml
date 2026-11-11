@@ -1,0 +1,32 @@
+# Gymnasium env softsim/CableArmReach-v0: move the tip of the two-cable arm (scenarios/actuation/cable_arm.yaml) to a
+# target (x, z) with two actions, the cable tensions. Coarse 6 mm mesh, 0.5 ms physics step, 50 ms per action; the arm's
+# first mode is ~1 Hz, so strong Rayleigh damping is added (equilibrium unchanged) and an episode is 2 s.
+# The default target is the tip at tensions 0.45 N / 0.15 N on the same settings (docs/control.md), so it is reachable.
+# Randomisation (off by default; gym.make(..., randomize=True)): Ecoflex modulus +-10 % of the body (the disks stay stiff).
+scenario: ../actuation/cable_arm.yaml
+backend: mujoco
+overrides:
+  - body.mesh.size=6mm
+  - simulation.timestep=0.5ms
+  - simulation.iterations=100
+  - "body.material.damping={model: rayleigh, beta: 0.15}"
+  - "body.zones[0].material.damping={model: rayleigh, beta: 0.15}"
+  - "body.zones[1].material.damping={model: rayleigh, beta: 0.15}"
+actuators:
+  cable_a: [0 N, 0.5 N]
+  cable_b: [0 N, 0.5 N]
+control_period: 50 ms
+observation: [tip_x, tip_z, cable_a_length, cable_b_length]
+include_actuators: true
+include_target: true
+task:
+  metrics: [tip_x, tip_z]
+  target: [3.994 mm, 118.515 mm]
+  tolerance: [0.4 mm, 0.3 mm]
+  scale: [1 mm, 0.5 mm]
+max_steps: 40
+randomize:
+  enabled: false
+  body: arm
+  ranges:
+    elastic.youngs_modulus: {rel: 0.1}

@@ -513,7 +513,7 @@ solver ([reference_fem.md](reference_fem.md)) cross-checks this:
 Use the MuJoCo presets with MuJoCo at their mesh size. Take the material's
 actual modulus from the reference.
 
-## A physical card on the 3D reference (`--backend fem`)
+## A physical card on the 3D reference (fem backend)
 
 The 3D locking-free reference ([reference_fem.md](reference_fem.md)) runs the
 drop test with each recording's measured offset, spin and tilt. It answers
