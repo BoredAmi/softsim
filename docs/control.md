@@ -93,6 +93,7 @@ the residual, not the actuator error.
 softsim inverse jobs/inverse_cable_cantilever_sofa.yaml                  # `method: sofa-qp` in the job
 softsim inverse jobs/inverse_cable_cantilever.yaml --method sofa-qp      # or on the command line
 softsim inverse jobs/inverse_cable_arm_sofa.yaml                         # two cables, tip x and z, one QP run
+softsim inverse jobs/inverse_bending_sofa.yaml                           # a pressure (SurfacePressureActuator)
 ```
 
 ```python
@@ -124,6 +125,16 @@ the step, within the bounds; the run is stepped until forces and outputs have st
   from the vertices (2 QP runs for the 2 degree job). Other outputs are refused.
 - **Step.** SOFA is implicit, so the step is 2 ms (`timestep`), not the scenario's 0.1 ms; the body gets the same
   stiffness-proportional damping as the repeated solve (`settle_damping`, default 10 ms) so that it settles.
+- **Pressure actuators.** A pneumatic actuator (`SurfacePressureActuator`) is built on the actuator's `cavity` region
+  (a child node with the cavity triangles, mapped to the body); bounds are pressures (`cavity: [0 kPa, 10 kPa]`) and the
+  targets are positions (`tip_x`, `tip_y`, `tip_z`; mind the direction a robot bends: the bending tube curls to -x, the
+  PneuNet to -z). Measured: the solver's lambda is an impulse, `pressure * dt`, like the cables (the bounds go in as
+  `pressure * dt`, the pressure is `lambda / dt`: a run clamped at 2 kPa gives the tip the ordinary backend's explicit
+  follower pressure gives at 2 kPa, -0.1230656 mm, to 7 digits). Two traps, both found by measurement: the cavity
+  triangles need the opposite winding to softsim's (else the volume shrinks and the pressure clamps at 0), and in SI units the
+  QP's matrices are tiny (the pressure's entry is ~4e-12), so qpOASES returns lambda = 0 for every reachable goal and
+  bangs between 0 and the bound for an unreachable one. The effector `weight` scales the objective: 1e6 (`qp_weight`) is
+  the default with pressures, 1e5 and 1e7 give the same pressure. Angle targets are refused with a pressure.
 - **Outcome.** Same statuses as above. A goal beyond the bounds leaves the cable at its bound (`bounded_best`,
   `at_bounds`): no second solve is made once a force is saturated.
 
@@ -135,7 +146,10 @@ the scene):
 | Cantilever, 2 degrees | 0.2699 N (angle error 1.4e-4 rad), 2 runs, 90 steps, 1.2 s | 0.2716 N (error 8.6e-5 rad), 5 equilibria, 693 steps, 9.1 s | 7.5x |
 | Cantilever, tip x = 2 mm | 0.5575 N (tip 1.9977 mm), 1 run, 60 steps, 0.9 s | 0.5509 N (tip 1.9767 mm), 6 equilibria, 868 steps, 10.0 s | 11x |
 | Same, 8 mm with at most 0.7 N | 0.7 N, tip 2.49 mm, `bounded_best` | - | - |
-| Arm, tip x 3.994 mm and z 118.515 mm | 0.4497 / 0.1500 N (true 0.45 / 0.15 N), errors 0.02 um / 0.3 um, 1 run, 2.8 s | `stalled`, 0.245 / 0.234 N, 28 equilibria unsettled, 336 s | 120x |
+| Arm, tip x 3.994 mm and z 118.515 mm | 0.4497 / 0.1500 N (true 0.45 / 0.15 N), errors 0.02 um / 0.3 um, 1 run, 2.8 s | 0.4464 / 0.1488 N (0.8% low, `converged`, tip errors 20 um and 12 nm), 13 equilibria, 2689 steps, 47 s; before the cable fix it was `stalled`, 0.245 / 0.234 N, 28 equilibria unsettled, 336 s | 17x |
+| Bending tube (2 mm mesh, 1279 points), tip x = -0.28681 mm (what 4 kPa gives) | 3999.0 Pa (true 4000, 0.03%; tip error 0.09 um), 3 runs, 110 steps of 2 ms, 32 s | 4000.3 Pa, 7 equilibria, 824 steps, 225 s | 7x |
+| PneuNet (1.5 mm mesh, 4936 points), tip z = 5.3077 mm (what 5 kPa gives, 10 ms steps) | 4997.7 Pa (true 5000, 0.05%; tip error 1.5 um), 2 runs, 40 steps, 96 s | not run (the explicit backend needs minutes per equilibrium at this size) | - |
+| Bending tube, tip x = -1 mm with at most 2 kPa | 2000 Pa, tip -0.1231 mm, `bounded_best` | - | - |
 
 The tensions agree to 0.6% (angle target; the two stop at residuals of 0.014 and 0.009 of a 0.01 rad scale, i.e. 0.4%
 in angle) and 1.2% (position target; the repeated solve stopped 23 um short of the target, and scaling its tension by
@@ -143,10 +157,46 @@ the ratio of the tips gives 0.5517 N against the QP's 0.5575 N: 1%). The QP's te
 backend's explicit cable force, puts the tip within 0.05 mm of the 2 mm target (tested). The arm's targets are the tip
 MuJoCo reaches at 0.45 / 0.15 N on the same mesh, so the 0.07% agreement is across backends.
 
-**Why the arm stalls on the repeated solve.** The ordinary SOFA backend applies the cable as an explicit follower force.
-On the 6 mm arm that force does not settle: the tip's x oscillates by about +-0.5 mm indefinitely at 1, 2 and 5 ms steps
-(not investigated further; MuJoCo with its damping settles). The constraint-based cable has no such limit cycle, which
-is a reason to use the QP path for slender cable robots on SOFA besides speed.
+The pressure targets are the tips the same model reaches at a held pressure: the bending tube's from the ordinary SOFA
+backend (explicit follower pressure, 2 ms steps, 59 s), the PneuNet's from a QP run clamped at 5 kPa (the explicit
+backend is too slow at 1.5 mm; the clamped run was checked against it on the tube). The tube's tip moves only 0.3 mm at
+4 kPa (stiff walls), so its scale is 0.01 mm, not the default 1 mm, which a run that never pressurised would satisfy.
+
+**Why the arm stalled on the repeated solve (found and fixed).** The ordinary SOFA backend used to apply the cable as an
+explicit follower force, and on the 6 mm arm that did not settle: the tip's x swung by 0.6-1.9 mm peak to peak
+indefinitely (period 0.39 s, 2.6 Hz, along the mesh diagonal), at every step from 10 ms to 0.25 ms, while MuJoCo
+settled. Measured on the 6 mm mesh at 0.45 / 0.15 N, Rayleigh beta 0.15 s:
+
+| Run | Tip x peak to peak, last seconds |
+| --- | --- |
+| explicit cable, dt 10 / 5 / 1 / 0.25 ms | 0.59 / 0.85 / 1.9 / 3.9 mm (grows as dt shrinks; still growing at 0.25 ms) |
+| explicit, no damping, 5 ms | 1.8 mm |
+| explicit, beta 0.5 / 1.5 s, 5 ms | regrows to 0.67 mm / decays (0.012 mm at 3.5 s) |
+| cable A alone, B alone, both at half tension (10 ms) | settle |
+| both cables at twice the tension (10 ms) | 1.7 mm |
+| released at 2 s (no cable) | decays in 1 s |
+| force-type `CableConstraint` (SoftRobots) instead of the force field | identical to the explicit run to 4 digits |
+| linear (`small`) or corotational (`large`, `svd`) elastic law, same load | settles (tip x 1.80, 4.39, 4.74 mm) |
+| cable as springs in the implicit system (below), 5 / 2 / 1 ms | settles; tip x 4.0025 mm, z 118.514 mm at every step |
+
+So it is not the step size (it gets worse as the step shrinks, and extrapolating the positions to the end of the step
+for the force changes little), not the routing points (the cable's Jacobian is symmetric and positive semi-definite,
+checked against finite differences), and not the constraint form of the cable (identical). It needs both cables (the S
+shape) and the hyperelastic force field. The reading that fits all of it, and that the fix below supports (an inference, the hyperelastic tangent was not computed directly), is: the cable is a stabilising lateral stiffness `T (I - u u^T) / l` per segment, and under
+the arm's compression (0.6 N against a column whose Euler load is about 0.03 N) it balances the elastic force field's
+negative geometric stiffness. `TetrahedronHyperelasticityFEMForceField` has, we infer, that geometric part in its tangent, so the
+implicit matrix (and with it the Rayleigh `beta K` damping, and implicit Euler's own numerical damping) is nearly
+singular or indefinite in the bending mode, with the cable's compensating stiffness missing from it. The slowest
+modes are then undamped or anti-damped whatever the step: a limit cycle. The corotational field has no geometric
+stiffness in its tangent and the small-strain one no geometric effect at all, so they settle (but are wrong: 4.39 and
+1.80 mm against 3.994 mm).
+
+The backend now puts a tension-controlled cable into the implicit system: springs between the via points (mapped on the
+mesh) whose rest lengths are reset every step to `length - T / k`, which gives the force `T` at the current positions
+and the tangent `T (I - u u^T) / l` as stiffness, with a negligible axial `k` (1% of `T` per via-point spacing). The
+arm now settles within 1 s at 5 ms to 1 ms steps (tip x 4.0025 mm, z 118.514 mm; the QP path's tip is 3.994 mm and
+118.515 mm, MuJoCo's 3.994 mm: 8.5 um apart in x, and the tension is the same), and the repeated solve on SOFA now converges (table above). Stroke-controlled and anchored
+cables are still explicit follower forces.
 
 **Limits.**
 
@@ -158,8 +208,8 @@ is a reason to use the QP path for slender cable robots on SOFA besides speed.
 - **The effector.** A position (up to three axes) of one point. An angle needs the secant wrapper (one cable, one
   target); several angle or mixed targets, tip orientation (a `Rigid3d` effector) and output constraints are not
   built. Fewer axes than cables is refused (the repeated solve refuses it too).
-- **Scope.** Tension-controlled cables on one soft body with a `tip` / `top` region; stroke-controlled cables, pressure
-  and force actuators, rigid bodies, contact, viscoelasticity, prescribed motion and moving mounts are refused or not
-  built. `SurfacePressureActuator` was not tried.
+- **Scope.** Tension-controlled cables and pressures on one soft body with a `tip` / `top` region; stroke-controlled
+  cables, force actuators, angle targets with a pressure, a pressure and a cable together (untested), rigid bodies,
+  contact, viscoelasticity, prescribed motion and moving mounts are refused or not built.
 - **One equilibrium.** As above: the QP follows one branch from the rest state; a snapping structure may have others.
 - **Bounds only on the forces.** `maxDispVariation` / displacement limits of `CableActuator` are not exposed.

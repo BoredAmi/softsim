@@ -24,9 +24,12 @@ Notes and limits (see docs/backends/sofa.md):
     * Prony viscoelasticity: the force field carries the long-term law; the
       Maxwell-branch overstresses (``softsim.materials.viscoelastic``) go through
       another ``ConstantForceField``, the same implementation as on MuJoCo.
-    * pressure and cable actuators: explicit follower forces
+    * pressure actuators and stroke-controlled or anchored cables: explicit follower forces
       (``softsim.actuation.pressure_forces``, ``cable_forces``) in a
       ``ConstantForceField``, updated before every step, as on MuJoCo.
+    * tension-controlled cables: springs between the via points (mapped onto the mesh) whose rest
+      lengths are reset every step to give the tension, so the cable's tangent stiffness is implicit
+      (``SofaBackend._add_cable``; the explicit force swings the two-cable arm in a limit cycle).
     * rotating mount: simulated in the mount's frame, rotated gravity plus the Euler, centrifugal and
       Coriolis forces (``MountFrame.fictitious``) in a ``ConstantForceField``, explicit, before every step.
     * prescribed regions: ``PartialLinearMovementProjectiveConstraint`` (held axes only) with a key
@@ -76,8 +79,12 @@ PLUGINS = [
     "Sofa.Component.ODESolver.Backward", "Sofa.Component.SolidMechanics.FEM.Elastic",
     "Sofa.Component.SolidMechanics.FEM.HyperElastic", "Sofa.Component.StateContainer",
     "Sofa.Component.Topology.Container.Constant", "Sofa.Component.Topology.Container.Dynamic",
-    "Sofa.Component.MechanicalLoad",
+    "Sofa.Component.MechanicalLoad", "Sofa.Component.SolidMechanics.Spring",
 ]
+# axial stiffness of a tension-controlled cable's springs, in tension per via-point spacing: a cable carries a
+# tension, not a stiffness, so it is small (the tension changes by 1 % of itself per spacing of stretch, and the
+# rest lengths are reset every step); it only keeps the lateral stiffness T/L, which the spring needs a k for
+CABLE_AXIAL_STIFFNESS = 0.01
 # Blow-up guard: an exploding FEM state floods the constraint solver with contacts
 # and SOFA segfaults before any NaN appears, so stepping stops above this speed.
 MAX_SPEED = float(os.environ.get("SOFTSIM_SOFA_MAX_SPEED", 100.0))  # m/s
@@ -254,7 +261,13 @@ class SofaBackend(Backend):
         root.addObject("BruteForceBroadPhase")
         root.addObject("BVHNarrowPhase")
         alarm = float(os.environ.get("SOFTSIM_SOFA_ALARM", max(4 * contact.soft_radius, 4e-4)))
-        root.addObject("MinProximityIntersection", alarmDistance=alarm, contactDistance=contact.soft_radius)
+        self._intersection = root.addObject("MinProximityIntersection", alarmDistance=alarm,
+                                            contactDistance=contact.soft_radius)
+        self._alarm0, self._contact_distance = alarm, contact.soft_radius
+        # a vertex that travels farther than the alarm distance in one step reaches a surface unseen, then is pushed
+        # *away from the far side* (the proximity normal follows the position, not the triangle): see sofa.md
+        self._alarm_factor = float(os.environ.get("SOFTSIM_SOFA_ALARM_FACTOR", 1.0))
+        self._adaptive_alarm = os.environ.get("SOFTSIM_SOFA_ADAPTIVE_ALARM", "1") != "0"
         frictions = [b.material.friction.sliding for b in scene.soft_bodies] + \
                     [b.friction.sliding for b in scene.rigid_bodies]
         if scene.ground.enabled:
@@ -345,12 +358,15 @@ class SofaBackend(Backend):
                           node.addObject("ConstantForceField", name="prony", indices=list(range(len(pts))),
                                          forces=np.zeros((len(pts), 3)).tolist()))
         loads = []  # (actuator name, force function of the positions and the actuator's value)
+        cables = []  # tension-controlled cables: (actuator, via points' state, springs, stiffness), see _add_cable
         for a in self._scene.actuators:
             if a.body != body.name:
                 continue
             if isinstance(a, PressureActuator):
                 tris = body.region(a.region)
                 loads.append((a.name, lambda x, v, tris=tris: pressure_forces(x, tris, v)))
+            elif isinstance(a, CableActuator) and not a.stroke_controlled and a.anchor is None:
+                cables.append(self._add_cable(node, body, a, rot, offset))
             elif isinstance(a, CableActuator):
                 nodes, bary = body.cable_rows(a)
                 rest = cable_length(body.mesh.points, nodes, bary)
@@ -380,7 +396,30 @@ class SofaBackend(Backend):
         masses = body.vertex_masses()
         return {"dofs": dofs, "masses": masses, "offset": offset, "rot": rot, "adhesion": adhesion,
                 "prony": overstress, "actuation": (actuation, loads), "prescribed": prescribed,
-                "fictitious": fictitious, "body": body.name}
+                "fictitious": fictitious, "body": body.name, "cables": cables}
+
+    def _add_cable(self, node, body: SoftBodySpec, a: CableActuator, rot: np.ndarray, offset: np.ndarray):
+        """A tension-controlled cable as springs between its via points, with the tension set every step.
+
+        The via points are mapped onto the mesh (``BarycentricMapping``) and a ``StiffSpringForceField`` joins
+        consecutive ones; each step ``step`` sets the springs' rest lengths so that their force is the tension at the
+        current positions, i.e. ``length - T / k``. The force is the tension, as with an explicit follower force, but
+        the spring's tangent stiffness (the cable's ``T (I - u u^T) / L`` lateral part, plus a negligible axial ``k``,
+        1 % of ``T`` per via-point spacing) is part of the implicit system and of the Rayleigh damping. Without it the
+        cable's stabilising stiffness is explicit while the elastic geometric stiffness it balances is implicit: the
+        two-cable arm then swings in a limit cycle (docs/control.md)."""
+        nodes, bary = body.cable_rows(a)
+        via = np.einsum("kj,kji->ki", bary, body.mesh.points[nodes]) @ rot.T + offset
+        seg = np.linalg.norm(np.diff(via, axis=0), axis=1)
+        peak = max([abs(v) for _, v in a.schedule] + [abs(a.tension), 0.1])
+        k = CABLE_AXIAL_STIFFNESS * peak / float(seg.mean())
+        child = node.addChild(f"cable_{a.name}")
+        points = child.addObject("MechanicalObject", position=via.tolist())
+        springs = child.addObject("StiffSpringForceField", name="tension", indices1=list(range(len(seg))),
+                                  indices2=list(range(1, len(seg) + 1)), lengths=seg.tolist(),
+                                  stiffness=[k] * len(seg), damping=[0.0] * len(seg))
+        child.addObject("BarycentricMapping", mapForces=True, mapMasses=False)
+        return a, points, springs, k
 
     def _add_rigid(self, root, body: RigidBodySpec) -> dict:
         com_local, inertia = rigid_mass_properties(body)
@@ -428,6 +467,17 @@ class SofaBackend(Backend):
         return any(not np.isfinite(v).all() or np.abs(v[..., :3]).max(initial=0.0) > MAX_SPEED
                    for v in velocities.values())
 
+    def _alarm(self, dt: float) -> float:
+        """Alarm distance for the coming step: the nominal one, or more if a vertex could cross it in one step.
+
+        The proximity intersection only makes a contact for a point within ``alarmDistance`` of a triangle at the
+        step's start. Faster than ``alarm / dt`` the point reaches the surface unseen (rim flare of the 500 g drop:
+        12 m/s against 0.4 mm / 50 us = 8 m/s) and, once past it, the contact pushes it further through.
+        The fastest vertex's travel in a step plus the contact distance covers it (twice that fixes it too but
+        costs 60% more time against 12%, ``SOFTSIM_SOFA_ALARM_FACTOR``)."""
+        vmax = max((np.abs(v[..., :3]).max(initial=0.0) for v in self._prev.values()), default=0.0)
+        return max(self._alarm0, self._contact_distance + self._alarm_factor * vmax * dt)
+
     def step(self, n: int = 1) -> None:
         dt = self.scene.simulation.timestep
         for _ in range(n):
@@ -439,6 +489,8 @@ class SofaBackend(Backend):
             if self._blown_up(self._prev):
                 self._diverged = True
                 return
+            if self._adaptive_alarm:
+                self._intersection.alarmDistance.value = self._alarm(dt)
             if self._adhesion:
                 self._apply_adhesion()
             for d in self._soft.values():
@@ -455,6 +507,11 @@ class SofaBackend(Backend):
                 if field is not None:
                     x = np.asarray(d["dofs"].position.value, float)
                     field.forces.value = sum(load(x, self.control(name)) for name, load in loads).tolist()
+                for a, points, springs, k in d["cables"]:  # rest lengths for a force T at the current positions
+                    # (T / k is up to 100 spacings, so the rest lengths are negative: the spring force k (l - l0) is
+                    # still T along the segment, and its lateral tangent k (1 - l0 / l) = T / l, as intended)
+                    length = np.linalg.norm(np.diff(np.asarray(points.position.value, float), axis=0), axis=1)
+                    springs.lengths.value = (length - self.control(a.name) / k).tolist()
             self._sofa.Simulation.animate(self.root, dt)
 
     def _apply_adhesion(self) -> None:

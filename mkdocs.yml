@@ -52,6 +52,7 @@ nav:
   - Robots:
       - Actuation: actuation.md
       - Inverse control: control.md
+      - Surrogates: surrogate.md
       - Gymnasium environments: envs.md
       - Soft gripper: gripper.md
       - Gripper demo script: demo_script.md

@@ -104,3 +104,68 @@ def test_two_cable_arm_recovers_the_tensions():
     assert res.status == "converged" and res.unsettled == 0
     assert res.values["cable_a"] == pytest.approx(0.45, rel=0.03)
     assert res.values["cable_b"] == pytest.approx(0.15, rel=0.03)
+
+
+def test_arm_tip_settles_on_the_forward_backend():
+    """The two-cable arm under constant 0.45 / 0.15 N: the tension-controlled cable's tangent stiffness is in the
+    implicit system, so the tip settles (an explicit follower force swung it by +-0.5 mm indefinitely, 5 ms or 1 ms)
+    at the QP path's tip (x 3.994 mm, z 118.515 mm on the 6 mm mesh, to 0.02 mm and 0.05 mm)."""
+    import numpy as np
+
+    raw = _with_damping(apply_overrides(load_yaml(ARM), [*ARM_COARSE, "simulation.timestep=5ms"]), ARM_DAMPING)
+    sim = Simulation(raw, backend="sofa", base_dir=ARM.parent)
+    try:
+        sim.backend.set_control("cable_a", 0.45)
+        sim.backend.set_control("cable_b", 0.15)
+        tip, top = [], np.where(sim.backend.state().soft["arm"].vertices[:, 2] > 0.1199)[0]
+        for _ in range(500):  # 2.5 s
+            sim.backend.step(1)
+            tip.append(sim.backend.state().soft["arm"].vertices[top].mean(axis=0))
+        tip = np.array(tip)
+        assert np.ptp(tip[-100:, 0]) < 2e-6 and np.ptp(tip[-100:, 2]) < 2e-6  # the last 0.5 s
+        assert tip[-1, 0] == pytest.approx(3.994e-3, abs=2e-5)
+        assert tip[-1, 2] == pytest.approx(118.515e-3, abs=5e-5)
+    finally:
+        sim.close()
+
+
+BENDING = ROOT / "scenarios" / "inflation" / "bending.yaml"
+
+
+@pytest.mark.slow
+def test_pressure_round_trip_on_the_bending_actuator():
+    """Pressure actuator: the tip the ordinary SOFA backend (explicit follower pressure) reaches at a held 4 kPa
+    is the QP's target, and the QP gives 4 kPa back (measured 3999.0 Pa, 0.03%; asserted 1%). The SurfacePressureActuator
+    bounds go in as ``pressure * dt`` and the pressure is ``lambda / dt``, as for the cables."""
+    outs = ["tip_x"]
+    reached = _forward(BENDING, ["simulation.timestep=2ms"], {"cavity": 4000.0}, outs)["tip_x"]
+    assert reached < -2e-4                       # curls towards -x
+    res = solve_inverse_sofa(BENDING, {"tip_x": reached}, ["cavity"], {"cavity": (0, "10 kPa")}, timestep="2 ms",
+                             scales={"tip_x": "0.01 mm"})
+    assert res.status == "converged" and res.unsettled == 0
+    assert res.values["cavity"] == pytest.approx(4000.0, rel=0.01)
+    assert res.outputs["tip_x"] == pytest.approx(reached, abs=2e-6)
+
+
+def test_pressure_target_beyond_the_bounds_is_the_bounded_solution():
+    """2 kPa cannot reach 1 mm: the cavity sits at its bound and the tip is where the explicit backend puts it at
+    2 kPa (-0.123066 mm, measured with 0.1 ms steps; the QP's clamped run gives -0.123066 mm)."""
+    res = solve_inverse_sofa(BENDING, {"tip_x": "-1 mm"}, ["cavity"], {"cavity": (0, "2 kPa")}, timestep="5 ms",
+                             scales={"tip_x": "0.01 mm"}, max_corrections=2)
+    assert res.status == "bounded_best" and res.at_bounds == ["cavity"]
+    assert res.values["cavity"] == pytest.approx(2000.0, rel=1e-3)
+    assert res.outputs["tip_x"] == pytest.approx(-1.23066e-4, abs=3e-6)
+
+
+def test_pressure_angle_target_is_refused():
+    from softsim.errors import ConfigError
+
+    with pytest.raises(ConfigError, match="angle targets are not supported with pressure"):
+        solve_inverse_sofa(BENDING, {"bend_angle": "1 deg"}, ["cavity"], {"cavity": (0, "10 kPa")})
+
+
+@pytest.mark.slow
+def test_pressure_job_file():
+    """jobs/inverse_bending_sofa.yaml: the target is the tip the explicit backend reaches at 4 kPa."""
+    out = run_job(ROOT / "jobs" / "inverse_bending_sofa.yaml")
+    assert out["status"] == "converged" and out["values"]["cavity"] == pytest.approx(4000.0, rel=0.01)

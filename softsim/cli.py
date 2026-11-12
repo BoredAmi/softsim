@@ -440,7 +440,14 @@ def _cmd_transfer(args: argparse.Namespace) -> int:
 def _cmd_inverse(args: argparse.Namespace) -> int:
     from softsim.control.inverse import run_job
 
-    print(json.dumps(run_job(args.job, args.method), indent=2, default=float))
+    print(json.dumps(run_job(args.job, args.method, args.surrogate), indent=2, default=float))
+    return 0
+
+
+def _cmd_surrogate(args: argparse.Namespace) -> int:
+    from softsim.control.surrogate import run_surrogate_job
+
+    print(json.dumps(run_surrogate_job(args.job), indent=2, default=float))
     return 0
 
 
@@ -608,10 +615,18 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("inverse", help="quasi-static inverse control: actuator values that reach target outputs "
                                        "(docs/control.md)")
     p.add_argument("job", help="job YAML, e.g. jobs/inverse_cable_cantilever.yaml")
-    p.add_argument("--method", choices=["repeated", "sofa-qp"], default=None,
+    p.add_argument("--method", choices=["repeated", "sofa-qp", "surrogate"], default=None,
                    help="repeated equilibrium solves (default, any backend) or SOFA's QP inverse solver "
-                        "(SoftRobots.Inverse; cables and tip position/angle targets); overrides the job's `method:`")
+                        "(SoftRobots.Inverse; cables and tip position/angle targets) or a fitted surrogate "
+                        "(`--surrogate file.json`, milliseconds); overrides the job's `method:`")
+    p.add_argument("--surrogate", default=None, metavar="FILE",
+                   help="surrogate JSON from `softsim surrogate` (implies --method surrogate; or `surrogate:` in the job)")
     p.set_defaults(func=_cmd_inverse)
+
+    p = sub.add_parser("surrogate", help="fit a reduced-order surrogate of the equilibrium map for real-time control "
+                                         "(docs/surrogate.md)")
+    p.add_argument("job", help="surrogate job YAML, e.g. jobs/surrogate_cable_cantilever.yaml")
+    p.set_defaults(func=_cmd_surrogate)
 
     p = sub.add_parser("fit", help="fit a scenario's parameters to a measured table (softsim.experiments.fit)")
     p.add_argument("fit", help="fit YAML with a `data:` section, e.g. calibrations/pneunet_fit.yaml")

@@ -1,0 +1,22 @@
+# Surrogate of the two-cable arm's equilibrium map (docs/surrogate.md):
+#   softsim surrogate jobs/surrogate_cable_arm.yaml
+#   softsim inverse jobs/inverse_cable_arm_surrogate.yaml --method surrogate
+# Same settings as jobs/inverse_cable_arm.yaml (the first mode is ~1 Hz, so the damping is strong).
+config: ../scenarios/actuation/cable_arm.yaml
+backend: mujoco
+overrides: [body.mesh.size=6mm, simulation.timestep=0.5ms, simulation.iterations=100]
+settle_damping: {model: rayleigh, beta: 0.15 s}
+scales: {tip_z: 0.2 mm}
+settle_tol: 0.005
+max_settle: 3 s
+inputs:
+  cable_a: [0 N, 0.5 N]
+  cable_b: [0 N, 0.5 N]
+outputs: [tip_x, tip_z]
+samples: 20                             # 4 corners + 16 Latin hypercube
+holdout: 6
+folds: 5
+seed: 0
+model: poly
+degree: auto
+output: ../runs/surrogate/cable_arm

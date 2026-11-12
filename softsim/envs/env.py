@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping
 
 import numpy as np
 
-from softsim.envs import ENV_IDS, require_gymnasium
+from softsim.envs import ENV_IDS, GRIPPER_ID, require_gymnasium
 
 gym = require_gymnasium()
 from gymnasium import spaces  # noqa: E402
@@ -42,7 +42,8 @@ class SoftsimEnv(gym.Env):
     * ``actuators``: ``{name: [low, high]}`` in SI with units (``0 N``); the action space is this box, in this order.
     * ``control_period``: time each action is held, a multiple of the physics ``timestep`` (default one output interval).
     * ``observation``: scenario metric names (``tip_x``, ``bend_angle``, ``cable_length``, ...) in SI;
-      ``include_actuators`` appends the held actuator values, ``include_target`` the target.
+      ``include_actuators`` appends the held actuator values, ``include_target`` the target; ``observation_rate``
+      (metric names) appends their rate of change over the last action, ``(new - old) / control_period``, a velocity.
     * ``task``: ``metrics`` (the controlled outputs), ``target`` (fixed) or ``target_range`` (``[[low, high], ...]``
       drawn at every reset), ``tolerance``, ``scale`` (default 1 mm / 0.01 rad per metric), ``success_bonus``.
       The reward is ``-|(metric - target) / scale|`` (Euclidean over the metrics), smooth away from the target,
@@ -109,6 +110,11 @@ class SoftsimEnv(gym.Env):
         for m in self.obs_metrics:
             if m not in known:
                 raise ConfigError(f"unknown metric {m!r}; this scenario reports {sorted(known)}")
+        self.rate_metrics = list(cfg.get("observation_rate", []))
+        for m in self.rate_metrics:
+            if m not in known:
+                raise ConfigError(f"unknown observation_rate metric {m!r}; this scenario reports {sorted(known)}")
+        self.control_period = self.substeps * dt
         self.include_actuators = bool(cfg.get("include_actuators", False))
         self.include_target = bool(cfg.get("include_target", True))
 
@@ -139,7 +145,7 @@ class SoftsimEnv(gym.Env):
         self.failure_penalty = float(task.get("failure_penalty", -10.0))
         self.target = self._target0.copy() if k else np.zeros(0)
 
-        n_obs = len(self.obs_metrics) + (len(self.actuators) if self.include_actuators else 0) \
+        n_obs = len(self.obs_metrics) + len(self.rate_metrics) + (len(self.actuators) if self.include_actuators else 0) \
             + (k if self.include_target else 0)
         self.observation_space = spaces.Box(-np.inf, np.inf, (n_obs,), dtype=np.float32)
 
@@ -159,6 +165,7 @@ class SoftsimEnv(gym.Env):
         self._steps = 0
         self._obs = np.zeros(n_obs, dtype=np.float32)
         self._metrics: dict[str, float] = known
+        self._previous: dict[str, float] = known
         self.last_step_time = 0.0
 
     # -- helpers -------------------------------------------------------------
@@ -183,6 +190,7 @@ class SoftsimEnv(gym.Env):
 
     def _observe(self) -> np.ndarray:
         parts = [self._metrics[k] for k in self.obs_metrics]
+        parts += [(self._metrics[k] - self._previous[k]) / self.control_period for k in self.rate_metrics]
         if self.include_actuators:
             parts += list(self._action)
         if self.include_target:
@@ -222,7 +230,7 @@ class SoftsimEnv(gym.Env):
         self._action = self._low.copy()
         self.sim.apply_controls(dict(zip(self.actuators, self._action)))
         self._steps = 0
-        self._metrics = self.sim.metrics()
+        self._metrics = self._previous = self.sim.metrics()
         self._obs = self._observe()
         return self._obs.copy(), self._info()
 
@@ -236,7 +244,7 @@ class SoftsimEnv(gym.Env):
         try:
             self.sim.apply_controls(dict(zip(self.actuators, action)))
             self.sim.step(self.substeps)
-            self._metrics = self.sim.metrics()
+            self._previous, self._metrics = self._metrics, self.sim.metrics()
         except Exception as exc:  # backend failure (divergence, solver error): end the episode, keep the last obs
             self.last_step_time = time.perf_counter() - t0
             return self._obs.copy(), self.failure_penalty, True, False, self._info(failure=f"{type(exc).__name__}: {exc}")
@@ -262,6 +270,8 @@ def register_envs() -> None:
         if env_id not in gym.registry:
             gym.register(id=env_id, entry_point="softsim.envs.env:SoftsimEnv",
                          kwargs={"config": str(ROOT / "scenarios" / "envs" / fname)})
+    if GRIPPER_ID not in gym.registry:
+        gym.register(id=GRIPPER_ID, entry_point="softsim.envs.gripper:ReducedGripperLiftEnv")
 
 
 def make_env(config: str | Path | Mapping[str, Any], **kwargs: Any) -> SoftsimEnv:

@@ -18,6 +18,15 @@ backend, see ``docs/backends/sofa.md``; only the actuation differs):
   child, mapForces/mapMasses off) and a ``CableActuator`` with ``minForce`` / ``maxForce`` from the bounds and its
   pull point a little behind the first via point (``docs/roadmap.md``, M6). SoftRobots' constraint value is an impulse;
   the force read back is ``lambda / dt`` (checked: the force-type cable equals the explicit one);
+* pressure actuators: a child node of the body holding the actuator's ``cavity`` triangles (a ``MeshTopology``, a
+  ``MechanicalObject`` on their vertices, a ``BarycentricMapping`` to the body) and a ``SurfacePressureActuator`` with
+  ``minPressure`` / ``maxPressure``. Same impulse convention as the cables: bounds go in as ``pressure * dt``, the
+  pressure read back is ``lambda / dt`` (checked: the bounded run equals the ordinary backend's explicit follower
+  pressure to 7 digits). Two things differ from the cables: the cavity triangles are given the opposite winding to
+  softsim's (SOFA's normals point into the cavity; the other way the volume shrinks and the pressure clamps at 0), and
+  the QP is badly scaled in SI units (the pressure's ``Q`` entry is ~1e-12, below qpOASES' tolerance, so it returns
+  ``lambda = 0`` for any reachable goal), hence the ``PositionEffector`` ``weight`` of 1e6 (``qp_weight``; 1e5 to 1e7
+  give the same pressure to 0.1%);
 * effectors: one ``PositionEffector`` on a barycentric point at the tip face's rest centroid (the ``tip`` / ``top``
   region), with ``useDirections`` selecting the targeted axes among ``tip_x``, ``tip_y``, ``tip_z``;
 * the angle targets ``bend_angle`` / ``chord_angle`` are not a position. They are reached by moving the effector
@@ -29,7 +38,7 @@ Outputs reported are the scenario's own (``Scenario.metrics`` on the final verti
 Checked against: the repeated-solve method on SOFA and the explicit forward cable (``tests/test_sofa_inverse.py``).
 
 Limits: quasi-static; the body is SOFA's linear tetrahedra (locking like MuJoCo's, see ``docs/actuation.md``); only
-cable actuators; contact, adhesion, viscoelasticity, prescribed motion and moving mounts are not built; a goal
+tension-controlled cables and pressures (no angle targets with a pressure); contact, adhesion, viscoelasticity, prescribed motion and moving mounts are not built; a goal
 that needs a negative force is infeasible (the cable can only pull).
 """
 
@@ -42,7 +51,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from softsim.actuation import CableActuator
+from softsim.actuation import CableActuator, PressureActuator
 from softsim.backends.base import SimState, SoftState
 from softsim.backends.sofa.backend import PLUGINS, force_field_args, import_sofa, rayleigh
 from softsim.config.loader import apply_overrides, load_yaml
@@ -55,6 +64,9 @@ INVERSE_PLUGINS = ["SoftRobots", "SoftRobots.Inverse"]
 POSITION_OUTPUTS = {"tip_x": 0, "tip_y": 1, "tip_z": 2}
 ANGLE_OUTPUTS = ("bend_angle", "chord_angle")
 _SCALES = {"length": 1e-3, "angle": 1e-2}
+# SurfacePressureActuator's normals must point into the cavity (out of the solid is the other way round: the volume
+# then shrinks and the actuator clamps at 0): softsim's cavity triangles are outward from the solid, so swap two corners
+PRESSURE_WINDING = [0, 2, 1]
 
 
 class InverseScene:
@@ -70,7 +82,7 @@ class InverseScene:
     """
 
     def __init__(self, sim: Simulation, cables: Mapping[str, tuple[float, float]], axes: Sequence[int],
-                 tolerance: float = 1e-8, max_iterations: int = 1000):
+                 tolerance: float = 1e-8, max_iterations: int = 1000, epsilon: float = 1e-3, weight: float = 1.0):
         scene = sim.scene
         if len(scene.soft_bodies) != 1 or scene.rigid_bodies:
             raise ConfigError("sofa-qp: needs a scene with one soft body and no rigid bodies")
@@ -92,7 +104,8 @@ class InverseScene:
         root.gravity = list(scene.simulation.gravity)
         root.dt = dt
         root.addObject("FreeMotionAnimationLoop")
-        root.addObject("QPInverseProblemSolver", maxIterations=max_iterations, tolerance=tolerance, printLog=False)
+        root.addObject("QPInverseProblemSolver", maxIterations=max_iterations, tolerance=tolerance, epsilon=epsilon,
+                        printLog=False)
         node = root.addChild(body.name)
         alpha, beta = rayleigh(body)
         node.addObject("EulerImplicitSolver", rayleighMass=alpha, rayleighStiffness=beta)
@@ -118,24 +131,39 @@ class InverseScene:
             node.addObject("FixedProjectiveConstraint", indices=list(body.pinned))
         node.addObject("LinearSolverConstraintCorrection")
         self.actuators: dict[str, Any] = {}
+        self.kinds: dict[str, str] = {}
         for a in scene.actuators:
             if a.name not in cables:
                 continue
+            lo, hi = cables[a.name]
+            if isinstance(a, PressureActuator):
+                tris = np.asarray(body.region(a.region))
+                used, local = np.unique(tris, return_inverse=True)
+                pnode = node.addChild(f"pressure_{a.name}")
+                pnode.addObject("MeshTopology", name="topo", position=pts[used].tolist(),
+                                triangles=local.reshape(-1, 3)[:, PRESSURE_WINDING].tolist())
+                pnode.addObject("MechanicalObject", position=pts[used].tolist())
+                self.actuators[a.name] = pnode.addObject(
+                    "SurfacePressureActuator", name=a.name, triangles="@topo.triangles",
+                    minPressure=float(lo) * dt, maxPressure=float(hi) * dt)
+                pnode.addObject("BarycentricMapping")
+                self.kinds[a.name] = "pressure"
+                continue
             if not isinstance(a, CableActuator) or a.stiffness is not None:
-                raise ConfigError(f"sofa-qp: actuator {a.name!r} is not a tension-controlled cable")
+                raise ConfigError(f"sofa-qp: actuator {a.name!r} is not a tension-controlled cable or a pressure")
             nodes, bary = body.cable_rows(a)
             via = np.einsum("kj,kji->ki", bary, body.mesh.points[nodes]) @ rot.T + self.offset
             behind = via[0] + (via[0] - via[1]) / np.linalg.norm(via[1] - via[0]) * 1e-3
-            lo, hi = cables[a.name]
             cnode = node.addChild(f"cable_{a.name}")
             cnode.addObject("MechanicalObject", position=via.tolist())
             self.actuators[a.name] = cnode.addObject(
                 "CableActuator", name=a.name, indices=list(range(len(via))), pullPoint=behind.tolist(),
                 hasPullPoint=True, minForce=float(lo) * dt, maxForce=float(hi) * dt)
             cnode.addObject("BarycentricMapping", mapForces=False, mapMasses=False)
+            self.kinds[a.name] = "force"
         missing = set(cables) - set(self.actuators)
         if missing:
-            raise ConfigError(f"sofa-qp: no cable actuators {sorted(missing)}; have {[a.name for a in scene.actuators]}")
+            raise ConfigError(f"sofa-qp: no actuators {sorted(missing)}; have {[a.name for a in scene.actuators]}")
         # effector at the tip face's rest centroid
         from softsim.scenarios.inflation import _face_centre_normal
         self.tip_rest = _face_centre_normal(pts, sim.scenario._regions[tip])[0]
@@ -145,7 +173,8 @@ class InverseScene:
         enode.addObject("MechanicalObject", position=[self.tip_rest.tolist()])
         use = [int(k in axes) for k in range(3)]
         self.effector = enode.addObject("PositionEffector", template="Vec3d", indices=[0], useDirections=use,
-                                        effectorGoal="@../../goal/goalMO.position")
+                                        effectorGoal="@../../goal/goalMO.position",
+                                        weight=weight)
         enode.addObject("BarycentricMapping", mapForces=False, mapMasses=False)
         Sofa.Simulation.init(root)
         self.root = root
@@ -168,8 +197,10 @@ class InverseScene:
         return float(self.root.time.value)
 
     def forces(self) -> dict[str, float]:
-        """Cable tensions [N] now: the solver's lambda is an impulse, so force = lambda / dt."""
-        return {n: float(np.asarray(a.force.value).ravel()[0]) / self.dt for n, a in self.actuators.items()}
+        """Cable tensions [N] and pressures [Pa] now: the solver's lambda is an impulse, so value = lambda / dt."""
+        return {n: float(np.asarray(a.force.value if self.kinds[n] == "force" else a.pressure.value).ravel()[0])
+                / self.dt
+                for n, a in self.actuators.items()}
 
     def step(self, n: int = 1) -> None:
         for _ in range(n):
@@ -197,8 +228,8 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
                        scales: Mapping[str, float] | None = None, timestep: float | str = "2 ms",
                        settle_damping: Mapping[str, Any] | None = None, settle_tol: float = 1e-3,
                        settle_window: float | str = 0.05, max_settle: float | str = 2.0, max_corrections: int = 8,
-                       **_ignored: Any) -> InverseResult:
-    """Find the constant cable tensions that bring ``targets`` to equilibrium, with SoftRobots.Inverse.
+                       qp_weight: float | None = None, **_ignored: Any) -> InverseResult:
+    """Find the constant cable tensions / pressures that bring ``targets`` to equilibrium, with SoftRobots.Inverse.
 
     Position targets (``tip_x``, ``tip_y``, ``tip_z``) are the effector's goal: SOFA's QP finds the tensions in one
     run per goal. The effector sits at a barycentric point at the tip face's rest centroid while the output is the
@@ -207,10 +238,11 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
     secant iteration on the goal's x. Any other target is refused.
 
     Args:
-        config: Scenario YAML path or mapping (cable actuators on one soft body with a ``tip`` / ``top`` region).
+        config: Scenario YAML path or mapping (cable or pressure actuators on one soft body with a ``tip`` / ``top`` region).
         targets: ``{output: value}``, SI or ``"<n> <unit>"`` strings.
-        actuators: Cable names to solve for (as many as there are effector axes, or one for an angle target).
-        bounds: ``{cable: (lower, upper)}`` tensions: ``minForce`` / ``maxForce`` of the QP.
+        actuators: Actuator names to solve for (as many as there are effector axes, or one cable for an angle target).
+        bounds: ``{actuator: (lower, upper)}``: tensions [N] (``minForce`` / ``maxForce``) or pressures [Pa]
+            (``minPressure`` / ``maxPressure``) of the QP.
         overrides: Dotted ``key=value`` config overrides.
         tolerance: Stop when the largest scaled residual is below this (scale: 1 mm, 0.01 rad; ``scales`` overrides).
         timestep: SOFA step [s]: it is implicit, so far larger than the scenario's explicit-solver step.
@@ -219,6 +251,7 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
             and every force less than ``settle_tol`` of its range over the window [s]; hitting ``max_settle`` [s] is
             counted in ``unsettled``.
         max_corrections: Cap on goal corrections / secant steps.
+        qp_weight: ``PositionEffector`` weight (default 1; 1e6 with pressure actuators, see the module doc).
 
     Returns:
         :class:`~softsim.control.inverse.InverseResult` (``simulations`` = QP runs to a settled state, ``steps`` =
@@ -253,18 +286,22 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
     sim = Simulation(raw, backend="sofa", base_dir=base)
     scene = None
     try:
-        lo = {n: parse_quantity(bounds[n][0], "force") for n in names}
-        hi = {n: parse_quantity(bounds[n][1], "force") for n in names}
+        dims = {n: actuator_dimension(sim, n) for n in names}
         for n in names:
-            if actuator_dimension(sim, n) != "force":
-                raise ConfigError(f"sofa-qp: actuator {n!r} is not a tension-controlled cable")
+            if dims[n] not in ("force", "pressure"):
+                raise ConfigError(f"sofa-qp: actuator {n!r} is neither a tension-controlled cable nor a pressure")
+        lo = {n: parse_quantity(bounds[n][0], dims[n]) for n in names}
+        hi = {n: parse_quantity(bounds[n][1], dims[n]) for n in names}
+        if angles and "pressure" in dims.values():
+            raise ConfigError("sofa-qp: angle targets are not supported with pressure actuators; use tip_x / tip_y / tip_z")
             if not (np.isfinite(lo[n]) and np.isfinite(hi[n]) and hi[n] > lo[n]):
                 raise ConfigError(f"actuator {n!r}: bounds must be finite with upper > lower, got {bounds[n]!r}")
         target = {o: parse_quantity(targets[o], output_dimension(o)) for o in outs}
         scale = {o: parse_quantity((scales or {}).get(o, _SCALES[output_dimension(o)]), output_dimension(o))
                  for o in outs}
         axes = sorted({POSITION_OUTPUTS[o] for o in outs if o in POSITION_OUTPUTS} or {0})
-        scene = InverseScene(sim, {n: (lo[n], hi[n]) for n in names}, axes)
+        weight = qp_weight if qp_weight is not None else (1e6 if "pressure" in dims.values() else 1.0)
+        scene = InverseScene(sim, {n: (lo[n], hi[n]) for n in names}, axes, weight=weight)
         return _run(scene, names, outs, target, scale, lo, hi, tolerance, settle_tol, settle_window, max_settle,
                     max_corrections, t0)
     finally:
@@ -358,7 +395,7 @@ def run_job_sofa(path: str | Path, job: Mapping[str, Any]) -> dict[str, Any]:
     """Run a parsed inverse job file with the SOFA QP method (see :func:`softsim.control.inverse.run_job`)."""
     path = Path(path).resolve()
     own = {"overrides", "tolerance", "scales", "timestep", "settle_damping", "settle_tol", "settle_window",
-           "max_settle", "max_corrections"}
+           "max_settle", "max_corrections", "qp_weight"}
     shared = {"config", "targets", "actuators", "backend", "method", "initial", "max_evaluations", "warm_start",
               "jacobian_step"}  # the repeated-solve method's keys are accepted and ignored
     extra = set(job) - own - shared

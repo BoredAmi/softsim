@@ -1,0 +1,39 @@
+# Gymnasium env softsim/PneuNetBend-v0: bend the PneuNet finger (scenarios/actuation/pneunet.yaml) to a target tip
+# bend angle with one action, the chamber pressure. Fast variant: the same finger with thicker walls (3 mm wall, top wall,
+# side wall and layer, 6 mm base, 20 mm high) so a 3 mm mesh is allowed (the reference is 1.5 mm, ~5 s per 20 ms), a 5 ms
+# physics step, 50 ms per action and Rayleigh damping. This is a coarse stand-in, not the validated finger: it bends
+# 0.09 rad at 10 kPa, 0.4 rad at 25 kPa (settled) and balloons above ~30 kPa, so the bound is 25 kPa.
+# The finger follows the pressure with a lag of ~0.1 s, hence the observation holds the bend angle's rate.
+# Randomisation (off by default, gym.make(..., randomize=True)): Ecoflex modulus +-20 % of the body (the layer stays stiff).
+scenario: ../actuation/pneunet.yaml
+backend: mujoco
+overrides:
+  - body.mesh.size=3mm
+  - body.geometry.layer=3mm
+  - body.geometry.base=6mm
+  - body.geometry.wall=3mm
+  - body.geometry.top_wall=3mm
+  - body.geometry.side_wall=3mm
+  - body.geometry.height=20mm
+  - body.geometry.channel_height=3mm
+  - simulation.timestep=5ms
+  - simulation.iterations=30
+  - "body.material.damping={model: rayleigh, beta: 0.01}"
+  - "body.zones[0].material.damping={model: rayleigh, beta: 0.01}"
+actuators:
+  cavity: [0 kPa, 25 kPa]
+control_period: 50 ms
+observation: [bend_angle, tip_x, tip_z]
+observation_rate: [bend_angle]
+include_actuators: true
+include_target: true
+task:
+  metrics: [bend_angle]
+  target_range: [[0.1 rad, 0.3 rad]]
+  tolerance: [0.02 rad]
+  scale: [0.05 rad]
+max_steps: 20
+randomize:
+  enabled: false
+  ranges:
+    elastic.youngs_modulus: {rel: 0.2}

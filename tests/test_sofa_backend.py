@@ -193,3 +193,115 @@ def test_mass_proportional_damping_matches_free_fall_with_drag():
     continuous = -g / alpha * (1 - np.exp(-alpha * t))
     np.testing.assert_allclose(v, continuous, rtol=1.5e-2)
     assert v[-1] == pytest.approx(continuous[-1], rel=1e-3)
+
+
+def _plate_compression(mu, h=0.008, strain=0.02, steps=500, dt=5e-4):
+    """A weighted plate on a cylinder (R 20 mm, H 17 mm), the ground and the plate with friction ``mu``: the
+    compression it settles to, and the same body's compression under the same load without contact (nodal forces
+    on the top face, static, with its own weight), each as a fraction of ``strain``; plus the mean rim radius
+    change of the contact run."""
+    from softsim.backends import get_backend
+    from softsim.materials.homogeneous import curve
+    from softsim.scene import Friction, GroundSettings, Pose, Scene, SimulationSettings
+
+    Sofa = _sofa()
+    from softsim.backends.sofa.backend import PLUGINS
+
+    R, H = 0.02, 0.017
+    material = validate(Material, {"density": 1000, "friction": {"sliding": mu},
+                                   "elastic": {"model": "stable_neo_hookean", "youngs_modulus": 50e3, "poisson_ratio": 0.45},
+                                   "damping": {"model": "rayleigh", "beta": 2e-2}})
+    mesh = structured_cylinder(R, H, h)
+    pts = mesh.points
+    sigma = float(-curve(material, "uniaxial", [1 - strain]).stress.iloc[0])
+    top, bot = np.isclose(pts[:, 2], H), np.isclose(pts[:, 2], 0)
+    rim = np.linalg.norm(pts[:, :2], axis=1) > R - 1e-6
+    plate = RigidBodySpec("plate", (Part("box", (0.05, 0.05, 0.003), (0, 0, 0.003)),), sigma * math.pi * R**2 / 9.81,
+                          pose=Pose((0, 0, H + 2e-4)), friction=Friction(sliding=mu))
+    scene = Scene((SoftBodySpec("s", mesh, material),), (plate,), ground=GroundSettings(friction=Friction(sliding=mu)),
+                  simulation=SimulationSettings(timestep=dt, duration=steps * dt, output_rate=1000))
+    backend = get_backend("sofa")()
+    backend.build(scene)
+    backend.step(steps)
+    v = backend.state().soft["s"].vertices
+    backend.close()
+    contact = (H - (v[top, 2].mean() - v[bot, 2].mean())) / H / strain
+    spread = float(np.linalg.norm(v[rim, :2] - v[:, :2].mean(0), axis=1).mean() / R - 1)
+
+    # the same load without contact
+    tris = mesh.surface_triangles()
+    fz = np.zeros(len(pts))
+    ti = np.nonzero(top)[0]
+    for t in tris[np.all(np.isin(tris, ti), axis=1)]:
+        fz[t] += 0.5 * np.linalg.norm(np.cross(pts[t[1]] - pts[t[0]], pts[t[2]] - pts[t[0]])) / 3
+    fz *= sigma * math.pi * R**2 / fz.sum()
+    ff, args = force_field_args(SoftBodySpec("s", mesh, material))
+    root = Sofa.Core.Node("root")
+    root.addObject("RequiredPlugin", pluginName=PLUGINS + ["Sofa.Component.MechanicalLoad"])
+    root.gravity = [0, 0, -9.81]
+    root.addObject("DefaultAnimationLoop")
+    n = root.addChild("s")
+    n.addObject("StaticSolver", newton_iterations=30)
+    n.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    n.addObject("TetrahedronSetTopologyContainer", position=pts.tolist(), tetrahedra=mesh.tets.tolist())
+    dofs = n.addObject("MechanicalObject", position=pts.tolist())
+    n.addObject("MeshMatrixMass", massDensity=1000.0, lumping=True)
+    n.addObject(ff, **args)
+    bi = np.nonzero(bot)[0]
+    n.addObject("PartialFixedProjectiveConstraint", indices=bi.tolist(), fixedDirections=[0, 0, 1])
+    n.addObject("FixedProjectiveConstraint", indices=[int(bi[np.argmin(np.linalg.norm(pts[bi, :2], axis=1))])])
+    n.addObject("PartialFixedProjectiveConstraint", indices=[int(bi[np.argmax(pts[bi, 0])])], fixedDirections=[0, 1, 1])
+    n.addObject("ConstantForceField", indices=ti.tolist(), forces=[[0, 0, -f] for f in fz[ti]])
+    Sofa.Simulation.init(root)
+    Sofa.Simulation.animate(root, 0.01)
+    p = np.asarray(dofs.position.value)
+    free = (H - (p[top, 2].mean() - p[bot, 2].mean())) / H / strain
+    free_spread = float(np.linalg.norm(p[rim, :2], axis=1).mean() / R - 1)
+    Sofa.Simulation.unload(root)
+    return contact, free, spread, free_spread
+
+
+def test_frictionless_plate_through_contact_matches_no_contact():
+    """Static compression by a frictionless plate through contact (the 'frictionless plate 7% stiff' limit): the
+    compression and the lateral spreading of the rim match the same load applied as nodal forces (measured at
+    8 mm: 0.6% and 0.1%). Nothing is wrong with the contact; see ``test_any_friction_makes_the_plate_sticky``."""
+    contact, free, spread, free_spread = _plate_compression(0.0)
+    assert contact == pytest.approx(free, rel=0.015)
+    assert spread == pytest.approx(free_spread, rel=0.03)
+
+
+@pytest.mark.slow
+def test_any_friction_makes_the_plate_sticky():
+    """SOFA applies the scene's largest friction coefficient to every pair: with 0.8 on the ground only, the plate
+    contact sticks and the body compresses 33% less and spreads half as much (measured at 8 mm: 0.738 against
+    1.101, rim 0.48% against 1.01%). That was the 'stiff plate'."""
+    contact, free, spread, free_spread = _plate_compression(0.8)
+    assert contact < 0.85 * free and spread < 0.7 * free_spread
+
+
+def test_alarm_distance_follows_the_fastest_vertex():
+    backend = SofaBackend()
+    backend._alarm0, backend._contact_distance, backend._alarm_factor = 4e-4, 1e-4, 1.0
+    backend._prev = {"s": np.zeros((3, 3)), "w": np.array([0, 0, -2.7, 50.0, 0, 0])}  # angular rates do not count
+    assert backend._alarm(5e-5) == 4e-4
+    backend._prev["s"][1] = [0.0, 3.0, -12.0]  # 12 m/s * 50 us = 0.6 mm per step
+    assert backend._alarm(5e-5) == pytest.approx(1e-4 + 12.0 * 5e-5)
+
+
+@pytest.mark.slow
+def test_rim_flare_does_not_go_through_the_ground():
+    """The 500 g drop with the fitted Ogden material (5 mm mesh, 8.8 ms): the top rim, rolled under the specimen,
+    falls back onto the ground at 12 m/s, 0.6 mm per 50 us step against a 0.4 mm alarm distance, and a vertex
+    passed 2.8 mm through it (8.5 mm by 22 ms). The alarm distance now follows the per-step travel."""
+    _sofa()
+    from pathlib import Path
+
+    from softsim.runner import run_config
+
+    case = Path(__file__).parents[1] / "scenarios" / "drop_test" / "cases" / "w500.yaml"
+    r = run_config(case, ["backend=sofa", "specimen.material=ecoflex_00_10_drop_fit_sofa_ogden",
+                          "specimen.mesh.size=0.005", "simulation.duration=0.0088", "simulation.timestep=5e-5",
+                          "simulation.output_rate=10000", "output.save_model=false"])
+    ts = r.timeseries
+    assert ts.specimen_min_z.min() > -0.1e-3  # 2.83 mm before
+    assert ts.compression.max() == pytest.approx(13.13e-3, rel=0.02)

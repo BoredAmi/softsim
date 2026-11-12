@@ -250,7 +250,10 @@ via points:
 - **fem (reference):** in the implicit solve. Via points use the elements'
   quadratic shape functions. The tangent is `T w w^T (I - u u^T) / l` per
   segment, symmetric and PSD, so Newton stays robust.
-- **MuJoCo, SOFA:** the same forces `-T dL/dx` on the linear elements'
+- **SOFA (tension-controlled, not anchored over a region):** the same load as springs between the
+  via points whose rest lengths are reset each step, so the tangent stiffness is implicit (an explicit
+  force swung the two-cable arm in a limit cycle; [control.md](control.md)).
+- **MuJoCo, SOFA (stroke-controlled or anchored):** the same forces `-T dL/dx` on the linear elements'
   vertices, recomputed before every step (`softsim.actuation.cable_forces`).
   They are explicit, so `softsim check` compares the cable's string stiffness
   `T (1/l1 + 1/l2)` with the vertex masses at the timestep. It warns or refuses,

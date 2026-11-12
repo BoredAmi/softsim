@@ -229,11 +229,15 @@ with `python tools/make_model_comparison.py`.)
   ν ≈ 0.5) points to what no tested model has: rate-dependent stiffening
   (Prony viscoelasticity; Rayleigh β can't represent it) and/or the compliant
   table.
-- **SOFA contact fails at extreme rim flaring.** In the Ogden 500 g run the
+- **SOFA contact failed at extreme rim flaring (fixed).** In the Ogden 500 g run the
   specimen's rim spreads to 45 mm radius and, from 7.6 ms (after the peak at
-  5.3 ms), rim vertices pass up to 8.5 mm through the ground. No element
-  inverts. The 500 g peak and timing are before this and valid, but its 58%
-  NRMSE includes the artefact and isn't meaningful.
+  5.3 ms), rim vertices passed up to 8.5 mm through the ground. No element
+  inverts. The cause was the intersection's alarm distance (0.4 mm) against the
+  rim's 0.6 mm per step when it snaps back onto the ground; the backend now
+  widens it to the fastest vertex's travel
+  ([backends/sofa.md](backends/sofa.md#known-limits): 2.83 mm to 0.006 mm at 8.8 ms, peak unchanged). The
+  500 g peak and timing were before this and valid; the 58% NRMSE in the table above was measured with the
+  artefact and has not been re-run.
 
 ## After the first contact: tack and the hopping specimen
 

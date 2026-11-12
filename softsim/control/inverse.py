@@ -186,6 +186,19 @@ def _with_damping(raw: dict[str, Any], damping: Mapping[str, Any]) -> dict[str, 
     return raw
 
 
+def build_simulation(config: str | Path | Mapping[str, Any], overrides: Sequence[str] = (), backend: str = "mujoco",
+                     settle_damping: Mapping[str, Any] | None = DEFAULT_DAMPING) -> Simulation:
+    """A :class:`Simulation` of ``config`` (path or mapping) with the overrides and the settling damping applied."""
+    if isinstance(config, (str, Path)):
+        base, raw = Path(config).resolve().parent, load_yaml(config)
+    else:
+        base, raw = Path.cwd(), dict(config)
+    raw = apply_overrides(raw, list(overrides))
+    if settle_damping:
+        raw = _with_damping(raw, settle_damping)
+    return Simulation(raw, backend=backend, base_dir=base)
+
+
 def solve_inverse(config: str | Path | Mapping[str, Any] | Simulation, targets: Mapping[str, Any],
                   actuators: Sequence[str], bounds: Mapping[str, tuple[Any, Any]], backend: str = "mujoco",
                   overrides: list[str] = (), initial: Mapping[str, Any] | None = None, tolerance: float = 0.05,
@@ -218,17 +231,7 @@ def solve_inverse(config: str | Path | Mapping[str, Any] | Simulation, targets: 
     t0 = time.perf_counter()
     max_settle, settle_window = parse_quantity(max_settle, "time"), parse_quantity(settle_window, "time")
     own = not isinstance(config, Simulation)
-    if own:
-        if isinstance(config, (str, Path)):
-            base, raw = Path(config).resolve().parent, load_yaml(config)
-        else:
-            base, raw = Path.cwd(), dict(config)
-        raw = apply_overrides(raw, list(overrides))
-        if settle_damping:
-            raw = _with_damping(raw, settle_damping)
-        sim = Simulation(raw, backend=backend, base_dir=base)
-    else:
-        sim = config
+    sim = build_simulation(config, overrides, backend, settle_damping) if own else config
     try:
         return _solve(sim, targets, actuators, bounds, initial, tolerance, max_evaluations, scales, settle_tol, settle_window,
                       max_settle, warm_start, jacobian_step, t0)
@@ -320,10 +323,10 @@ def _solve(sim, targets, actuators, bounds, initial, tolerance, max_evaluations,
                          eq.steps, eq.unsettled, time.perf_counter() - t0, history)
 
 
-METHODS = ("repeated", "sofa-qp")
+METHODS = ("repeated", "sofa-qp", "surrogate")
 
 
-def run_job(path: str | Path, method: str | None = None) -> dict[str, Any]:
+def run_job(path: str | Path, method: str | None = None, surrogate: str | Path | None = None) -> dict[str, Any]:
     """Run a job file (see ``jobs/inverse_cable_cantilever.yaml``) and return the result as a dict.
 
     ``method`` (or the job's ``method:`` key; default ``repeated``) selects the repeated equilibrium solve of this
@@ -333,7 +336,7 @@ def run_job(path: str | Path, method: str | None = None) -> dict[str, Any]:
     for key in ("config", "targets", "actuators"):
         if key not in job:
             raise ConfigError(f"{path}: missing {key!r}")
-    method = method or job.pop("method", "repeated")
+    method = method or ("surrogate" if surrogate or "surrogate" in job else None) or job.pop("method", "repeated")
     job.pop("method", None)
     if method not in METHODS:
         raise ConfigError(f"{path}: unknown method {method!r}; choose from {list(METHODS)}")
@@ -341,6 +344,10 @@ def run_job(path: str | Path, method: str | None = None) -> dict[str, Any]:
         from softsim.control.sofa_inverse import run_job_sofa
 
         return run_job_sofa(path, job)
+    if method == "surrogate":
+        from softsim.control.surrogate import run_inverse_job
+
+        return run_inverse_job(path, job, surrogate)
     known = {"config", "overrides", "backend", "targets", "actuators", "initial", "tolerance", "max_evaluations", "scales",
              "settle_damping", "settle_tol", "settle_window", "max_settle", "warm_start", "jacobian_step"}
     extra = set(job) - known

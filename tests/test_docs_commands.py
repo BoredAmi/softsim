@@ -18,7 +18,7 @@ PAGES = [ROOT / "README.md", ROOT / "docs" / "index.md", *sorted((ROOT / "docs" 
 BLOCK = re.compile(r"```(\w+)\n(.*?)```", re.S)
 # commands whose first positional argument is a file in the repository
 FILE_ARG = {"run", "check", "params", "export", "view", "sweep", "sensitivity", "calibrate", "transfer", "fit",
-            "fetch", "fit-material", "track", "optimize", "inverse"}
+            "fetch", "fit-material", "track", "optimize", "inverse", "surrogate"}
 SCENARIO = {"run", "check", "params", "export", "view", "sensitivity"}
 
 

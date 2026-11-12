@@ -252,3 +252,162 @@ def test_missing_gymnasium_gives_a_clear_error():
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0, out.stderr
     assert "ERR" in out.stdout and "softsim[rl]" in out.stdout
+
+
+# -- pneumatic finger, reduced gripper, baseline (M12 groundwork, second batch) ---------------------------------
+
+PNEU = ROOT / "scenarios" / "envs" / "pneunet_bend.yaml"
+PNEU_ID = "softsim/PneuNetBend-v0"
+GRIP_ID = "softsim/ReducedGripperLift-v0"
+
+
+@pytest.fixture
+def pneu():
+    env = gym.make(PNEU_ID)
+    yield env
+    env.close()
+
+
+@pytest.fixture
+def grip():
+    env = gym.make(GRIP_ID)
+    yield env
+    env.close()
+
+
+def test_pneunet_env_check_and_spaces(pneu):
+    """check_env passes; the action is the chamber pressure in Pa, the observation bend angle, tip x/z, its rate, the
+    held pressure and the target."""
+    from gymnasium.utils.env_checker import check_env
+
+    check_env(pneu.unwrapped, skip_render_check=True)
+    assert pneu.action_space.shape == (1,) and pneu.action_space.high[0] == pytest.approx(25e3)
+    obs, info = pneu.reset(seed=0)
+    assert obs.shape == (6,) and 0.1 <= info["target"][0] <= 0.3
+    assert obs[3] == 0.0 and obs[4] == 0.0  # at rest: no rate, no pressure
+
+
+def test_pneunet_constant_action_equals_the_scenario(pneu):
+    """15 kPa held for 3 env steps equals the Simulation driven directly with the same overrides; more pressure
+    bends more, and the rate observation is the bend angle's change over the control period."""
+    cfg = load_yaml(PNEU)
+    sim = Simulation(PNEU.parent / cfg["scenario"], overrides=cfg["overrides"], backend="mujoco")
+    sim.apply_controls({"cavity": 15e3})
+    sim.step(3 * pneu.unwrapped.substeps)
+    want = sim.metrics()["bend_angle"]
+    sim.close()
+    pneu.reset(seed=1)
+    angles = [0.0]
+    for _ in range(3):
+        obs, _, _, _, info = pneu.step(np.array([15e3], dtype=np.float32))
+        angles.append(info["metrics"]["bend_angle"])
+    assert info["metrics"]["bend_angle"] == pytest.approx(want)
+    assert want > 0.05
+    assert obs[3] == pytest.approx((angles[3] - angles[2]) / 0.05, rel=1e-4)
+
+
+def test_pneunet_randomisation_changes_the_response_reproducibly():
+    """Modulus +-20 % changes the bend after one step, and the same seed gives the same material and the same bend."""
+    runs = []
+    for seed in (3, 3, 4):
+        env = gym.make(PNEU_ID, randomize=True)
+        env.reset(seed=seed)
+        _, _, _, _, info = env.step(np.array([20e3], dtype=np.float32))
+        runs.append((info["material"]["elastic.youngs_modulus"], info["metrics"]["bend_angle"]))
+        env.close()
+    assert runs[0] == runs[1] and runs[0][0] != runs[2][0] and runs[0][1] != runs[2][1]
+
+
+def test_gripper_env_check_and_spaces(grip):
+    from gymnasium.utils.env_checker import check_env
+
+    check_env(grip.unwrapped, skip_render_check=True)
+    assert grip.action_space.shape == (2,) and grip.observation_space.shape == (7,)
+    obs, info = grip.reset(seed=0)
+    assert 0.008 <= info["object"]["mass"] <= 0.020 and 0.7 <= info["object"]["friction"] <= 1.2
+    assert obs[3] == pytest.approx(0.0, abs=1e-6) and obs[0] == 0.0  # the object starts on the table
+
+
+def test_gripper_constant_action_equals_direct_simulation(grip):
+    """A constant (pressure, lift) action over 3 steps equals stepping ReducedGripper directly with the same
+    object and the env's linear ramp from zero during the first control period."""
+    from softsim.reduced import ReducedFinger, ReducedGripper
+    from softsim.reduced.mjcf import OBJECTS
+
+    env = grip.unwrapped
+    env.reset(seed=2, options={"mass": 0.012, "friction": 0.9})
+    for _ in range(3):
+        obs, *_ = env.step(np.array([30e3, 0.01], dtype=np.float32))
+    g = ReducedGripper(ReducedFinger.from_json(ROOT / "softsim" / "reduced" / "wang_finger.json"), shape="box",
+                       size=OBJECTS["box"], mass=0.012, friction=0.9)
+    n = env.substeps
+    for i in range(1, n + 1):
+        g.step(30e3 * i / n, 0.01 * i / n)
+    for _ in range(2 * n):
+        g.step(30e3, 0.01)
+    assert env.gripper.object_height == pytest.approx(g.object_height, abs=1e-9)
+    assert obs[2] == pytest.approx(g.palm_rise, abs=1e-6)
+
+
+def test_gripper_seeding_and_randomisation():
+    """Same seed, same object and same trajectory; options fix the object; randomize=False uses the range means."""
+    outs = []
+    for seed in (7, 7, 8):
+        env = gym.make(GRIP_ID)
+        _, info = env.reset(seed=seed)
+        for _ in range(5):
+            obs, r, *_ = env.step(np.array([20e3, 0.0], dtype=np.float32))
+        outs.append((info["object"], obs, r))
+        env.close()
+    assert outs[0][0] == outs[1][0] and np.array_equal(outs[0][1], outs[1][1]) and outs[0][2] == outs[1][2]
+    assert outs[0][0] != outs[2][0]
+    env = gym.make(GRIP_ID, randomize=False)
+    _, info = env.reset(seed=1)
+    assert info["object"] == {"mass": pytest.approx(0.014), "friction": pytest.approx(0.95)}
+    _, info = env.reset(options={"mass": 0.02, "friction": 1.1})
+    assert info["object"] == {"mass": 0.02, "friction": 1.1}
+    env.close()
+
+
+def _gripper_episode(env, pressure: float, lift: float, **options):
+    env.reset(seed=0, options=options)
+    total = 0.0
+    for k in range(env.unwrapped.max_steps):
+        a = [pressure * min(k / 12, 1), lift * min(max(k - 40, 0) / 10, 1)]
+        _, r, term, trunc, info = env.step(np.array(a, dtype=np.float32))
+        total += r
+        if term or trunc:
+            return total, info
+    raise AssertionError("episode did not end")
+
+
+def test_gripper_lift_rewards_holding_and_punishes_dropping(grip):
+    """Scripted grasp of a 10 g box (mu 1): squeezing and lifting is held (is_held) with a high return; the same
+    lift without pressure leaves the object on the table; reward is bounded by 1 per step."""
+    held, info_h = _gripper_episode(grip, 30e3, 0.04, mass=0.010, friction=1.0)
+    free, info_f = _gripper_episode(grip, 0.0, 0.04, mass=0.010, friction=1.0)
+    assert info_h["held"] and info_h["success"] and info_h["rise"] > 0.03
+    assert not info_f["held"] and info_f["rise"] == pytest.approx(0.0, abs=1e-3)
+    assert held > 15 and free < 0 and held <= grip.unwrapped.max_steps
+
+
+def test_gripper_bad_inputs():
+    with pytest.raises(ValueError, match="unknown object shape"):
+        gym.make(GRIP_ID, shape="sphere")
+    env = gym.make(GRIP_ID)
+    env.reset(seed=0)
+    with pytest.raises(ValueError, match="finite"):
+        env.unwrapped.step(np.array([np.nan, 0.0]))
+    env.close()
+
+
+def test_train_baseline_script_runs(tmp_path):
+    """tools/train_baseline.py end to end on a tiny budget (the gripper env is the fast one): it writes a result with
+    the random and CEM returns. The real budget and numbers are in docs/envs.md."""
+    out = tmp_path / "r.json"
+    cmd = [sys.executable, str(ROOT / "tools" / "train_baseline.py"), "--env", GRIP_ID, "--generations", "1", "--pop", "4",
+           "--episodes", "1", "--eval-episodes", "2", "--workers", "2", "--json", str(out)]
+    done = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, timeout=300)
+    assert done.returncode == 0, done.stderr[-2000:]
+    res = json.loads(out.read_text())
+    assert res["train_episodes"] == 4 and np.isfinite(res["random"]["mean"]) and np.isfinite(res["cem"]["mean"])

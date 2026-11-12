@@ -1,0 +1,13 @@
+# Find the pressure that puts the tip of the off-axis bending actuator (scenarios/inflation/bending.yaml) at a target,
+# with SOFA's QP inverse solver (SurfacePressureActuator on the cavity, docs/control.md "SOFA fast path"):
+#   softsim inverse jobs/inverse_bending_sofa.yaml
+# The target is the tip the ordinary SOFA backend reaches at a held 4 kPa (2 ms steps): the QP gives back 4 kPa.
+config: ../scenarios/inflation/bending.yaml
+method: sofa-qp
+timestep: 2 ms                          # SOFA is implicit: far larger than the explicit solvers' step
+scales: {tip_x: 0.01 mm}                # the tip moves 0.3 mm in all: a 1 mm scale would be satisfied at 0
+targets:
+  tip_x: -0.28681 mm                    # curls towards -x (thin +x wall stretches)
+actuators:
+  cavity: [0 kPa, 10 kPa]               # minPressure / maxPressure of the SurfacePressureActuator
+tolerance: 0.05

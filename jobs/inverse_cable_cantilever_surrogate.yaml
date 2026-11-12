@@ -1,0 +1,11 @@
+# Inverse on a fitted surrogate (docs/surrogate.md); the surrogate comes from jobs/surrogate_cable_cantilever.yaml:
+#   softsim surrogate jobs/surrogate_cable_cantilever.yaml
+#   softsim inverse jobs/inverse_cable_cantilever_surrogate.yaml --method surrogate
+config: ../scenarios/actuation/cable_cantilever.yaml
+overrides: [body.mesh.size=4mm]         # for the verification run; must match the surrogate's scenario
+surrogate: ../runs/surrogate/cable_cantilever/surrogate.json
+verify: true                            # one forward equilibrium at the solution: the true error
+targets:
+  bend_angle: 2 deg
+actuators:
+  cable: [0 N, 0.7 N]

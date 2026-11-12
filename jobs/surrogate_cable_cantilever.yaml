@@ -1,0 +1,22 @@
+# Reduced-order surrogate of the equilibrium map (docs/surrogate.md):
+#   softsim surrogate jobs/surrogate_cable_cantilever.yaml
+#   softsim inverse jobs/inverse_cable_cantilever_surrogate.yaml --method surrogate --surrogate ../runs/surrogate/cable_cantilever/surrogate.json
+# Samples the cable tension, settles each sample to equilibrium, fits a polynomial, reports held-out error.
+config: ../scenarios/actuation/cable_cantilever.yaml
+backend: mujoco
+overrides: [body.mesh.size=4mm]         # coarse: fast; the surrogate has this mesh's (locked) values
+inputs:
+  cable: [0 N, 0.7 N]
+outputs: [bend_angle, tip_x, tip_z]
+samples: 8                              # corners + Latin hypercube, seeded
+holdout: 4                              # extra points the fit never sees
+folds: 4
+seed: 0
+model: poly                             # poly | rbf
+degree: auto                            # chosen by k-fold cross-validation
+output: ../runs/surrogate/cable_cantilever
+dynamics:                               # optional: linear dynamic model (DMD with control) from step responses
+  steps: 3                              # training step responses (seeded inputs in the box)
+  test: 2                               # held-out step responses
+  duration: 0.3 s
+  delay: 1                              # one earlier sample in the state gives it a velocity

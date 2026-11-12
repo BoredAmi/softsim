@@ -1,0 +1,17 @@
+# Inverse on the arm's surrogate (docs/surrogate.md); targets as in jobs/inverse_cable_arm.yaml
+# (the tip at the known tensions 0.45 N and 0.15 N).
+config: ../scenarios/actuation/cable_arm.yaml
+overrides: [body.mesh.size=6mm, simulation.timestep=0.5ms, simulation.iterations=100]
+settle_damping: {model: rayleigh, beta: 0.15 s}
+settle_tol: 0.005
+max_settle: 3 s
+scales: {tip_z: 0.2 mm}
+surrogate: ../runs/surrogate/cable_arm/surrogate.json
+verify: true
+targets:
+  tip_x: 3.994 mm
+  tip_z: 118.515 mm
+actuators:
+  cable_a: [0 N, 0.5 N]
+  cable_b: [0 N, 0.5 N]
+tolerance: 0.1

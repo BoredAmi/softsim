@@ -175,7 +175,10 @@ drop weights. See [materials.md](materials.md).
 - **Whole bounce in 3D** (tack + support) for 20 and 50 g.
 - **SOFA contact fidelity:** the "58% loss" frictionless was a friction mismatch (SOFA uses one coefficient for every
   pair); with every pair frictionless it loses 3.4% more than the reference and peaks 14% shallow (2026-11-11,
-  [backends/sofa.md](backends/sofa.md#known-limits)). Left: the M4 rim-flare penetration, and the frictionless plate.
+  [backends/sofa.md](backends/sofa.md#known-limits)). Both open artefacts are closed (2026-11-12): the
+  rim flare went 2.83 mm through the ground because a vertex moved 0.6 mm per step against a 0.4 mm alarm distance (the
+  backend's alarm distance now follows the per-step travel: 0.006 mm), and the "7% stiff frictionless plate" was
+  friction (a coefficient of about 0.1 anywhere in the scene; at 0 the plate agrees with no contact to 0.6%).
 - **Rate data** below 1 s (DMA or impact tests) for silicones. Today's
   relaxation data start at 1 s, while impacts relax within milliseconds.
 - **500 g:** with the material excluded, check the setup and the measurement
@@ -332,7 +335,7 @@ cables and region forces carried by virtual work. Verified on the tip load (0.86
 cable cantilever, 64° large rotation (arc of the compressed beam), layered section and the S of the
 two-segment arm (linear E–B within 0.7%; the 3D reference is 8% lower from the compression stiffening
 `1 + 2N/EA`, which a materially linear rod cannot have); 16 tests, 6 mutants caught, a figure.
-Open: alpha damping is inert on BeamAdapter's mass (refused), the explicit cable step limit, and
+Open: alpha damping is inert on BeamAdapter's mass (refused), the explicit cable step limit (the rod backend's; the SOFA FEM cable is now implicit), and
 rods that are not columns along z (curved or branched), PneuNet-like bodies being out of scope.
 
 ## M9: soft gripper and grasping
@@ -407,7 +410,7 @@ dipole's gradient and a cantilever's closed form up to buckling (`tests/test_mag
 ## M11: design and control toolkit
 
 Quasi-static inverse control (done: `softsim inverse` by repeated equilibrium solves, and the SoftRobots.Inverse
-fast path on SOFA, `--method sofa-qp`; see [control.md](control.md)), reduced-order and Koopman surrogates for real-time ROS 2 control,
+fast path on SOFA, `--method sofa-qp`; see [control.md](control.md)), reduced-order surrogates for real-time ROS 2 control (done: quasi-static polynomial/RBF maps and a linear DMD model, `softsim surrogate`; Koopman not done),
 design optimisation over parametric geometry (`softsim optimize`), and
 sim-to-real identification from short recorded motions.
 
@@ -416,16 +419,34 @@ sim-to-real identification from short recorded motions.
   summary metric (or a ratio), constraints as penalties with the best chosen among feasible evaluations and
   infeasibility reported, resumable evaluation log, parallel initial simplex. Checked on the cable cantilever
   against a known maximum (the bound) and a bisection reference; the MuJoCo-locking bias of the optimum and
-  the `fem` check are documented. Open in M11: surrogates, sim-to-real identification.
+  the `fem` check are documented. Open in M11: sim-to-real identification.
 - **SOFA fast path for inverse control (done):** `softsim/control/sofa_inverse.py`, `softsim inverse --method sofa-qp`
   ([control.md](control.md#sofa-fast-path-softrobotsinverse-method-sofa-qp)). The SoftRobots.Inverse plugin loads and
   works in the v26.06 binary (`QPInverseProblemSolver`, `CableActuator`, `PositionEffector`). The scene is built beside
   the SOFA backend, not inside it (no backend change). Cantilever tension within 0.6-1.2% of the repeated solve on the
   same backend and 7-11 times faster (1 s); the two-cable arm in 2.8 s where the repeated solve on SOFA does not settle
-  (336 s, `stalled`, the explicit cable force oscillates); a target beyond the bounds gives the bounded solution, flagged.
-  The cable bounds go in as `force * dt` and the tension is read as `lambda / dt` (the M6 note on impulses). Open:
-  orientation effectors, stroke-controlled cables, pressure actuators (`SurfacePressureActuator`), the cause of the
-  explicit cable's limit cycle on the arm.
+  (336 s, `stalled`, with the then explicit cable force; see the next bullet); a target beyond the bounds gives the bounded solution, flagged.
+  The cable bounds go in as `force * dt` and the tension is read as `lambda / dt` (the M6 note on impulses).
+  Pressure actuators (`SurfacePressureActuator` on the cavity surface) are in: the bounds go in as `pressure * dt` like
+  the cables, the cavity triangles need the opposite winding, and the effector weight 1e6 fixes a badly scaled QP; the
+  bending tube recovers 4 kPa to 0.03% (7 times faster than the repeated solve on SOFA) and the PneuNet 5 kPa to 0.05%.
+  Open: orientation effectors, stroke-controlled cables, angle targets with a pressure, a pressure and a cable
+  together.
+- **The SOFA cable's limit cycle (done):** the explicit follower force swung the two-cable arm at every step from 10 ms to
+  0.25 ms (the swing grows as the step shrinks, so it is not the lag), it vanishes with a linear or corotational
+  elastic law and with the force-type `CableConstraint` it does not (identical to the explicit run). The cable's
+  stabilising lateral stiffness was missing from the implicit system while the hyperelastic law's geometric stiffness,
+  which it balances, was in it (inferred from these runs). The backend now builds tension-controlled cables as springs
+  with per-step rest lengths (`SofaBackend._add_cable`): the arm settles at 5 ms to 1 ms (tip x 4.0025 mm, z 118.514 mm)
+  and the repeated solve converges ([control.md](control.md)). Stroke-controlled and anchored cables are still explicit.
+- **Surrogates (done):** `softsim surrogate <job.yaml>` ([surrogate.md](surrogate.md)). Seeded Latin-hypercube samples
+  settled with the inverse solver's equilibrium code, a polynomial (degree by cross-validation) or RBF fit, held-out
+  validation, a resumable sample log keyed on the scenario and code hash, JSON evaluable from numpy.
+  `softsim inverse --method surrogate` solves in 26-38 ms, with an optional verifying simulation. MuJoCo: cantilever
+  held-out error 2e-7 rad; arm 21 um (tip x), the known 0.45 / 0.15 N found to 0.01% (the repeated solve: 0.4%) 1500
+  times faster once fitted (the samples cost 3-4 repeated solves). Optional DMD-with-control dynamic model, held-out
+  rollout error 0.4-1.1% of the travel on the cantilever. Open: Koopman (nonlinear) dynamics, closed-loop use in a ROS 2 node,
+  surrogates on SOFA or the reference.
 
 ## M12: GPU backend and learning (GPU machine)
 
@@ -438,7 +459,10 @@ refit, finer meshes).
 **CPU groundwork done:** Gymnasium environments on the MuJoCo CPU backend (`softsim.envs`, extra `rl`):
 a generic reach-task env from YAML, two registered examples (cable beam, two-cable arm), domain randomisation over
 the card's `uncertainty` and config ranges, `SyncVectorEnv` compatible; see [envs.md](envs.md). Open: the batched GPU
-backend, further robots (pneumatic, gripper) as envs, training baselines.
+backend. Also done: a PneuNet bending env (`softsim/PneuNetBend-v0`, coarse thick-walled variant, 7 steps/s), a
+reduced-gripper grasp-and-lift env (`softsim/ReducedGripperLift-v0`, 150 steps/s, randomised mass and friction) and
+`tools/train_baseline.py`, a numpy CEM baseline with measured gains over random actions (envs.md). Open: the same
+for the FE gripper, deep-RL baselines (stable-baselines3) as an optional extra.
 
 ## M13: benchmarks, docs, release (ongoing)
 
@@ -465,8 +489,8 @@ contribution guides for robots, presets and datasets.
 - Rate dependence: Prony now runs on every backend (M5). What is missing is
   rate data for silicones, and a test of whether any Prony spectrum explains
   the heavy impacts.
-- The SOFA frictionless-plate artefact (7% stiff) and rim-flare ground
-  penetration (M9).
+- (Done, 2026-11-12: the SOFA frictionless-plate artefact was friction, and the rim-flare ground penetration
+  an alarm distance shorter than the per-step travel; [backends/sofa.md](backends/sofa.md#known-limits).)
 
 ## Later
 
