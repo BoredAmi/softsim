@@ -58,15 +58,16 @@ class ExperimentCase:
         d = self.data.dropna(subset=[column])
         return d.t.to_numpy(), d[column].to_numpy()
 
-    def sim_overrides(self, gap: float = 0.002) -> list[str]:
+    def sim_overrides(self, gap: float = 0.002, tilt: bool = True) -> list[str]:
         """Scenario overrides reproducing the measured impact (speed, horizontal offset,
         in-plane rotation rate, and in-plane tilt where it was measured reliably, see
-        ``softsim.experiments.video.tilt``). Out-of-plane tilt is not observable and left at zero."""
+        ``softsim.experiments.video.tilt``; ``tilt=False`` leaves it out, as the calibrations made before the tilt
+        existed did). Out-of-plane tilt is not observable and left at zero."""
         v = self.meta["impact_speed"]
         v0 = math.sqrt(max(v**2 - 2 * G * gap, 0.0))
         omega_y = math.radians(self.meta.get("rotation_rate_at_contact_deg_s", 0.0))  # clockwise on screen = +y
-        tilt = self.meta.get("tilt_at_contact", {})
-        tilt_y = math.radians(tilt["tilt_deg"]) if tilt.get("reliable") else 0.0
+        tilt = self.meta.get("tilt_at_contact", {}) if tilt else {}
+        tilt_y = math.radians(tilt["tilt_deg"]) if tilt and tilt.get("reliable") else 0.0
         return [
             f"drop.gap={gap}",
             f"drop.initial_speed={v0}",

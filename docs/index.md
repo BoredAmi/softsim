@@ -24,6 +24,10 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[fem,fast]"       # optional: the reference FEM (JAX) and PARDISO
 ```
 
+Without the repository: `pip install "softsim[mujoco,mesh]"` and `softsim examples copy my_examples` copies a
+few runnable configs (drop test, cable and PneuNet scenarios, Gymnasium envs); replace `scenarios/` by `my_examples/`
+in the commands of the tutorials (those scenarios are in the copy).
+
 On ROS 2 Humble, create the venv with `--system-site-packages` ([ROS 2](ros2.md)). For SOFA, unzip the
 SOFA v26.06 Linux release and set `SOFA_ROOT` ([SOFA backend](backends/sofa.md)).
 

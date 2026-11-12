@@ -410,7 +410,7 @@ dipole's gradient and a cantilever's closed form up to buckling (`tests/test_mag
 ## M11: design and control toolkit
 
 Quasi-static inverse control (done: `softsim inverse` by repeated equilibrium solves, and the SoftRobots.Inverse
-fast path on SOFA, `--method sofa-qp`; see [control.md](control.md)), reduced-order surrogates for real-time ROS 2 control (done: quasi-static polynomial/RBF maps and a linear DMD model, `softsim surrogate`; Koopman not done),
+fast path on SOFA, `--method sofa-qp`; see [control.md](control.md)), reduced-order surrogates for real-time ROS 2 control (done: quasi-static polynomial/RBF maps and a linear DMD model, `softsim surrogate`; closed-loop `Controller` with surrogate feedforward, integral feedback and an MPC-lite option, [surrogate.md](surrogate.md#closed-loop-control-on-the-surrogate); Koopman not done),
 design optimisation over parametric geometry (`softsim optimize`), and
 sim-to-real identification from short recorded motions.
 
@@ -430,8 +430,13 @@ sim-to-real identification from short recorded motions.
   Pressure actuators (`SurfacePressureActuator` on the cavity surface) are in: the bounds go in as `pressure * dt` like
   the cables, the cavity triangles need the opposite winding, and the effector weight 1e6 fixes a badly scaled QP; the
   bending tube recovers 4 kPa to 0.03% (7 times faster than the repeated solve on SOFA) and the PneuNet 5 kPa to 0.05%.
-  Open: orientation effectors, stroke-controlled cables, angle targets with a pressure, a pressure and a cable
-  together.
+  Also in: angle targets with any actuator (the effector goal is moved along a free axis by a Broyden iteration on the
+  goals; the bending tube's tilt recovers 4 kPa to 0.0005%), a pressure and a cable together (`scenarios/inflation/bending_cable.yaml`,
+  tip x and z recover 3983 Pa / 0.19992 N for 4000 Pa / 0.2 N; angle plus position 0.11% / 0.01%) and stroke-controlled
+  cables (solved as tensions, stroke read back, stroke bounds iterated: 1.4997 mm for 1.5 mm, 1.0002 mm at a 1 mm limit).
+  Open: a true orientation effector (this build has no `Rigid3d` one: `PositionEffector`, `CableEffector`,
+  `VolumeEffector`, `BarycentricCenterEffector`), output constraints, anchored cables and force actuators, several
+  bodies.
 - **The SOFA cable's limit cycle (done):** the explicit follower force swung the two-cable arm at every step from 10 ms to
   0.25 ms (the swing grows as the step shrinks, so it is not the lag), it vanishes with a linear or corotational
   elastic law and with the force-type `CableConstraint` it does not (identical to the explicit run). The cable's
@@ -464,12 +469,18 @@ reduced-gripper grasp-and-lift env (`softsim/ReducedGripperLift-v0`, 150 steps/s
 `tools/train_baseline.py`, a numpy CEM baseline with measured gains over random actions (envs.md). Open: the same
 for the FE gripper, deep-RL baselines (stable-baselines3) as an optional extra.
 
-## M13: benchmarks, docs, release (ongoing)
+## M13: benchmarks, docs, release (release-ready; waiting for the tag)
 
-`softsim bench` writes `docs/benchmarks.md` (every validated scenario × every
-backend: error vs data, wall time, mesh). Also: a docs site with tutorials, a
-pip release, CI (with a SOFA-skipping job and a nightly SOFA job) and
-contribution guides for robots, presets and datasets.
+Done: `softsim bench` writes `docs/benchmarks.md` (every validated scenario × every
+backend: error vs data, wall time, mesh); a docs site with tutorials; contribution guides for robots, presets and
+datasets; CI (lint, tests on Python 3.10 and 3.12, a core-only job, the docs build, and a weekly SOFA job); a release
+workflow (sdist and wheel, PyPI trusted publishing, docs deploy on a `v*` tag); and packaged example configs
+(`softsim examples copy DIR`) so a pip install can run the drop test, the cable and PneuNet scenarios and the
+Gymnasium environments. The wheel and sdist pass `twine check` and install and run in clean environments.
+
+Open (needs the maintainer): set up the PyPI trusted publisher (project `softsim`, workflow `release.yml`,
+environment `pypi`), enable GitHub Pages from the `gh-pages` branch, set the 0.1.0 date in `CHANGELOG.md` and
+`CITATION.cff`, and push the tag `v0.1.0`.
 
 ## Open items
 
@@ -491,6 +502,10 @@ contribution guides for robots, presets and datasets.
   the heavy impacts.
 - (Done, 2026-11-12: the SOFA frictionless-plate artefact was friction, and the rim-flare ground penetration
   an alarm distance shorter than the per-step travel; [backends/sofa.md](backends/sofa.md#known-limits).)
+
+- **SOFA under the tilted 500 g impact** (2026-11-12): with the measured 11° landing tilt the SOFA fits blow up at
+  5 mm / 0.05 ms; try a finer step or mesh (GPU machine), or refit with the tilt. The fits made before the tilt
+  existed are re-simulated without it (`tilt: false`, [experiments.md](experiments.md#backends-and-material-models-m4)).
 
 ## Later
 

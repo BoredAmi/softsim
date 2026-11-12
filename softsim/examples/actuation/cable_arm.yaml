@@ -1,0 +1,46 @@
+# Two-segment cable arm (docs/actuation.md): a 12 x 12 x 120 mm Ecoflex 00-30 column with stiff disks
+# (50 MPa zones, 4 mm) at z = 38-42 and 78-82 mm, as a continuum arm's spacer disks. Cable A (x = +4 mm)
+# ends in the lower disk, cable B (x = -4 mm) passes through it and ends in the upper disk. In the lower
+# segment the moment is 4 mm x (T_A - T_B), in the upper one only B's: -4 mm x T_B, so the arm bends
+# one way below the first disk and back above it (an S). Above the second disk nothing loads the
+# column, so it is straight. Euler-Bernoulli per segment (the disks are rigid):
+#   theta(z) = sum_over_soft_lengths  M L / (E_t I)       (docs/actuation.md, "A two-segment cable arm")
+# Tensions ramp smoothly to 0.45 N (A) and 0.15 N (B) over 400 ms, then are held; no gravity.
+#   softsim run scenarios/actuation/cable_arm.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: Two-segment cable arm (12 x 12 x 120 mm, Ecoflex 00-30, two stiff disks), cables A 0.45 N and B 0.15 N.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+  iterations: 300           # MuJoCo: the stiff disks make the flex ill-conditioned
+
+ground:
+  enabled: false
+
+body:
+  name: arm
+  geometry: {type: box, size: [12 mm, 12 mm, 120 mm]}
+  material: {preset: ecoflex_00_30, damping: null}
+  mesh: {size: 2 mm, method: structured}
+  fixed: [base]
+  zones:
+    - name: disk1
+      material: {preset: ecoflex_00_30, damping: null, elastic: {youngs_modulus: 50 MPa}}
+      box: [[-6 mm, -6 mm, 38 mm], [6 mm, 6 mm, 42 mm]]
+    - name: disk2
+      material: {preset: ecoflex_00_30, damping: null, elastic: {youngs_modulus: 50 MPa}}
+      box: [[-6 mm, -6 mm, 78 mm], [6 mm, 6 mm, 82 mm]]
+
+actuators:
+  - name: cable_a
+    type: cable
+    path: [[4 mm, 0 mm, 0 mm], [4 mm, 0 mm, 40 mm]]
+    schedule: [[0 ms, 0 N], [100 ms, 0.0725 N], [200 ms, 0.2250 N], [300 ms, 0.3775 N], [400 ms, 0.4500 N], [500 ms, 0.4500 N]]
+  - name: cable_b
+    type: cable
+    path: [[-4 mm, 0 mm, 0 mm], [-4 mm, 0 mm, 80 mm]]
+    schedule: [[0 ms, 0 N], [100 ms, 0.0242 N], [200 ms, 0.0750 N], [300 ms, 0.1258 N], [400 ms, 0.1500 N], [500 ms, 0.1500 N]]

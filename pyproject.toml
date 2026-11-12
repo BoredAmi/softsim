@@ -38,9 +38,9 @@ video = ["opencv-python>=4.5", "pillow>=9"]
 media = ["pillow>=9"]          # tools/make_readme_media.py
 fem = ["jax[cpu]>=0.4.30,<0.7", "scipy>=1.11"]   # reference solvers (softsim.fem, backend "fem"); float64 on CPU
 fast = ["pypardiso>=0.4"]   # MKL PARDISO for the 3D reference's linear solves (x86-64; ~35x faster than SuperLU)
-rl = ["gymnasium>=0.29"]   # softsim.envs: Gymnasium environments (docs/envs.md)
+rl = ["gymnasium>=0.29", "scipy>=1.11"]   # softsim.envs: Gymnasium environments (docs/envs.md)
 docs = ["mkdocs-material>=9.5", "pymdown-extensions>=10"]
-all = ["softsim[mujoco,mesh,calib,fem,media]"]
+all = ["softsim[mujoco,mesh,calib,video,fem,media,rl]"]
 dev = ["pytest>=7", "ruff>=0.5", "softsim[mujoco,mesh,calib,rl]"]
 
 [project.urls]
@@ -67,7 +67,7 @@ fem = "softsim.backends.fem:FemBackend"
 include = ["softsim*"]
 
 [tool.setuptools.package-data]
-softsim = ["materials/presets/*.yaml", "geometry/presets/*.yaml", "reduced/*.json"]
+softsim = ["materials/presets/*.yaml", "geometry/presets/*.yaml", "reduced/*.json", "examples/**/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

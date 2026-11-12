@@ -149,8 +149,8 @@ class InverseScene:
                 pnode.addObject("BarycentricMapping")
                 self.kinds[a.name] = "pressure"
                 continue
-            if not isinstance(a, CableActuator) or a.stiffness is not None:
-                raise ConfigError(f"sofa-qp: actuator {a.name!r} is not a tension-controlled cable or a pressure")
+            if not isinstance(a, CableActuator):
+                raise ConfigError(f"sofa-qp: actuator {a.name!r} is not a cable or a pressure")
             nodes, bary = body.cable_rows(a)
             via = np.einsum("kj,kji->ki", bary, body.mesh.points[nodes]) @ rot.T + self.offset
             behind = via[0] + (via[0] - via[1]) / np.linalg.norm(via[1] - via[0]) * 1e-3
@@ -179,6 +179,14 @@ class InverseScene:
         Sofa.Simulation.init(root)
         self.root = root
         self.tip_region = tip
+
+    def set_bounds(self, name: str, lower: float, upper: float) -> None:
+        """Change an actuator's bounds (values, not impulses) while the scene runs."""
+        a = self.actuators[name]
+        key = ("minPressure", "maxPressure") if self.kinds[name] == "pressure" else ("minForce", "maxForce")
+        a.findData(key[0]).value = float(lower) * self.dt
+        a.findData(key[1]).value = float(upper) * self.dt
+        a.reinit()
 
     def set_goal(self, position: np.ndarray) -> None:
         self.goal.position.value = [list(map(float, position))]
@@ -228,14 +236,16 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
                        scales: Mapping[str, float] | None = None, timestep: float | str = "2 ms",
                        settle_damping: Mapping[str, Any] | None = None, settle_tol: float = 1e-3,
                        settle_window: float | str = 0.05, max_settle: float | str = 2.0, max_corrections: int = 8,
-                       qp_weight: float | None = None, **_ignored: Any) -> InverseResult:
+                       qp_weight: float | None = None, angle_direction: str | None = None, **_ignored: Any) -> InverseResult:
     """Find the constant cable tensions / pressures that bring ``targets`` to equilibrium, with SoftRobots.Inverse.
 
     Position targets (``tip_x``, ``tip_y``, ``tip_z``) are the effector's goal: SOFA's QP finds the tensions in one
     run per goal. The effector sits at a barycentric point at the tip face's rest centroid while the output is the
     area-weighted centroid of the face, so a few corrections of the goal by the remaining error follow the first
-    solve (``max_corrections``). An angle target (``bend_angle`` or ``chord_angle``, one cable) is reached by a
-    secant iteration on the goal's x. Any other target is refused.
+    solve (``max_corrections``). An angle target (``bend_angle`` or ``chord_angle``) is not a position: it is
+    reached by moving the effector goal along a free axis (``angle_direction``) with a Broyden iteration on the
+    goals of all targets (a secant for one angle), which also handles angle and position targets together and any
+    mix of cables and pressures. Any other target is refused.
 
     Args:
         config: Scenario YAML path or mapping (cable or pressure actuators on one soft body with a ``tip`` / ``top`` region).
@@ -252,6 +262,10 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
             counted in ``unsettled``.
         max_corrections: Cap on goal corrections / secant steps.
         qp_weight: ``PositionEffector`` weight (default 1; 1e6 with pressure actuators, see the module doc).
+        angle_direction: Axis (``"+x"``, ``"-x"``, ``"+y"``, ...) along which the effector goal is moved to reach an
+            angle target, i.e. the direction the tip moves as it bends (the bending tube curls to ``-x``). Default
+            ``None``: ``+x`` first (an axis no position target uses), ``-x`` if that leaves every actuator at its
+            lower bound with the angle short.
 
     Returns:
         :class:`~softsim.control.inverse.InverseResult` (``simulations`` = QP runs to a settled state, ``steps`` =
@@ -274,13 +288,10 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
         raise ConfigError(f"no bounds for actuators {missing}")
     if not names or not outs:
         raise ConfigError("need at least one actuator and one target")
-    angles = [o for o in outs if o in ANGLE_OUTPUTS]
     unknown = [o for o in outs if o not in POSITION_OUTPUTS and o not in ANGLE_OUTPUTS]
     if unknown:
         raise ConfigError(f"sofa-qp: targets {unknown} are not effector outputs; use {sorted(POSITION_OUTPUTS)} "
                           f"or one of {list(ANGLE_OUTPUTS)}")
-    if angles and (len(outs) != 1 or len(names) != 1):
-        raise ConfigError("sofa-qp: an angle target needs exactly one cable and no other target")
     if len(outs) < len(names):
         raise ConfigError(f"{len(names)} actuators but only {len(outs)} targets: the solution would not be unique")
     sim = Simulation(raw, backend="sofa", base_dir=base)
@@ -288,40 +299,81 @@ def solve_inverse_sofa(config: str | Path | Mapping[str, Any], targets: Mapping[
     try:
         dims = {n: actuator_dimension(sim, n) for n in names}
         for n in names:
-            if dims[n] not in ("force", "pressure"):
-                raise ConfigError(f"sofa-qp: actuator {n!r} is neither a tension-controlled cable nor a pressure")
+            if dims[n] not in ("force", "pressure", "length"):
+                raise ConfigError(f"sofa-qp: actuator {n!r} is neither a cable nor a pressure")
         lo = {n: parse_quantity(bounds[n][0], dims[n]) for n in names}
         hi = {n: parse_quantity(bounds[n][1], dims[n]) for n in names}
-        if angles and "pressure" in dims.values():
-            raise ConfigError("sofa-qp: angle targets are not supported with pressure actuators; use tip_x / tip_y / tip_z")
+        for n in names:
             if not (np.isfinite(lo[n]) and np.isfinite(hi[n]) and hi[n] > lo[n]):
                 raise ConfigError(f"actuator {n!r}: bounds must be finite with upper > lower, got {bounds[n]!r}")
         target = {o: parse_quantity(targets[o], output_dimension(o)) for o in outs}
         scale = {o: parse_quantity((scales or {}).get(o, _SCALES[output_dimension(o)]), output_dimension(o))
                  for o in outs}
-        axes = sorted({POSITION_OUTPUTS[o] for o in outs if o in POSITION_OUTPUTS} or {0})
+        goal_axes, goal_signs, auto_sign = _goal_axes(outs, angle_direction)
+        axes = sorted(set(goal_axes))
         weight = qp_weight if qp_weight is not None else (1e6 if "pressure" in dims.values() else 1.0)
-        scene = InverseScene(sim, {n: (lo[n], hi[n]) for n in names}, axes, weight=weight)
+        # a stroke-controlled cable (tension = k (length - rest + stroke)) is solved for its tension, with tension bounds
+        # re-derived from the stroke bounds at the current length after each run; the stroke is read back from it
+        strokes = {n: (a.stiffness, sim.scenario._cables[n][3]) for n in names if dims[n] == "length"
+                   for a in sim.scene.actuators if a.name == n}
+        tlo = {n: (strokes[n][0] * max(lo[n], 0.0) if n in strokes else lo[n]) for n in names}
+        thi = {n: (strokes[n][0] * hi[n] if n in strokes else hi[n]) for n in names}
+        scene = InverseScene(sim, {n: (tlo[n], thi[n]) for n in names}, axes, weight=weight)
         return _run(scene, names, outs, target, scale, lo, hi, tolerance, settle_tol, settle_window, max_settle,
-                    max_corrections, t0)
+                    max_corrections, t0, goal_axes, goal_signs, auto_sign, strokes)
     finally:
         if scene is not None:
             scene.close()
         sim.close()
 
 
+def _goal_axes(outs, direction: str | None) -> tuple[list[int], list[float], bool]:
+    """The effector axis and sign each target's goal is moved along (positions: their own axis; angles: free axes)."""
+    axes: list[int | None] = [POSITION_OUTPUTS.get(o) for o in outs]
+    used = {a for a in axes if a is not None}
+    sign, auto = 1.0, direction is None
+    free = [a for a in range(3) if a not in used]
+    first = None
+    if direction is not None:
+        d = str(direction).strip().lower()
+        if len(d) != 2 or d[0] not in "+-" or d[1] not in "xyz":
+            raise ConfigError(f"angle_direction must be '+x', '-x', '+y', ... not {direction!r}")
+        sign, first = (1.0 if d[0] == "+" else -1.0), "xyz".index(d[1])
+        if first in used:
+            raise ConfigError(f"angle_direction {direction!r}: the {d[1]} axis is already a position target")
+    signs = []
+    for k, a in enumerate(axes):
+        if a is None:
+            cand = [first] if first is not None and first in free else free
+            if not cand:
+                raise ConfigError("sofa-qp: no free effector axis for the angle target (angles need an axis each "
+                                  "that no position target uses)")
+            axes[k] = a = cand[0]
+            free.remove(a)
+        signs.append(1.0 if outs[k] in POSITION_OUTPUTS else sign)
+    return [int(a) for a in axes], signs, auto
+
+
 def _run(scene: InverseScene, names, outs, target, scale, lo, hi, tolerance, settle_tol, settle_window, max_settle,
-         max_corrections, t0) -> InverseResult:
+         max_corrections, t0, axes=None, signs=None, auto_sign=False, strokes=None) -> InverseResult:
     """The goal / correction loop around the settled QP runs (see :func:`solve_inverse_sofa`)."""
     chunk = 10
     window = max(int(round(settle_window / (chunk * scene.dt))), 2)
     max_chunks = max(int(round(max_settle / (chunk * scene.dt))), window + 1)
-    force_tol = np.array([settle_tol * (hi[n] - lo[n]) for n in names])
+    strokes = strokes or {}
+    # tension bounds of the run (a stroke-controlled cable's follow its stroke bounds at the current length)
+    tlo = {n: (strokes[n][0] * max(lo[n], 0.0) if n in strokes else lo[n]) for n in names}
+    thi = {n: (strokes[n][0] * hi[n] if n in strokes else hi[n]) for n in names}
+    force_tol = np.array([settle_tol * (thi[n] - tlo[n]) for n in names])
+    last: dict[str, Any] = {}
+    secant: dict[tuple[str, str], tuple[float, float]] = {}   # (bound used, bound it should be) of the last run
     out_tol = np.array([settle_tol * scale[o] for o in outs])
     sc = np.array([scale[o] for o in outs])
     tgt = np.array([target[o] for o in outs])
-    axes = [POSITION_OUTPUTS[o] for o in outs if o in POSITION_OUTPUTS] or [0]
-    angle = outs[0] in ANGLE_OUTPUTS
+    if axes is None:
+        axes, signs, auto_sign = _goal_axes(outs, None)
+    signs = list(signs)
+    is_angle = np.array([o in ANGLE_OUTPUTS for o in outs])
     stats = {"steps": 0, "unsettled": 0, "runs": 0}
     history: list[dict[str, Any]] = []
 
@@ -331,6 +383,7 @@ def _run(scene: InverseScene, names, outs, target, scale, lo, hi, tolerance, set
             scene.step(chunk)
             stats["steps"] += chunk
             m, f = scene.outputs(), scene.forces()
+            last["m"] = m
             f_hist.append([f[n] for n in names])
             o_hist.append([m[o] for o in outs])
             if len(f_hist) >= window and _settled(np.array(f_hist[-window:]), np.array(o_hist[-window:]), force_tol,
@@ -339,45 +392,104 @@ def _run(scene: InverseScene, names, outs, target, scale, lo, hi, tolerance, set
         else:
             stats["unsettled"] += 1
         stats["runs"] += 1
-        history.append({"values": dict(zip(names, map(float, f_hist[-1]))),
+        history.append({"values": dict(zip(names, map(float, stroke_of(np.array(f_hist[-1]), last["m"])))),
                         "outputs": dict(zip(outs, map(float, o_hist[-1])))})
         return np.array(f_hist[-1]), np.array(o_hist[-1])
 
     rest = scene.tip_rest
     height = float(rest[2] - scene.points0[:, 2].min())
-    if angle:  # first goal: the tip of a circular arc of the target angle (x ~ theta L / 2)
-        goals = [float(np.clip(tgt[0], -np.pi, np.pi)) * height / 2]
-    else:
-        goals = [target[o] - rest[POSITION_OUTPUTS[o]] for o in outs]
+
+    def first_goals() -> np.ndarray:
+        # positions: the target itself; angles: the tip of a circular arc of the target angle (x ~ theta L / 2)
+        return np.array([float(np.clip(target[o], -np.pi, np.pi)) * height / 2 if a else target[o] - rest[ax]
+                         for o, a, ax in zip(outs, is_angle, axes)])
+
+    def slope0() -> np.ndarray:  # d(output) / d(goal) at the start: 1 for a position, 2 / L for an angle
+        return np.diag(np.where(is_angle, 2.0 / height, 1.0) / sc)
+
+    goals, jac = first_goals(), slope0()
     best: dict[str, Any] = {"res": np.inf}
-    trial: list[tuple[float, float]] = []   # angle case: (goal x, residual) pairs
-    span = np.array([hi[n] - lo[n] for n in names])
-    low = np.array([lo[n] for n in names])
+    def stroke_of(f: np.ndarray, m: dict[str, float]) -> np.ndarray:
+        """Values as the job gives them: tensions, pressures and, for a stroke cable, stroke = T / k - (L - L0)."""
+        return np.array([f[i] if n not in strokes else
+                         f[i] / strokes[n][0] - (m[f"{n}_length"] - strokes[n][1]) for i, n in enumerate(names)])
+
+    def tension_bounds(m: dict[str, float]) -> tuple[np.ndarray, np.ndarray]:
+        out = [], []
+        for n in names:
+            if n in strokes:
+                k, rest = strokes[n]
+                stretch = m[f"{n}_length"] - rest
+                tl, th = max(k * (lo[n] + stretch), 0.0), max(k * (hi[n] + stretch), 0.0)
+            else:
+                tl, th = lo[n], hi[n]
+            out[0].append(tl)
+            out[1].append(th)
+        return np.array(out[0]), np.array(out[1])
+
+    low, high = np.array([tlo[n] for n in names]), np.array([thi[n] for n in names])
+    span = high - low
+    prev = None                      # (goals, residual) of the last run, for Broyden's update
+    flipped = False
     for k in range(max_corrections + 1):
         goal = rest.copy()
-        for a, d in zip(axes, goals):
-            goal[a] = rest[a] + d
+        for ax, sg, d in zip(axes, signs, goals):
+            goal[ax] = rest[ax] + sg * d
         scene.set_goal(goal)
         f, o = settle()
         r = (o - tgt) / sc
         worst = float(np.abs(r).max())
-        if worst < best["res"]:
-            best.update(res=worst, f=f.copy(), o=o.copy())
-        saturated = bool(np.any((f <= low + 1e-3 * span) | (f >= low + span * (1 - 1e-3))))
-        if worst <= tolerance or (saturated and k >= 1) or k == max_corrections:
+        at_low = bool(np.any(f <= low + 1e-3 * span))
+        saturated = bool(at_low or np.any(f >= low + span * (1 - 1e-3)))
+        if worst < best["res"] or (strokes and saturated):  # a saturated stroke cable: the latest run has the consistent bounds
+            best.update(res=worst, f=f.copy(), o=o.copy(), m=dict(last["m"]), low=low.copy(), span=span.copy())
+        if (auto_sign and not flipped and is_angle.any() and at_low and worst > tolerance):
+            # the angle goal pushed the wrong way (every actuator can only push one way): go the other way
+            flipped = True
+            signs = [-sg if a else sg for sg, a in zip(signs, is_angle)]
+            goals, jac, prev = first_goals(), slope0(), None
+            best = {"res": np.inf}
+            continue
+        moved = False
+        if strokes and saturated:  # the next run's tension bounds follow the stroke bounds at the length reached now
+            target_low, target_high = tension_bounds(last["m"])   # what the bounds are at the length reached now
+            new_low, new_high = target_low.copy(), target_high.copy()
+            for i, n in enumerate(names):  # the length depends on the tension: secant on bound = target(bound)
+                if n not in strokes:
+                    continue
+                for tag, used, target, new in (("lo", low, target_low, new_low), ("hi", high, target_high, new_high)):
+                    if (n, tag) in secant:
+                        (b1, t1), (b2, t2) = secant[n, tag], (used[i], target[i])
+                        den = (t2 - b2) - (t1 - b1)
+                        if abs(den) > 1e-12:
+                            new[i] = max(b2 - (t2 - b2) * (b2 - b1) / den, 0.0)
+                    secant[n, tag] = (used[i], target[i])
+            moved = bool(np.any(np.abs(new_low - low) + np.abs(new_high - high) > 1e-3 * span))
+            if moved:
+                low, high = new_low, new_high
+                span = np.maximum(high - low, 1e-12)
+                for i, n in enumerate(names):
+                    if n in strokes:
+                        scene.set_bounds(n, low[i], high[i])
+        if worst <= tolerance or (saturated and k >= 1 and not moved) or k == max_corrections:
             break
-        if angle:
-            trial.append((goals[0], float(r[0])))
-            if len(trial) >= 2 and trial[-1][1] != trial[-2][1]:
-                (g1, r1), (g2, r2) = trial[-2], trial[-1]
-                goals = [g2 - r2 * (g2 - g1) / (r2 - r1)]
-            else:
-                goals = [goals[0] - r[0] * sc[0] * height / 2]
+        if is_angle.any():  # Broyden's update of d(residual) / d(goal), then a Newton step
+            if prev is not None:
+                dg, dr = goals - prev[0], r - prev[1]
+                if np.dot(dg, dg) > 0:
+                    jac = jac + np.outer(dr - jac @ dg, dg) / np.dot(dg, dg)
+            prev = (goals.copy(), r.copy())
+            try:
+                step = np.linalg.solve(jac, r)
+            except np.linalg.LinAlgError:
+                step = np.linalg.lstsq(jac, r, rcond=None)[0]
+            goals = goals - step
         else:
-            goals = [g - (ov - tv) for g, ov, tv in zip(goals, o, tgt)]
+            goals = goals - (o - tgt)
     f, o = best["f"], best["o"]
-    values = {n: float(f[i]) for i, n in enumerate(names)}
+    low, span = best["low"], best["span"]       # the bounds of the run that gave the best result
     at_bounds = [n for i, n in enumerate(names) if f[i] <= low[i] + 1e-3 * span[i] or f[i] >= low[i] + span[i] * (1 - 1e-3)]
+    values = {n: float(v) for n, v in zip(names, stroke_of(f, best["m"]))}
     if best["res"] <= tolerance:
         status = "converged"
     elif at_bounds:
@@ -395,7 +507,7 @@ def run_job_sofa(path: str | Path, job: Mapping[str, Any]) -> dict[str, Any]:
     """Run a parsed inverse job file with the SOFA QP method (see :func:`softsim.control.inverse.run_job`)."""
     path = Path(path).resolve()
     own = {"overrides", "tolerance", "scales", "timestep", "settle_damping", "settle_tol", "settle_window",
-           "max_settle", "max_corrections", "qp_weight"}
+           "max_settle", "max_corrections", "qp_weight", "angle_direction"}
     shared = {"config", "targets", "actuators", "backend", "method", "initial", "max_evaluations", "warm_start",
               "jacobian_step"}  # the repeated-solve method's keys are accepted and ignored
     extra = set(job) - own - shared

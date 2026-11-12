@@ -1,0 +1,13 @@
+# Find the stroke of a stroke-controlled cable (tension = k (length - rest + stroke), 300 N/m tendon) that bends the
+# cantilever to a tip position, with SOFA's QP inverse solver (docs/control.md "SOFA fast path"):
+#   softsim inverse jobs/inverse_cable_stroke_sofa.yaml
+# The target is the tip the ordinary SOFA backend reaches at a held 1.5 mm stroke (4 mm mesh, 2 ms steps).
+config: ../scenarios/actuation/cable_cantilever_stroke.yaml
+method: sofa-qp
+overrides: [body.mesh.size=4mm]
+timestep: 2 ms
+targets:
+  tip_x: 1.14667 mm
+actuators:
+  cable: [0 mm, 3 mm]                   # stroke bounds: the QP's tension bounds follow them at the length reached
+tolerance: 0.05

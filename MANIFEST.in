@@ -1,0 +1,4 @@
+include CHANGELOG.md CITATION.cff CONTRIBUTING.md
+graft scenarios
+graft benchmarks
+global-exclude __pycache__ *.py[cod]

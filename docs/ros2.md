@@ -92,6 +92,14 @@ ros2 service call /softsim/action softsim_interfaces/srv/RunAction \
 ros2 topic echo /softsim/metrics/indentation
 ```
 
+## Closed-loop controller node
+
+`controller_node` runs a [surrogate controller](surrogate.md#closed-loop-control-on-the-surrogate) on top of the
+simulation node: it subscribes to `/softsim/metrics/<output>` and `~/target/<output>` (Float64) and publishes
+`/softsim/actuators/<name>/command` every `period` seconds. Run it with `use_sim_time:=true`.
+Parameters: `surrogate`, `outputs`, `period`, `ki`, `mode`, `damping`, `max_correction`, `sim_namespace`. Not yet run
+against a ROS installation.
+
 ## Timing
 
 The simulation runs slower than real time (about 0.005–0.02× for the drop test,

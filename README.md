@@ -4,12 +4,14 @@ Data-driven simulation of soft materials and soft robots, with pluggable physics
 backends and validation against real experiments. The core is a pure Python
 package; ROS 2 integration is a thin layer on top (milestone M2).
 
-**Status (v0.1.0, unreleased):** the core, the ROS 2 layer, video tracking and calibration, and the SOFA
-backend are done. Soft-material fidelity (M5) and the robot foundations (M6: pressure, cables, forces,
-material zones, CAD import, mounts) are nearly done. The pneumatic finger (M7), the cable finger and rods (M8)
-are validated. The gripper (M9, with self-collision and a friction benchmark) and magnetic soft materials (M10:
-soft- and hard-magnetic, saturation, magnetic zones) are in progress, and the design and control tools (M11)
-have started: `softsim optimize` and `softsim inverse`. Every validated case on every backend is in one table:
+**Status (v0.1.0, release candidate):** the core, the ROS 2 layer, video tracking and calibration, and the SOFA
+backend (M1-M4) are done, as are the pneumatic finger (M7) and the cable finger and rods (M8), all validated.
+Soft-material fidelity (M5) and the robot foundations (M6: pressure, cables, forces, material zones, CAD import,
+mounts) are nearly done. The gripper (M9: finite-element grasps, self-collision, a friction benchmark), magnetic
+soft materials (M10: soft- and hard-magnetic, saturation, zones) and the design and control tools (M11:
+`softsim optimize`, `softsim inverse` including the SOFA pressure/cable fast path, `softsim surrogate`) are in
+progress, and Gymnasium environments (M12 groundwork: cable beam and arm reach, `PneuNetBend`,
+`ReducedGripperLift`) run on the CPU backend. Every validated case on every backend is in one table:
 [docs/benchmarks.md](docs/benchmarks.md) (`softsim bench`).
 
 Backends:
@@ -160,6 +162,16 @@ python3 -m venv --system-site-packages .venv
 ```
 
 `numpy<2` is pinned so ROS 2 Humble's compiled Python modules keep working.
+
+**From PyPI** (once released), without the repository:
+
+```bash
+pip install "softsim[mujoco,mesh]"        # more extras: rl, calib, fem, fast, video, all
+softsim examples copy my_examples         # the drop test, cable and PneuNet configs, and the Gymnasium env configs
+```
+
+then `softsim run my_examples/drop_test/cases/w020.yaml`. The paths in the rest of this README (`scenarios/...`)
+refer to a source checkout.
 
 **Reference FEM (optional).** `pip install -e ".[fem,fast]"` adds JAX (CPU,
 float64) and MKL PARDISO for `softsim.fem`

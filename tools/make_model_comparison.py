@@ -30,7 +30,8 @@ CALIBRATIONS = {  # label -> calibration file (report in its output directory)
 def _simulate(path: str):
     cal = Calibration(ROOT / path)
     report = yaml.safe_load((cal.output / "report.yaml").read_text())
-    return simulate_cases(cal.dataset, cal.tracks, list(cal.cases), [*cal.overrides, *best_overrides(report)])
+    return simulate_cases(cal.dataset, cal.tracks, list(cal.cases), [*cal.overrides, *best_overrides(report)],
+                          tilt=cal.tilt)  # each fit as it was fitted (calibration key `tilt`)
 
 
 def main() -> None:

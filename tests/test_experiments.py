@@ -126,6 +126,12 @@ def test_compare_identical_curves(tmp_path):
     assert m["rmse"] == pytest.approx(0.0, abs=1e-12) and m["peak_sim"] == pytest.approx(m["peak_exp"])
     ov = exp.sim_overrides()
     assert "drop.offset=[0.0015, 0.0]" in ov and any(o.startswith("drop.angular_velocity=[0.0, 0.52") for o in ov)
+    # a reliable measured tilt is applied, unless the caller asks for the setup of fits made before it existed
+    (tmp_path / "c.yaml").write_text("impact_speed: 2.7\noffset_at_contact_mm: 1.5\n"
+                                     "tilt_at_contact: {tilt_deg: -11.0, reliable: true}\n")
+    exp = ExperimentCase.load(tmp_path, "c")
+    assert f"drop.tilt=[0.0, {math.radians(-11.0)}]" in exp.sim_overrides()
+    assert not any(o.startswith("drop.tilt") for o in exp.sim_overrides(tilt=False))
 
 
 def test_dataset_and_frames(tmp_path):

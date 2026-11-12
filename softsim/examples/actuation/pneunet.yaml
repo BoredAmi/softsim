@@ -1,0 +1,45 @@
+# PneuNet bending finger: six chambers in an Ecoflex 00-30 block (54 x 16 x 16 mm),
+# joined by a channel above a 5 mm base slab whose bottom 1.5 mm is a stiffer
+# silicone (1 MPa, a strain-limiting layer, as a material zone). The base face
+# (x = 0) is bonded; the pressure inflates the chambers, whose thin top and
+# walls stretch while the slab resists, so the finger curls towards -z. Smooth
+# ramp to 8 kPa over 400 ms, then held; no gravity. Outputs: bend_angle (tip
+# face rotation), tip_x/z, cavity_volume. Above ~15 kPa (MuJoCo, 1.5 mm) the thin
+# Ecoflex walls approach their limit pressure and balloon.
+#   softsim run scenarios/actuation/pneunet.yaml
+#   softsim run scenarios/actuation/pneunet.yaml --backend fem --set simulation.timestep=2ms
+scenario: actuation
+description: PneuNet finger, Ecoflex 00-30 with a 1 MPa layer, 0-8 kPa.
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 500 ms
+  output_rate: 1 kHz
+  gravity: [0, 0, 0]
+  iterations: 300           # MuJoCo: thin walls make the flex stiff
+
+ground:
+  enabled: false
+
+body:
+  name: finger
+  geometry: {type: pneunet, chambers: 6, chamber_length: 6 mm, wall: 2 mm, end_wall: 4 mm, width: 16 mm,
+             side_wall: 2 mm, height: 16 mm, base: 5 mm, top_wall: 2 mm, channel_width: 4 mm, channel_height: 2 mm,
+             layer: 1.5 mm}
+  material: {preset: ecoflex_00_30, damping: null}
+  mesh: {size: 1.5 mm, method: gmsh}
+  fixed: [base]
+  zones:
+    - name: layer
+      region: layer
+      material: {preset: ecoflex_00_30, damping: null, elastic: {youngs_modulus: 1 MPa}}
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0.000 kPa], [25 ms, 0.018 kPa], [50 ms, 0.128 kPa], [75 ms, 0.390 kPa],
+               [100 ms, 0.828 kPa], [125 ms, 1.440 kPa], [150 ms, 2.202 kPa], [175 ms, 3.072 kPa],
+               [200 ms, 4.000 kPa], [225 ms, 4.928 kPa], [250 ms, 5.798 kPa], [275 ms, 6.560 kPa],
+               [300 ms, 7.172 kPa], [325 ms, 7.610 kPa], [350 ms, 7.872 kPa], [375 ms, 7.982 kPa],
+               [400 ms, 8.000 kPa], [500 ms, 8.000 kPa]]

@@ -1,0 +1,16 @@
+# A pressure and a cable together (scenarios/inflation/bending_cable.yaml: the bending tube with a cable in its thin
+# wall), with SOFA's QP inverse solver (docs/control.md "SOFA fast path"):
+#   softsim inverse jobs/inverse_bending_cable_sofa.yaml
+# The targets are the tip the ordinary SOFA backend reaches at a held 4 kPa and 0.2 N (2 ms steps): the QP gives back
+# about 4 kPa and 0.2 N (tip x and z are what separate the two: the pressure lengthens the tube, the cable shortens it).
+config: ../scenarios/inflation/bending_cable.yaml
+method: sofa-qp
+timestep: 2 ms
+scales: {tip_x: 0.01 mm, tip_z: 0.01 mm}
+targets:
+  tip_x: 2.9624 mm
+  tip_z: 39.4169 mm
+actuators:
+  cavity: [0 kPa, 10 kPa]
+  cable: [0 N, 0.5 N]
+tolerance: 0.05

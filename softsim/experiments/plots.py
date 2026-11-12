@@ -23,7 +23,7 @@ def _plt():
 
 
 def simulate_cases(dataset, tracks: str | Path, cases: list[str], overrides: list[str],
-                   duration: float = 0.03) -> dict[str, pd.DataFrame]:
+                   duration: float = 0.03, tilt: bool = True) -> dict[str, pd.DataFrame]:
     """Run each case with its measured impact; returns simulated indentation curves.
 
     Cases whose simulation diverges are left out (with a warning on stderr), so
@@ -34,7 +34,7 @@ def simulate_cases(dataset, tracks: str | Path, cases: list[str], overrides: lis
     out = {}
     for case in cases:
         exp = ExperimentCase.load(tracks, case)
-        ov = [*overrides, *exp.sim_overrides(), f"simulation.duration={duration}", "output.save_model=false"]
+        ov = [*overrides, *exp.sim_overrides(tilt=tilt), f"simulation.duration={duration}", "output.save_model=false"]
         try:
             ts = run_config(dataset.config_path(case), ov).timeseries
         except StabilityError as exc:

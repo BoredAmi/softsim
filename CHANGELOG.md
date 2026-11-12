@@ -8,6 +8,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Core (M1):** YAML configs with units and strict schemas, `--set` overrides, material presets, soft and rigid
   geometry, tetrahedral meshing, a backend-neutral scene, capability flags with refusals, pre-run physics
   checks, sweeps, CLI.
+- **SOFA inverse (`--method sofa-qp`):** angle targets (`bend_angle`, `chord_angle`) with any actuator, alone or with position targets (Broyden iteration on the effector goals, `angle_direction`); a pressure and a cable together (`scenarios/inflation/bending_cable.yaml`); stroke-controlled cables (solved as tensions, stroke read back, stroke bounds iterated). Round trips recover the actuation to 0.5% or better.
 - **SOFA cable (fix):** tension-controlled cables are springs with per-step rest lengths, so their tangent stiffness is implicit; the two-cable arm no longer swings in a +-0.5 mm limit cycle on SOFA and the repeated inverse solve converges.
 - **Backends:** MuJoCo flex (M1), SOFA v26.06 (M4), `fem`, the locking-free 3D reference (quadratic
   tetrahedra, P2/P0; M5), and `rod`, slender bodies as SOFA BeamAdapter beams (M8).
@@ -28,6 +29,9 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Robots (M7-M10):** PneuNet and the Wang et al. ribbed finger (reference within 0.8 deg RMS of the
   measurements), cable finger and arm, a two-finger gripper with finite-element grasps and a live page,
   soft-magnetic elastomers (MRE) on the reference.
+- **Drop comparisons:** calibrations made before the measured landing tilt was applied (28-29 Oct) are re-simulated
+  without it (`tilt: false` in the calibration file); with the tilt the SOFA 500 g fits blew up and were missing from
+  the figures. The SOFA Ogden fit's 500 g NRMSE is 79% without the rim artefact (it was reported as 58%).
 - **SOFA contact:** the alarm distance follows the fastest vertex's travel per step (rim flare of the 500 g drop: a vertex
   went 2.83 mm through the ground, now 0.006 mm; the restitution table is unchanged, +12% CPU time in that run;
   `SOFTSIM_SOFA_ADAPTIVE_ALARM=0` restores the fixed one). The "frictionless plate 7% stiff" artefact was friction:
@@ -56,6 +60,9 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
   (resumable log, held-out validation, JSON evaluable from numpy) and `softsim inverse --method surrogate` solves on it
   in milliseconds with an optional verifying simulation; optional DMD-with-control dynamic model. MuJoCo arm: the known
   tensions found to 0.01%, ~1500 times faster per solve than the repeated solve.
+- **Closed-loop control (M11):** `softsim.control.controller.Controller` (surrogate feedforward, damped-least-squares
+  integral feedback with anti-windup, optional MPC-lite on the DMD model) and a ROS 2 `controller_node`; with a
+  stiffness 20 % off, feedback removes the 17 to 33 % (cantilever) and 1 to 3 mm (arm) feedforward error on MuJoCo.
 - **Runs:** a run that fails partway saves the samples it computed (`summary.yaml` → `metadata.incomplete`).
 - **Release (M13):** `softsim bench` and the benchmark table, CI, a docs site with tutorials, a test that every command
   in the README and tutorials parses and its config validates, `softsim --version`.

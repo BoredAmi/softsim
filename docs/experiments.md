@@ -236,8 +236,14 @@ with `python tools/make_model_comparison.py`.)
   rim's 0.6 mm per step when it snaps back onto the ground; the backend now
   widens it to the fastest vertex's travel
   ([backends/sofa.md](backends/sofa.md#known-limits): 2.83 mm to 0.006 mm at 8.8 ms, peak unchanged). The
-  500 g peak and timing were before this and valid; the 58% NRMSE in the table above was measured with the
-  artefact and has not been re-run.
+  500 g peak and timing were before this and are reproduced (9.0 mm / 5.3 ms); the fit's stored 500 g NRMSE
+  (58%) included the artefact, and re-simulated without it the 500 g NRMSE is 79% (2026-11-12). The Ogden fit's
+  cost of 0.24 above was minimised with the artefact in its 500 g term.
+- **Re-simulating these fits needs their own setup.** They were made (28-29 Oct) before the measured 11° in-plane
+  landing tilt of the 500 g drop was applied to every re-simulation (31 Oct); with the tilt, both SOFA fits blow up
+  at 5 mm / 0.05 ms (8.3-8.4 ms, a real instability, not the speed guard) and the figures were left without 500 g.
+  Their calibration files now say `tilt: false`, and `tools/make_model_comparison.py` re-simulates each fit as it
+  was fitted. Whether SOFA survives the tilted impact at a finer mesh or step is open.
 
 ## After the first contact: tack and the hopping specimen
 

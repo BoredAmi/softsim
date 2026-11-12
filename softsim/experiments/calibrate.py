@@ -284,7 +284,7 @@ def _evaluate_case(task: tuple) -> dict[str, float]:
     raw, base_dir, tracks, case = task[:4]
     observables = task[4] if len(task) > 4 else {"indentation_rel": None}
     exp = ExperimentCase.load(tracks, case)
-    raw = apply_overrides(raw, exp.sim_overrides())
+    raw = apply_overrides(raw, exp.sim_overrides(tilt=task[5] if len(task) > 5 else True))
     try:
         sim = Simulation(raw, base_dir=base_dir)
         try:
@@ -326,6 +326,7 @@ class Calibration:
                                                     spec.get("material_key", "specimen.material"))
         self.grid = int(spec.get("grid", 0))
         self.max_evaluations = int(spec.get("max_evaluations", 60))
+        self.tilt = bool(spec.get("tilt", True))  # false: ignore the measured in-plane tilt (older fits)
         self.output = (base / spec.get("output", "calibration_out")).resolve()
         self.jobs = jobs
         self._workers = min(jobs, len(self.cases))
@@ -353,7 +354,7 @@ class Calibration:
             r = raw
             for key, value in values.items():
                 r = set_dotted(r, key, value)
-            tasks.append((r, base_dir, self.tracks, case, self.observables[case]))
+            tasks.append((r, base_dir, self.tracks, case, self.observables[case], getattr(self, "tilt", True)))
         return tasks
 
     @staticmethod

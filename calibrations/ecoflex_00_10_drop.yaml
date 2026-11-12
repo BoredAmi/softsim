@@ -7,6 +7,7 @@
 dataset: ../datasets/czopek2026_ecoflex_drop.yaml
 tracks: ../data/processed/czopek2026_ecoflex_drop
 cases: {w020: 1.0, w050: 1.0, w500: 1.0}
+tilt: false   # fitted before the measured in-plane tilt was applied (2026-10-31); re-simulate as fitted
 overrides:
   - specimen.mesh.size=0.005       # fitted values are tied to this mesh size
   - simulation.duration=0.022

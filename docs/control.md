@@ -94,6 +94,9 @@ softsim inverse jobs/inverse_cable_cantilever_sofa.yaml                  # `meth
 softsim inverse jobs/inverse_cable_cantilever.yaml --method sofa-qp      # or on the command line
 softsim inverse jobs/inverse_cable_arm_sofa.yaml                         # two cables, tip x and z, one QP run
 softsim inverse jobs/inverse_bending_sofa.yaml                           # a pressure (SurfacePressureActuator)
+softsim inverse jobs/inverse_bending_angle_sofa.yaml                     # a tip tilt with a pressure
+softsim inverse jobs/inverse_bending_cable_sofa.yaml                     # a pressure and a cable together
+softsim inverse jobs/inverse_cable_stroke_sofa.yaml                      # a stroke-controlled cable
 ```
 
 ```python
@@ -121,8 +124,15 @@ the step, within the bounds; the run is stepped until forces and outputs have st
   least as many axes as cables. The effector is a barycentric point and the scenario's output is the face's area-weighted
   centroid, so the goal is corrected by the remaining error after each settled run (up to `max_corrections`; the
   cantilever needed none, the error of the point against the centroid being 2 um). `bend_angle` / `chord_angle`
-  (one target, one cable) are not a position: the effector goal's x is moved by a secant iteration on the angle read
-  from the vertices (2 QP runs for the 2 degree job). Other outputs are refused.
+  are not a position: the effector goal is moved along an axis no position target uses (`angle_direction`, `+x` by
+  default; `-x` is tried when `+x` leaves every actuator at its lower bound, as for a tube that curls to -x) and the
+  goals of all the targets are found by a Broyden iteration on the angle / position read from the vertices (a secant
+  for one angle: 2 QP runs for the 2 degree job). This works with any actuator (a pressure, a cable, both) and
+  with angle and position targets together; each angle needs a free axis (at most three targets in all). It needs no
+  second effector point (a pair of points on the tip face fixes the translation as well as the tilt, and a `Rigid3d`
+  effector does not exist in this build: `PositionEffector`, `CableEffector`, `VolumeEffector` and
+  `BarycentricCenterEffector` are the registered ones), so the angle is the scenario's own metric, exactly.
+  Other outputs are refused.
 - **Step.** SOFA is implicit, so the step is 2 ms (`timestep`), not the scenario's 0.1 ms; the body gets the same
   stiffness-proportional damping as the repeated solve (`settle_damping`, default 10 ms) so that it settles.
 - **Pressure actuators.** A pneumatic actuator (`SurfacePressureActuator`) is built on the actuator's `cavity` region
@@ -134,7 +144,16 @@ the step, within the bounds; the run is stepped until forces and outputs have st
   triangles need the opposite winding to softsim's (else the volume shrinks and the pressure clamps at 0), and in SI units the
   QP's matrices are tiny (the pressure's entry is ~4e-12), so qpOASES returns lambda = 0 for every reachable goal and
   bangs between 0 and the bound for an unreachable one. The effector `weight` scales the objective: 1e6 (`qp_weight`) is
-  the default with pressures, 1e5 and 1e7 give the same pressure. Angle targets are refused with a pressure.
+  the default with pressures, 1e5 and 1e7 give the same pressure. Angle targets work with a pressure (below).
+- **Mixed actuators.** Pressures and cables can be solved together (one `QPInverseProblemSolver`, each actuator with
+  its own impulse bounds), with `qp_weight` 1e6 as soon as one is a pressure (it does not hurt the cable's scaling).
+  `scenarios/inflation/bending_cable.yaml` is the bending tube with a cable in its thin +x wall: the pressure curls
+  the tip to -x and lengthens the tube, the cable pulls it to +x and shortens it, so tip x and z together fix both.
+- **Stroke-controlled cables.** A cable with `control: stroke` (tension `k (L - L0 + s)`) is solved as a tension and the
+  stroke read back as `s = T / k - (L - L0)` from the final vertices; the bounds are strokes (`cable: [0 mm, 3 mm]`)
+  and the QP's tension bounds `k (s_bound + L - L0)` are re-set after each run at the length reached (the length
+  depends on the tension, so the bound is found by a secant: 3 runs when a bound is active; a bound that is
+  not active needs no iteration).
 - **Outcome.** Same statuses as above. A goal beyond the bounds leaves the cable at its bound (`bounded_best`,
   `at_bounds`): no second solve is made once a force is saturated.
 
@@ -150,6 +169,12 @@ the scene):
 | Bending tube (2 mm mesh, 1279 points), tip x = -0.28681 mm (what 4 kPa gives) | 3999.0 Pa (true 4000, 0.03%; tip error 0.09 um), 3 runs, 110 steps of 2 ms, 32 s | 4000.3 Pa, 7 equilibria, 824 steps, 225 s | 7x |
 | PneuNet (1.5 mm mesh, 4936 points), tip z = 5.3077 mm (what 5 kPa gives, 10 ms steps) | 4997.7 Pa (true 5000, 0.05%; tip error 1.5 um), 2 runs, 40 steps, 96 s | not run (the explicit backend needs minutes per equilibrium at this size) | - |
 | Bending tube, tip x = -1 mm with at most 2 kPa | 2000 Pa, tip -0.1231 mm, `bounded_best` | - | - |
+| Bending tube, tilt 0.013947 rad (what 4 kPa gives) | 4000.02 Pa (0.0005%; angle error 9e-8 rad), 4 runs (one on the wrong side, +x), 38 s; 3 runs, 25 s with `angle_direction: -x` | not run (225 s per position target) | - |
+| Tube with a cable in the thin wall, tip x 2.9624 mm and z 39.4169 mm (4 kPa and 0.2 N) | 3983 Pa (0.4%) and 0.19992 N (0.04%), tip errors 0.1 and 0.3 um, 6 runs, 210 steps, 37 s | not run (two actuators, minutes per equilibrium) | - |
+| Same, bend_angle 0.138112 rad and tip z 39.4169 mm | 4004.5 Pa (0.11%) and 0.20003 N (0.01%), 5 runs, 220 steps, 42 s | - | - |
+| Same, cable limited to 0.1 N | cable 0.1 N, `bounded_best` | - | - |
+| Stroke cable (300 N/m), tip x 1.14667 mm (what a 1.5 mm stroke gives, 4 mm mesh) | stroke 1.4997 mm (0.02%), 1 run, 0.5 s; for the angle target 1.4969 mm (0.2%), 2 runs | - | - |
+| Same, stroke limited to 1 mm | stroke 1.0002 mm, tip 0.7693 mm (ordinary backend at a 1 mm stroke: 0.7682 mm), 3 runs, `bounded_best` | - | - |
 
 The tensions agree to 0.6% (angle target; the two stop at residuals of 0.014 and 0.009 of a 0.01 rad scale, i.e. 0.4%
 in angle) and 1.2% (position target; the repeated solve stopped 23 um short of the target, and scaling its tension by
@@ -205,11 +230,18 @@ cables are still explicit follower forces.
   the model faster; it does not make the model more accurate.
 - **Quasi-static.** The forces are the held values at equilibrium; the path and the time to get there depend on the
   step and the damping. The QP is a per-step solution, not a trajectory plan.
-- **The effector.** A position (up to three axes) of one point. An angle needs the secant wrapper (one cable, one
-  target); several angle or mixed targets, tip orientation (a `Rigid3d` effector) and output constraints are not
-  built. Fewer axes than cables is refused (the repeated solve refuses it too).
-- **Scope.** Tension-controlled cables and pressures on one soft body with a `tip` / `top` region; stroke-controlled
-  cables, force actuators, angle targets with a pressure, a pressure and a cable together (untested), rigid bodies,
-  contact, viscoelasticity, prescribed motion and moving mounts are refused or not built.
+- **The effector.** A position (up to three axes) of one point. Angles are reached through that point's goal (the
+  iteration above, a few extra QP runs), not as an orientation constraint of the QP; at most three targets
+  (positions and angles) in all, an angle's direction must be a free axis, and the angle direction is a single sign for
+  all angles. A tilt of an unreachable direction (e.g. `+x` for a tube that only curls to -x) is detected only
+  when the actuators sit at their lower bound. Output constraints are not built. Fewer targets than actuators is
+  refused (the repeated solve refuses it too).
+- **Scope.** Cables (tension- or stroke-controlled, no anchors) and pressures, alone or together, on one soft body with a
+  `tip` / `top` region; force actuators, rigid bodies, contact, viscoelasticity, prescribed motion and moving mounts are
+  refused or not built. A stroke cable's tendon is the scenario's (`stiffness`) and the stroke read back assumes
+  the ordinary backend's model, tension = `k (L - L0 + s)` (an explicit follower force there; the QP has the
+  tension as a constraint force).
 - **One equilibrium.** As above: the QP follows one branch from the rest state; a snapping structure may have others.
-- **Bounds only on the forces.** `maxDispVariation` / displacement limits of `CableActuator` are not exposed.
+- **Bounds on the forces** (tensions, pressures) and, for stroke cables, on the stroke through the iteration above;
+  `maxDispVariation` / `CableActuator`'s own displacement limits are not used (they would model a rigid tendon,
+  not the series spring).

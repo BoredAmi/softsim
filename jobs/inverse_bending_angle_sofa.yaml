@@ -1,0 +1,15 @@
+# Find the pressure that gives the off-axis bending actuator (scenarios/inflation/bending.yaml) a tip tilt, with SOFA's
+# QP inverse solver (docs/control.md "SOFA fast path"): an angle target with a pressure actuator.
+#   softsim inverse jobs/inverse_bending_angle_sofa.yaml
+# The target is the tilt the ordinary SOFA backend reaches at a held 4 kPa (2 ms steps): the QP gives back 4 kPa.
+# The effector goal is moved along -x (the tube curls towards -x) until the angle matches (angle_direction).
+config: ../scenarios/inflation/bending.yaml
+method: sofa-qp
+timestep: 2 ms
+scales: {bend_angle: 0.0005 rad}
+angle_direction: -x
+targets:
+  bend_angle: 0.013947 rad
+actuators:
+  cavity: [0 kPa, 10 kPa]
+tolerance: 0.05

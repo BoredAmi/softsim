@@ -1,5 +1,6 @@
 """SOFA fast path for inverse control (softsim.control.sofa_inverse): SoftRobots.Inverse's QP on coarse meshes."""
 
+import functools
 import time
 from pathlib import Path
 
@@ -157,11 +158,28 @@ def test_pressure_target_beyond_the_bounds_is_the_bounded_solution():
     assert res.outputs["tip_x"] == pytest.approx(-1.23066e-4, abs=3e-6)
 
 
-def test_pressure_angle_target_is_refused():
+@pytest.mark.slow
+def test_pressure_angle_target_round_trip():
+    """An angle target with a pressure: the tip tilt the ordinary backend reaches at a held 4 kPa (0.013947 rad, from
+    the explicit follower pressure) is the target; the effector goal is moved along a free axis (-x: found by the
+    solver, the first +x goal leaves the pressure at 0) until the angle matches, and 4 kPa comes back."""
+    outs = ["bend_angle"]
+    reached = _forward(BENDING, ["simulation.timestep=2ms"], {"cavity": 4000.0}, outs)["bend_angle"]
+    res = solve_inverse_sofa(BENDING, {"bend_angle": reached}, ["cavity"], {"cavity": (0, "10 kPa")},
+                             timestep="2 ms", scales={"bend_angle": "0.0005 rad"})
+    assert res.status == "converged" and res.unsettled == 0
+    assert res.values["cavity"] == pytest.approx(4000.0, rel=0.01)
+    assert res.outputs["bend_angle"] == pytest.approx(reached, abs=1e-5)
+
+
+def test_angle_direction_must_be_a_free_axis():
     from softsim.errors import ConfigError
 
-    with pytest.raises(ConfigError, match="angle targets are not supported with pressure"):
-        solve_inverse_sofa(BENDING, {"bend_angle": "1 deg"}, ["cavity"], {"cavity": (0, "10 kPa")})
+    with pytest.raises(ConfigError, match="already a position target"):
+        solve_inverse_sofa(CANTILEVER, {"tip_x": "1 mm", "bend_angle": "1 deg"}, ["cable"], {"cable": (0, 0.7)},
+                           angle_direction="+x")
+    with pytest.raises(ConfigError, match="angle_direction must be"):
+        solve_inverse_sofa(CANTILEVER, {"bend_angle": "1 deg"}, ["cable"], {"cable": (0, 0.7)}, angle_direction="up")
 
 
 @pytest.mark.slow
@@ -169,3 +187,89 @@ def test_pressure_job_file():
     """jobs/inverse_bending_sofa.yaml: the target is the tip the explicit backend reaches at 4 kPa."""
     out = run_job(ROOT / "jobs" / "inverse_bending_sofa.yaml")
     assert out["status"] == "converged" and out["values"]["cavity"] == pytest.approx(4000.0, rel=0.01)
+
+
+BENDING_CABLE = ROOT / "scenarios" / "inflation" / "bending_cable.yaml"
+MIXED = {"cavity": 4000.0, "cable": 0.2}
+MIXED_BOUNDS = {"cavity": (0, "10 kPa"), "cable": (0, "0.5 N")}
+
+
+@functools.lru_cache(maxsize=1)
+def _mixed_forward():
+    """The ordinary SOFA backend with 4 kPa and 0.2 N held together on the tube with a cable in its thin wall."""
+    return _forward(BENDING_CABLE, ["simulation.timestep=2ms"], MIXED, ["tip_x", "tip_z", "bend_angle"])
+
+
+@pytest.mark.slow
+def test_pressure_and_cable_together_recover_both():
+    """Two actuators of different type (a pressure and a cable bending the tube in opposite directions): tip x and z
+    that the forward backend reaches at 4 kPa + 0.2 N are the targets of one QP; both come back (measured 3983 Pa,
+    0.4%, and 0.19992 N, 0.04%; asserted 1%)."""
+    ref = _mixed_forward()
+    assert ref["tip_x"] > 2e-3                      # the cable wins in x: the two really pull against each other
+    res = solve_inverse_sofa(BENDING_CABLE, {"tip_x": ref["tip_x"], "tip_z": ref["tip_z"]}, list(MIXED_BOUNDS),
+                             MIXED_BOUNDS, timestep="2 ms", scales={"tip_x": "0.01 mm", "tip_z": "0.01 mm"})
+    assert res.status == "converged" and res.unsettled == 0
+    assert res.values["cavity"] == pytest.approx(4000.0, rel=0.01)
+    assert res.values["cable"] == pytest.approx(0.2, rel=0.01)
+
+
+@pytest.mark.slow
+def test_angle_and_position_targets_with_mixed_actuators():
+    """An angle and a position together, with a pressure and a cable: bend_angle and tip_z of the same forward run.
+    The angle's goal is on x (free), tip_z's on z; a Broyden iteration on both goals (measured 4004.5 Pa, 0.11%, and
+    0.20003 N, 0.01%, 5 runs)."""
+    ref = _mixed_forward()
+    res = solve_inverse_sofa(BENDING_CABLE, {"bend_angle": ref["bend_angle"], "tip_z": ref["tip_z"]},
+                             list(MIXED_BOUNDS), MIXED_BOUNDS, timestep="2 ms",
+                             scales={"bend_angle": "0.0005 rad", "tip_z": "0.01 mm"})
+    assert res.status == "converged" and res.unsettled == 0
+    assert res.values["cavity"] == pytest.approx(4000.0, rel=0.01)
+    assert res.values["cable"] == pytest.approx(0.2, rel=0.01)
+
+
+@pytest.mark.slow
+def test_mixed_targets_beyond_the_bounds_are_flagged():
+    """The same two targets with the cable limited to 0.1 N cannot be reached: the cable is at its bound."""
+    ref = _mixed_forward()
+    res = solve_inverse_sofa(BENDING_CABLE, {"tip_x": ref["tip_x"], "tip_z": ref["tip_z"]}, list(MIXED_BOUNDS),
+                             {"cavity": (0, "10 kPa"), "cable": (0, "0.1 N")}, timestep="2 ms",
+                             scales={"tip_x": "0.01 mm", "tip_z": "0.01 mm"}, max_corrections=3)
+    assert res.status == "bounded_best" and "cable" in res.at_bounds
+    assert res.values["cable"] == pytest.approx(0.1, rel=1e-3)
+
+
+STROKE = ROOT / "scenarios" / "actuation" / "cable_cantilever_stroke.yaml"
+
+
+def test_stroke_controlled_cable_round_trip():
+    """A stroke-controlled cable (300 N/m tendon, tension = k (length - rest + stroke)) is solved as a tension and
+    the stroke read back as T / k - (L - L0): the tip the ordinary backend reaches at a 1.5 mm stroke is the target,
+    and 1.5 mm comes back (measured 1.4997 mm, 0.02%; asserted 1%), for a position and for an angle target."""
+    ref = _forward(STROKE, COARSE, {"cable": 1.5e-3}, ["tip_x", "bend_angle"])
+    pos = solve_inverse_sofa(STROKE, {"tip_x": ref["tip_x"]}, ["cable"], {"cable": (0, "3 mm")}, overrides=COARSE)
+    ang = solve_inverse_sofa(STROKE, {"bend_angle": ref["bend_angle"]}, ["cable"], {"cable": (0, "3 mm")},
+                             overrides=COARSE)
+    for res in (pos, ang):
+        assert res.status == "converged" and res.unsettled == 0
+        assert res.values["cable"] == pytest.approx(1.5e-3, rel=0.01)
+
+
+def test_stroke_bounds_are_on_the_stroke_not_the_tension():
+    """A 1 mm stroke limit on a target that needs 1.5 mm: the tension bound k (1 mm + stretch) depends on the length
+    the cable has at the bound, so the bound is iterated (a secant, 3 runs). The stroke ends at 1 mm (measured
+    1.0002 mm) and the tip is the forward backend's at a 1 mm stroke (0.76817 mm; the QP's 0.76928 mm)."""
+    ref = _forward(STROKE, COARSE, {"cable": 1.5e-3}, ["tip_x"])
+    res = solve_inverse_sofa(STROKE, {"tip_x": ref["tip_x"]}, ["cable"], {"cable": (0, "1 mm")}, overrides=COARSE)
+    assert res.status == "bounded_best" and res.at_bounds == ["cable"]
+    assert res.values["cable"] == pytest.approx(1e-3, rel=0.01)
+    held = _forward(STROKE, COARSE, {"cable": 1.0e-3}, ["tip_x"])["tip_x"]
+    assert res.outputs["tip_x"] == pytest.approx(held, abs=3e-5)
+
+
+@pytest.mark.slow
+def test_mixed_job_file():
+    out = run_job(ROOT / "jobs" / "inverse_bending_cable_sofa.yaml")
+    assert out["status"] == "converged"
+    assert out["values"]["cavity"] == pytest.approx(4000.0, rel=0.01)
+    assert out["values"]["cable"] == pytest.approx(0.2, rel=0.01)

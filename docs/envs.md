@@ -2,14 +2,14 @@
 
 A reach task on any actuation scene as a [Gymnasium](https://gymnasium.farama.org) environment: the action is the
 actuator values, the observation a list of scenario metrics, the reward a smooth distance to a target. Code:
-`softsim/envs/`; tests: `tests/test_envs.py`. The extra is optional: `pip install "softsim[rl]"` (gymnasium >= 0.29).
+`softsim/envs/`; tests: `tests/test_envs.py`. The extra is optional: `pip install "softsim[rl]"` (gymnasium >= 0.29, scipy).
 Without it `import softsim.envs` works and `softsim.envs.make_env` raises an ImportError that says what to install.
 
 ```python
 import gymnasium as gym
 import softsim.envs
 
-softsim.envs.register_envs()              # the ids below; an installed softsim also registers them on `import gymnasium`
+softsim.envs.register_envs()              # registers the ids below (Gymnasium 0.x also does it on `import gymnasium`; 1.x does not)
 
 env = gym.make("softsim/CableBeamReach-v0", randomize=True)
 obs, info = env.reset(seed=0)             # redraws the material and the target

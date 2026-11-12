@@ -17,5 +17,6 @@ setup(
     description="Generic ROS 2 node running any softsim scenario.",
     license="Apache-2.0",
     tests_require=["pytest"],
-    entry_points={"console_scripts": ["softsim_node = softsim_ros.node:main"]},
+    entry_points={"console_scripts": ["softsim_node = softsim_ros.node:main",
+                                      "controller_node = softsim_ros.controller_node:main"]},
 )

@@ -26,6 +26,8 @@ from softsim.materials.sampling import sample  # noqa: E402
 from softsim.runner import Simulation  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+# the repository's scenarios/envs in a source checkout, the packaged copy (softsim/examples/envs) in a pip install
+ENV_CONFIG_DIR = ROOT / "scenarios" / "envs" if (ROOT / "scenarios" / "envs").is_dir() else Path(__file__).resolve().parents[1] / "examples" / "envs"
 _DEFAULT_SCALES = {"length": 1e-3, "angle": 1e-2, "force": 1e-3, "pressure": 100.0}
 
 
@@ -269,7 +271,7 @@ def register_envs() -> None:
     for env_id, fname in ENV_IDS.items():
         if env_id not in gym.registry:
             gym.register(id=env_id, entry_point="softsim.envs.env:SoftsimEnv",
-                         kwargs={"config": str(ROOT / "scenarios" / "envs" / fname)})
+                         kwargs={"config": str(ENV_CONFIG_DIR / fname)})
     if GRIPPER_ID not in gym.registry:
         gym.register(id=GRIPPER_ID, entry_point="softsim.envs.gripper:ReducedGripperLiftEnv")
 

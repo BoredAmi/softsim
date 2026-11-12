@@ -1,0 +1,31 @@
+# The off-axis bending tube (bending.yaml) with a cable in its thin +x wall as well: a pressure and a cable on one
+# body, which bend it in opposite directions (the pressure curls the tip towards -x and lengthens it, the cable pulls
+# it towards +x and shortens it). The test case for several actuators of mixed type in the SOFA inverse fast path
+# (docs/control.md): tip x and z together fix the pressure and the tension.
+#   softsim inverse jobs/inverse_bending_cable_sofa.yaml
+scenario: inflation
+description: Bending tube with a pressure cavity and a cable in the thin wall (mixed actuators).
+backend: mujoco
+
+simulation:
+  timestep: 0.1 ms
+  duration: 400 ms
+  output_rate: 1 kHz
+  iterations: 300
+
+body:
+  name: finger
+  geometry: {type: closed_tube, outer_diameter: 16 mm, inner_diameter: 8 mm, height: 40 mm, cap: 3 mm,
+             cavity_offset: [2 mm, 0 mm]}
+  material: ecoflex_00_30
+  mesh: {size: 2 mm, method: gmsh}
+  fixed: [base]
+
+actuators:
+  - name: cavity
+    region: cavity
+    schedule: [[0 ms, 0 kPa], [300 ms, 4 kPa], [400 ms, 4 kPa]]
+  - name: cable
+    type: cable
+    path: [[7 mm, 0 mm, 0 mm], [7 mm, 0 mm, 35 mm]]
+    schedule: [[0 ms, 0 N], [300 ms, 0.2 N], [400 ms, 0.2 N]]

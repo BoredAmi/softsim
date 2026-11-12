@@ -476,6 +476,22 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _cmd_examples(args: argparse.Namespace) -> int:
+    from softsim.examples import copy_examples, example_files
+
+    if args.action == "list":
+        for rel in example_files():
+            print(rel.as_posix())
+        return 0
+    try:
+        written = copy_examples(args.dest, overwrite=args.overwrite)
+    except FileExistsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"copied {len(written)} example configs to {args.dest}; try: softsim run {args.dest}/drop_test/cases/w020.yaml")
+    return 0
+
+
 def _version() -> str:
     from importlib.metadata import PackageNotFoundError, version
 
@@ -586,6 +602,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--density", help="override the dataset's density, e.g. '1.07 g/cm^3'")
     p.add_argument("--out", help="output directory (default runs/material_fits/<dataset>/<material>)")
     p.set_defaults(func=_cmd_fit_material)
+
+    p = sub.add_parser("examples", help="list the example configs shipped with the package, or copy them to a directory")
+    p.add_argument("action", choices=["list", "copy"])
+    p.add_argument("dest", nargs="?", default="softsim_examples", help="target directory for copy (default: softsim_examples)")
+    p.add_argument("--overwrite", action="store_true", help="replace files that already exist")
+    p.set_defaults(func=_cmd_examples)
 
     p = sub.add_parser("scenarios", help="list registered scenarios and their actions")
     p.set_defaults(func=_cmd_scenarios)

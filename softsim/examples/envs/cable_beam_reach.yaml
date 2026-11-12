@@ -1,0 +1,27 @@
+# Gymnasium env softsim/CableBeamReach-v0: bend the cable-driven cantilever (scenarios/actuation/cable_cantilever.yaml)
+# to a target tip angle with one action, the cable tension. Coarse 4 mm mesh, 1 ms physics step, 20 ms per action,
+# Rayleigh damping so it settles in ~0.1 s (equilibrium is unchanged). MuJoCo's tip angle at 0.7 N is 0.089 rad
+# (the Euler-Bernoulli 0.28 rad is not reached on this mesh: linear tets lock, docs/envs.md), so targets stay below that.
+# Randomisation is off by default (gym.make(..., randomize=True) switches it on): E +-20 % around the card.
+scenario: ../actuation/cable_cantilever.yaml
+backend: mujoco
+overrides:
+  - body.mesh.size=4mm
+  - simulation.timestep=1ms
+  - "body.material.damping={model: rayleigh, beta: 0.01}"
+actuators:
+  cable: [0 N, 0.7 N]
+control_period: 20 ms
+observation: [bend_angle, tip_x, cable_length]
+include_actuators: true
+include_target: true
+task:
+  metrics: [bend_angle]
+  target_range: [[0.02 rad, 0.07 rad]]
+  tolerance: [0.004 rad]
+  scale: [0.01 rad]
+max_steps: 30
+randomize:
+  enabled: false
+  ranges:
+    elastic.youngs_modulus: {rel: 0.2}
