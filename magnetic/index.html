@@ -1,0 +1,2349 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../drop/">
+      
+      
+        <link rel="next" href="../benchmarks/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Magnetic (MRE) - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#magnetic-soft-materials-mre" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Magnetic (MRE)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../materials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#using-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-hard-magnetic-gripper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A hard-magnetic gripper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#against-bernat-et-als-mre-gripper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Against Bernat et al.'s MRE gripper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../experiments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#using-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-hard-magnetic-gripper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A hard-magnetic gripper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#against-bernat-et-als-mre-gripper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Against Bernat et al.'s MRE gripper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="magnetic-soft-materials-mre">Magnetic soft materials (MRE)<a class="headerlink" href="#magnetic-soft-materials-mre" title="Permanent link">&para;</a></h1>
+<p>softsim models a <strong>soft-magnetic elastomer</strong>: silicone filled with iron powder, as in magnetorheological elastomer (MRE)
+grippers. The iron has no magnetisation of its own. The applied field magnetises it, a strip turns to lie along the field,
+and in a field gradient it is pulled towards the stronger field. The reference solver (<code>backend: fem</code>) runs it; MuJoCo,
+SOFA and the rod backend refuse it rather than simulate a passive body.</p>
+<h2 id="using-it">Using it<a class="headerlink" href="#using-it" title="Permanent link">&para;</a></h2>
+<p>A material card and a field, in any scenario config:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">material</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2000 kg/m^3</span>
+<span class="w">    </span><span class="nt">elastic</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">magneto_active</span>
+<span class="w">      </span><span class="nt">matrix</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="nv">neo_hookean</span><span class="p p-Indicator">,</span><span class="nt"> youngs_modulus</span><span class="p">:</span><span class="w"> </span><span class="nv">810 kPa</span><span class="p p-Indicator">,</span><span class="nt"> poisson_ratio</span><span class="p">:</span><span class="w"> </span><span class="nv">0.49</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">particle_volume_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.123</span><span class="w">   </span><span class="c1"># or susceptibility: 0.45</span>
+<span class="w">      </span><span class="nt">along</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]</span><span class="w">                  </span><span class="c1"># the strip's length, body frame</span>
+<span class="w">      </span><span class="nt">normal</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">]</span><span class="w">                 </span><span class="c1"># its thickness</span>
+<span class="w">      </span><span class="c1"># demagnetization: block          # default; or [N_along, N_normal, N_across]</span>
+
+<span class="nt">magnetic_field</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">uniform</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.5 s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">20 kA/m</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]]]</span><span class="w">   </span><span class="c1"># H, linear between waypoints; or a constant [Hx, Hy, Hz]</span>
+<span class="w">  </span><span class="nt">magnets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring</span>
+<span class="w">      </span><span class="nt">remanence</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.23 T</span>
+<span class="w">      </span><span class="nt">diameter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20 mm</span>
+<span class="w">      </span><span class="nt">hole</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.2 mm</span>
+<span class="w">      </span><span class="nt">thickness</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5 mm</span>
+<span class="w">      </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-12 mm</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">axis</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.2 s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">12 mm</span><span class="p p-Indicator">]]]</span><span class="w">    </span><span class="c1"># optional, minimum jerk</span>
+<span class="w">      </span><span class="nt">solid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                                          </span><span class="c1"># optional: the body can touch it</span>
+<span class="w">      </span><span class="nt">edge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2 mm</span><span class="w">                                         </span><span class="c1"># optional: its chamfer (the default)</span>
+</code></pre></div>
+<p>A <code>solid</code> magnet is also a rigid cylinder of the reference (its outer one), fixed or moving along its path, that the body
+touches with its own friction. <code>edge</code> is the magnet's chamfer: it rounds the contact surface and softens the field at the
+rims of the end faces (below).</p>
+<p><code>scenarios/magnetic/mre_strip_buckling.yaml</code> is a complete example (<code>softsim run scenarios/magnetic/mre_strip_buckling.yaml</code>,
+12 s).</p>
+<h2 id="the-model">The model<a class="headerlink" href="#the-model" title="Permanent link">&para;</a></h2>
+<p>Energy per unit reference volume (<code>softsim/fem/magnetic.py</code>):</p>
+<div class="highlight"><pre><span></span><code>w = -mu0 / 2 (chi_a (a.H)^2 + chi_n (n.H)^2 + chi_b (H.H - (a.H)^2 - (n.H)^2))
+</code></pre></div>
+<ul>
+<li><strong>Axes follow the deformation.</strong> The strip's axis is <code>a = F a0</code> and its normal is <code>n = F^-T n0</code>, both normalised, so the
+  energy turns with the material. A shear shows the difference between F and F^-T.</li>
+<li><strong>Composite susceptibility.</strong> <code>chi</code> is given, or comes from the iron's volume fraction by Maxwell Garnett's rule,
+  <code>3 phi / (1 - phi)</code>.</li>
+<li><strong>Per-axis susceptibility.</strong> Each axis takes <code>chi / (1 + N chi)</code>, where <code>N</code> is the demagnetising factor of the
+  rectangular block bounding the body at rest. The factor is exact for a block (Aharoni 1998).</li>
+<li><strong>Field.</strong> <code>H</code> is the applied field at the deformed position: a uniform part plus permanent magnets.</li>
+<li>Each magnet is an axially magnetised cylinder, magnetised uniformly at <code>Br / mu0</code>.</li>
+<li>Its field is exact outside it (Derby and Olbert's closed form, with Bulirsch's elliptic integral run for a fixed
+    number of steps so JAX can differentiate it).</li>
+<li>A ring is a disc minus its hole.</li>
+<li>Inside a magnet, H is <code>B / mu0 - M</code>. Nothing should be there, but contact holds nodes out, not quadrature points.
+    Taking <code>B / mu0</code> there made a false well just inside the rim, twice as deep as the real field, and it pulled a
+    strip through the magnet's skin.</li>
+<li><strong>Edges.</strong> A sharp-edged magnet's field is infinite on the rims of its end faces (logarithmically). A strip drawn
+    onto the magnet slid into that corner, and Newton failed. Real magnets are chamfered, and <code>edge</code> (0.2 mm, the small
+    end of a chamfer) gives the field one: the elliptic modulus <code>kc</code>, which is zero only on those rims, becomes
+    <code>sqrt(kc^2 + (edge / 2a)^2)</code>. The field is then finite there, 1.7% off 1 mm away and 0.6% at 2 mm. On Bernat's
+    rolling strip it lowers the torque by 3.3% (by 1.0% for 0.1 mm). The torque table below uses the exact, sharp field.</li>
+<li><strong>Derivatives.</strong> Newton's gradient and Hessian come from JAX. At each quadrature point they use the field's
+  second-order expansion about where the point is now. Its value and first two derivatives there are the field's, so
+  both are exact. Differentiating the magnets' elliptic integrals twice in reverse instead took 4 MB an element: 41 GB
+  for a 10 800-element finger. The expansion takes 1.0 s a Hessian, at 1.2 GB.</li>
+</ul>
+<p><strong>What it leaves out:</strong></p>
+<ul>
+<li><strong>The field is applied, not solved for.</strong> The strip's own field is not computed: the model is first order in <code>chi</code>,
+  with only the demagnetising factors correcting for shape. The factors stay at their rest values as the body bends.</li>
+<li><strong>Interactions.</strong> Bodies do not magnetise one another, and magnets feel no force back.</li>
+<li><strong>Hard-magnetic particles</strong> (NdFeB, magnetised before use): the card's <code>remanent_magnetization</code> M_r [A/m, body
+  frame] adds <code>w_r = -mu0 (F M_r) . H</code> per unit reference volume (Zhao, Kim, Yuk and Zhao, J. Mech. Phys. Solids 124,
+  2019), the magnetised material carried by the deformation; with <code>susceptibility: 0</code> the composite is purely hard.
+  Checks: a turned body's energy <code>-mu0 V M_r H cos t</code>, a stretched one's <code>-mu0 V s M_r H</code> (the deformation gradient,
+  not its rotation), and a cantilever magnetised along its length in a field across it, whose tip deflects by
+  Euler-Bernoulli's <code>c L^3 / (3 E I)</code>, <code>c = mu0 M_r H A</code> (+1.1% at a 1 mm mesh, converging at second order).</li>
+<li><strong>Magnetic zones.</strong> <code>body.zones</code> may carry their own <code>magneto_active</code> card, or none: the body's magnetic energy is the
+  sum over its elements, each with its own material's susceptibility, remanence, axes and saturation (a zone of a
+  non-magnetic material takes up no field; a non-magnetic body can have magnetic zones). The single-material path is
+  unchanged. Two arms of one body magnetised in opposite directions are two zones whose cards differ in the sign of
+  <code>remanent_magnetization</code> (<code>scenarios/magnetic/hard_magnetic_gripper.yaml</code>). A zone with induced magnetisation
+  (<code>susceptibility &gt; 0</code>) must give its demagnetising factors, <code>demagnetization: [N_along, N_normal, N_across]</code>: <code>block</code>
+  (the body's own bounding block) is refused in a body with zones, because a zone's field is shaped by its neighbours,
+  not by its own block (decision 2026-11-11). A purely hard zone needs no factors. Checks (<code>tests/test_magnetic.py</code>,
+  <code>tests/test_scenario_magnetic.py</code>): a bar of two zones with remanence <code>+M</code> and <code>-M</code> along its length has zero energy
+  in a uniform field along it, at rest, turned and stretched (below 1e-12 of <code>mu0 V M H</code>); with the second zone
+  non-magnetic, exactly half the whole bar's; a turned body with one hard and one soft zone has the sum of the two
+  closed forms (1e-9); the assembled gradient and Hessian equal the single-magnet body's when all zones share a card
+  (1e-12) and agree with central differences of the energy and the gradient when they differ (1e-6); each zone's card
+  reaches the solver over exactly its own elements.</li>
+<li><strong>Saturation is a tanh law, not a measured curve.</strong> With the card's <code>saturation_magnetization</code> M_s set (0 keeps the linear
+  law), the energy is <code>-mu0 M_s^2 / chi_r ln cosh(sqrt(2 chi_r q) / M_s)</code>, with <code>-mu0 q</code> the linear energy and <code>chi_r</code> the
+  largest axis susceptibility. Along the easiest axis that is exactly <code>M = M_s tanh(chi H / M_s)</code>; the other axes saturate
+  with it, an approximation. Checks (<code>tests/test_magnetic.py</code>): the tanh along the easy axis, the linear law at small
+  fields, <code>|M| &lt;= M_s</code> in any direction, a bar's energy from below to well above saturation, and a saturated piece pulled
+  up a dipole's gradient by <code>mu0 V M dH/dz</code> (3.0 times weaker than the linear law at <code>chi H / M_s</code> = 3). A measured B-H
+  curve would replace the tanh.</li>
+</ul>
+<h2 id="a-hard-magnetic-gripper">A hard-magnetic gripper<a class="headerlink" href="#a-hard-magnetic-gripper" title="Permanent link">&para;</a></h2>
+<p><code>scenarios/magnetic/hard_magnetic_gripper.yaml</code> is one soft body, a U: a 28 x 4 x 4 mm palm bar clamped at its foot and
+two 4 x 4 x 40 mm arms on its ends, 20 mm apart (a STEP from <code>scenarios/magnetic/cad/make_u_gripper.py</code>, loaded with
+<code>mesh_file</code>). The arms are zones of the same 200 kPa elastomer with remanence 100 kA/m along the arm, <code>+z</code> in the left
+one and <code>-z</code> in the right; the palm is not magnetic. A uniform field along <code>+x</code> turns each moment towards it, so the
+arms close; reversed, they open. Run it with <code>softsim run scenarios/magnetic/hard_magnetic_gripper.yaml</code> (a 1.5 mm
+mesh, 2 s, 2 min on 2 threads). Its field ramps to 100 A/m, a small angle for the closed form below.</p>
+<p>Measured against the cantilever under a uniform distributed couple <code>c = mu0 M_r H A</code>, whose tip moves
+<code>c L^3 / (3 E I)</code> (L = 40 mm, 1.005 mm at 100 A/m); static solutions at 100 A/m, both arms:</p>
+<table>
+<thead>
+<tr>
+<th>Mesh</th>
+<th>Arm bending <code>u'''</code> against <code>c / EI</code></th>
+<th>Tip against <code>c L^3 / 3EI</code></th>
+<th>Root slope times L, of that</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2 mm (2.6k nodes)</td>
+<td>+7% (left), +10% (right)</td>
+<td>1.24, 1.26</td>
+<td></td>
+</tr>
+<tr>
+<td>1.5 mm</td>
+<td>+3.4%</td>
+<td>1.198</td>
+<td>0.162</td>
+</tr>
+<tr>
+<td>1 mm (17.5k nodes)</td>
+<td>+1.4%</td>
+<td>1.176</td>
+<td></td>
+</tr>
+<tr>
+<td>0.75 mm (35.6k nodes)</td>
+<td>+0.5%</td>
+<td>1.168</td>
+<td>0.159</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The arm itself follows the closed form.</strong> <code>u'''</code> is the cubic coefficient of the arm's centre line over 10-44 mm
+  (the part away from the palm), which a distributed couple fixes whatever happens at the root. It converges to the
+  closed form, like the 4 x 4 x 60 mm cantilever (+1.1% at 1 mm).</li>
+<li><strong>The tip does not, and should not.</strong> The arm stands on a palm of its own thickness that bends and shears under the
+  arms' couples; the arm's slope at its root times its 40 mm accounts for 0.16 of the closed form, converged with the
+  mesh, so the tip is 17-18% over a clamped-root cantilever's at 0.75-1 mm. A stiffer palm would shrink that term. The
+  test (<code>test_the_arms_of_a_hard_magnetic_gripper_close_by_the_cantilever_closed_form</code>) therefore checks the tip as
+  the cantilever's plus that root slope times the arm, to 5%, and the arm's own bending to 5% at 1.5 mm.</li>
+<li><strong>Linearity.</strong> The tip changes by under 1% against the closed form between 30 and 300 A/m at 1 mm (3 mm at 300 A/m,
+  7.5% of the arm length).</li>
+<li><strong>Symmetry.</strong> At 1 mm the two arms agree to 0.1%; at 2 mm they differ by 2% (the unstructured mesh is not mirrored).</li>
+</ul>
+<p>No object is gripped yet, and nothing here was run for one. Closing on a light rigid object needs a <code>grasp</code> scenario
+with a rigid body between the arms (<code>scenarios/grasp/box.yaml</code> is the pattern for a box and contact) and the field held
+after the arms touch it. The arms must travel several millimetres, so the closed form above no longer applies and the
+field and the contact steps have to be found by running it: a job for the GPU machine, at 1 mm (17.5k nodes) or finer,
+not for two laptop threads.</p>
+<h2 id="checks">Checks<a class="headerlink" href="#checks" title="Permanent link">&para;</a></h2>
+<p>Every check is against something that does not share the code it checks.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Against</th>
+<th>Result</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Elliptic integral</td>
+<td>Quadrature (scipy), including next to a rim</td>
+<td>1e-9</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Cylinder magnet's field</td>
+<td>400 current loops, Biot-Savart with scipy's elliptic integrals; 0.1 mm past the rim among the points</td>
+<td>1e-7</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>On its axis; far away</td>
+<td>Closed form; a dipole of moment <code>M V</code></td>
+<td>1e-12; (a/r)^2</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Outside the magnet</td>
+<td>div H = 0, curl H = 0 (JAX Jacobian), tilted ring</td>
+<td>1e-9</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Demagnetising factors</td>
+<td>Cube 1/3; the three sum to 1; plate to 1, bar to 1/2 and 0</td>
+<td>1e-12</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Turned and sheared body</td>
+<td><code>E(theta)</code> and <code>E(gamma)</code> by hand</td>
+<td>1e-9</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Pull up a dipole's gradient</td>
+<td><code>-3 mu0 chi V m^2 / 4 pi^2 r^7</code> by hand</td>
+<td>1e-3</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Newton's gradient and Hessian, in a dipole's field and 0.57 mm from a ring magnet</td>
+<td>Central differences of the energy and of the gradient</td>
+<td>1e-6, 1e-5</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Elements in chunks</td>
+<td>All at once</td>
+<td>1e-12</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Through the magnet's skin</td>
+<td>Maxwell's jump conditions: H along the rim and B across both faces continuous, H across a face jumps by M</td>
+<td>1e-5</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Softened edge</td>
+<td>Finite on the rim; within 2% of the sharp field 1 mm away, 0.2% at 5 mm</td>
+<td></td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Bar across a field, to 70% of buckling</td>
+<td>Closed form of <code>E I t'' + K (t + e) = 0</code></td>
+<td>2.2% at 1 mm (11% at 2 mm)</td>
+<td><code>test_magnetic.py</code>, <code>test_scenario_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Strip rolled onto a ring magnet</td>
+<td>Energy per radian of its cross-section (the field is axisymmetric), by quadrature</td>
+<td>0.09% at 0.5 mm</td>
+<td><code>test_magnet_field.py</code></td>
+</tr>
+<tr>
+<td>Config to solver</td>
+<td>The card's per-axis <code>chi</code>; a turned body in a turned field keeps its energy; the field at each step's end; a solid magnet's cylinder, turn and path</td>
+<td>1e-12</td>
+<td><code>test_scenario_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Opposite-remanence zones; one zone non-magnetic</td>
+<td>Zero energy; half the bar's <code>-mu0 V M H cos t</code></td>
+<td>1e-12</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Turned two-zone body</td>
+<td>Sum of each zone's closed form</td>
+<td>1e-9</td>
+<td><code>test_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Hard-magnetic gripper's arms (zones)</td>
+<td>Cantilever under a distributed couple, the arm's <code>u'''</code></td>
+<td>3.4% at 1.5 mm, 1.4% at 1 mm, 0.5% at 0.75 mm</td>
+<td><code>test_scenario_magnetic.py</code></td>
+</tr>
+<tr>
+<td>Solid magnet</td>
+<td>A strip pulled onto its rim lies on it, not in it, with a contact force</td>
+<td>microns</td>
+<td><code>test_scenario_magnetic.py</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Mutations.</strong> <code>python tools/mutate_magnetic.py</code> (about 25 min) breaks the model in 32 plausible ways, one at a time, on
+a copy, and checks that a test fails each time. Before any mutation, it checks that the copy is what gets imported and
+that the unmutated copy passes. The slips it tries include:</p>
+<ul>
+<li>a wrong tensor, a dropped factor or a wrong sign;</li>
+<li>an elliptic integral cut short, or a ring's hole not reversed;</li>
+<li>the field read at rest or at the step's start;</li>
+<li>the Hessian lost, or the field's expansion wrong;</li>
+<li>a solid magnet's size, turn or path wrong.</li>
+</ul>
+<h2 id="against-bernat-et-als-mre-gripper">Against Bernat et al.'s MRE gripper<a class="headerlink" href="#against-bernat-et-als-mre-gripper" title="Permanent link">&para;</a></h2>
+<p>Bernat, Czopek, Superczynska, Gajewski and Marcinkowska (arXiv:2407.13477) built a gripper from 60 x 15 mm MRE strips
+(iron powder, 1 : 1 by weight) that roll onto axially magnetised ring magnets (20/4.2 x 5 mm, Br 1.21-1.25 T).</p>
+<p><strong>Their data.</strong> They computed the rolling torque in ANSYS (Fig. 3b) and measured the finger's force (0.70 ± 0.02 N,
+Fig. 11). <code>tools/digitise_svg_plot.py</code> reads both figures out of the paper's vector files exactly: marker positions,
+with axes calibrated on the plots' own ticks, so no reading by eye. The result is in
+<code>datasets/bernat2024_mre_gripper.yaml</code>.</p>
+<p><strong>What we compute.</strong> <code>tools/mre_rolling_torque.py</code> wraps a meshed strip round the magnet by a prescribed map and takes
+the torque as the slope of the solver's own magnetic energy. The susceptibility is not in the paper. Ours comes from the
+recipe alone: 12-14% iron by volume gives <code>chi</code> = 0.41-0.47.</p>
+<p><img alt="Rolling torque against angle: softsim for 2, 3 and 4 mm strips beside Bernat et al.'s ANSYS" src="../media/mre_rolling_torque.png" /></p>
+<p><em>Bands: <code>chi</code> 0.41-0.47 from the recipe. Dotted: the angle at which a strip of that thickness is fully rolled.
+<code>python tools/mre_rolling_torque.py --plot docs/media/mre_rolling_torque.png</code>, about 1 min on a GPU.</em></p>
+<table>
+<thead>
+<tr>
+<th>Strip</th>
+<th>Torque, chi 0.41</th>
+<th>Torque, chi 0.47</th>
+<th>Ratio to ANSYS (5.15 mN m)</th>
+<th>chi matching ANSYS</th>
+<th>Fully rolled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2 mm</td>
+<td>3.01 mN m</td>
+<td>3.41 mN m</td>
+<td>0.58-0.66</td>
+<td>0.79</td>
+<td>313°</td>
+</tr>
+<tr>
+<td>3 mm</td>
+<td>3.59 mN m</td>
+<td>4.06 mN m</td>
+<td>0.70-0.79</td>
+<td>0.63</td>
+<td>299°</td>
+</tr>
+<tr>
+<td>4 mm</td>
+<td>3.98 mN m</td>
+<td>4.50 mN m</td>
+<td>0.77-0.87</td>
+<td>0.56</td>
+<td>286°</td>
+</tr>
+</tbody>
+</table>
+<p>At half the element size the torques move by 0.3% (<code>--size 0.5e-3</code>).</p>
+<ul>
+<li><strong>Shape.</strong> The torque is flat while the strip rolls on, as in ANSYS. It falls to zero once the whole strip is on the
+  rim.</li>
+<li><strong>Thickness.</strong> The ANSYS curve reaches zero at 308.9°. A 60 mm strip is fully rolled at that angle if its mid-surface
+  radius is 11.1 mm, which means a strip about 2.3 mm thick. The paper's text does not say which thickness its
+  simulation used (it gives 2-4 mm). Our 2 mm curve also falls the way ANSYS's does. This is an inference from geometry,
+  not a measurement.</li>
+<li><strong>Size.</strong> For a 2 mm strip, the recipe's <code>chi</code> gives 58-66% of the ANSYS torque. ANSYS's own material matches a
+  <code>chi</code> of 0.79, a relative permeability of 1.8. That is above the dilute Maxwell Garnett estimate, and below the
+  "about 2-5" the paper quotes for MRE in general. Two things could explain part of the gap: the strip's own field
+  beyond its demagnetising factors (which ANSYS solves for and we do not), and whatever B-H curve ANSYS used. Neither is
+  known, so the gap is reported, not fitted away.</li>
+</ul>
+<p><strong>The force is not checked yet.</strong> The 0.7 N was read with the finger pressed on a gauge, at a contact point the paper
+does not give.</p>
+<ul>
+<li><strong>A free end peeled along the rim's tangent.</strong> Energy balance gives <code>F = (T - E I / 2 rho) / rho</code>, with
+  <code>rho = R + t / 2</code>: the pull does <code>F rho</code> per angle unrolled, the strip gives back the rolling torque <code>T</code> and
+  releases its bending energy <code>E I / 2 rho</code> (0.37 mN m here). For the 15 x 2 mm strip that is 0.24-0.28 N on our
+  torque and 0.44 N on ANSYS's.</li>
+<li><strong>Measured.</strong> The plateau is higher: 0.66 N for RTV, 0.76-0.83 N for DS and MS. So the gauge must act at a shorter
+  lever, about 7 mm from the magnet's axis on ANSYS's torque ((5.15 - 0.37) mN m / 0.70 N).</li>
+<li><strong>The clamped finger cannot peel this way.</strong> <code>tools/mre_tangent_pull.py</code> wraps a strip clamped at its root half-way
+  round the magnet and pulls its tip along the rim's tangent. It has to be 4 mm wide, narrower than the magnet; see
+  below.</li>
+<li>The pull does not level off at the 0.119 N energy balance gives that strip. It rises from 0.064 N held to
+    0.63 N at 1 mm and 1.9 N at 6.2 mm.</li>
+<li>With the root clamped, the wrap lies between two tangent points that this pull leaves in place, so nothing
+    unrolls.</li>
+<li>A clamped finger peels only when the push lets its free end swing round. Its force is therefore set by where and
+    which way it is pushed: the missing contact point again.</li>
+</ul>
+<p><img alt="A clamped MRE strip's tip pulled along the rim's tangent: the force keeps rising" src="../media/mre_tangent_pull.png" /></p>
+<p><em><code>python tools/mre_tangent_pull.py</code> (about 25 min on a GPU), then
+<code>python tools/mre_tangent_pull.py --plot runs/mre/peel_4mm_clamped.csv docs/media/mre_tangent_pull.png</code>.</em></p>
+<p><strong>What did not run.</strong></p>
+<ul>
+<li><strong>Bernat's 15 mm strip.</strong> It overhangs the 5 mm magnet by 5 mm a side, and the magnet's poles pull those flaps in at
+  metres per second. A plate estimate gives about 2 mm of flap deflection under that pull. Each step took minutes,
+  and Newton failed at 1.4 ms.</li>
+<li><strong>A free, frictionless strip held only by its tip.</strong> The magnet slid it sideways towards a rim edge, and Newton
+  failed.</li>
+<li><strong>A strip released from a gap.</strong> It hits the magnet at metres per second within half a millisecond (about
+  1e4 m/s²), and Newton fails at the impact even with 0.125 ms steps. The real finger does not snap shut from a gap:
+  it already lies on its magnet and rolls on or off as the magnet moves.</li>
+</ul>
+<p><strong>Simulating the closed finger against a gauge needs:</strong></p>
+<ul>
+<li>the gauge's contact point and direction;</li>
+<li>the strip's thickness profile;</li>
+<li>the magnets' position in the closed state;</li>
+<li>if possible, a B-H curve of the composite (saturation would also tame the flaps).</li>
+</ul>
+<h2 id="limits">Limits<a class="headerlink" href="#limits" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Reduced.</strong> The strip's own field is not solved; demagnetising factors from the body's rest block. Saturation is an
+  isotropic tanh law, off by default (<code>saturation_magnetization: 0</code>); no card has a measured value yet.</li>
+<li><strong>Hard-magnetic particles: checked, not yet validated.</strong> <code>remanent_magnetization</code> [A/m, body frame] adds Zhao et al.'s
+  (2019) energy <code>-mu0 (F M_r) . H</code>; checked against a turned and a stretched body's energy and a cantilever's tip
+  deflection (<code>tests/test_magnetic.py</code>), not yet against a measured hard-magnetic robot.</li>
+<li><strong>One magnetic body.</strong> Several magnetic zones of it are allowed (above), but no field on a moving or rotating mount:
+  move the magnets along their <code>path</code> instead. A zone's induced magnetisation needs explicit demagnetising factors.</li>
+<li><strong>Solid magnets are full cylinders.</strong> A ring's contact solid is its outer disc, so nothing enters the hole; the
+  contact rounds its edges by the magnet's <code>edge</code>, as its field does.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

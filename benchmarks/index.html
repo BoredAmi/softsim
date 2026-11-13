@@ -1,0 +1,2333 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../magnetic/">
+      
+      
+        <link rel="next" href="../validation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Benchmarks - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#benchmarks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Benchmarks
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../materials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../magnetic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../experiments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full tier
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="benchmarks">Benchmarks<a class="headerlink" href="#benchmarks" title="Permanent link">&para;</a></h1>
+<p>Every validated case on every backend against its truth (an analytic solution or a measurement),
+generated by <code>softsim bench</code>. The tolerance is the error bar softsim states for that backend on that
+case, so <em>pass</em> means <em>within the documented error bar</em>, not <em>exact</em>: MuJoCo and SOFA use linear
+tetrahedra, which lock in bending (<a href="../actuation/">actuation.md</a>); the <code>fem</code> reference is locking-free.</p>
+<p>Regenerate: <code>softsim bench --tier quick</code> (minutes) or <code>--tier full</code> (hours; GPU machine), then
+<code>softsim bench --report-only</code>. A row marked <em>stale</em> shows a result from an older config or older code: re-run it.</p>
+<h2 id="quick-tier">Quick tier<a class="headerlink" href="#quick-tier" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Quantity</th>
+<th>Truth</th>
+<th>Backend</th>
+<th>Value</th>
+<th>Error</th>
+<th>Tolerance</th>
+<th>Status</th>
+<th>Mesh</th>
+<th>Wall [s]</th>
+<th>Run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cable_cantilever</td>
+<td>tip angle [rad]</td>
+<td>0.2696</td>
+<td>fem</td>
+<td>0.2675</td>
+<td>-0.8%</td>
+<td>±2%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>707</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>cable_cantilever</td>
+<td>tip angle [rad]</td>
+<td>0.2696</td>
+<td>rod</td>
+<td>0.2775</td>
+<td>+2.9%</td>
+<td>±4%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>2</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>cable_cantilever</td>
+<td>tip angle [rad]</td>
+<td>0.2696</td>
+<td>mujoco</td>
+<td>0.188</td>
+<td>-30.3%</td>
+<td>±35%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>43</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>cable_cantilever</td>
+<td>tip angle [rad]</td>
+<td>0.2696</td>
+<td>sofa</td>
+<td>0.188</td>
+<td>-30.3%</td>
+<td>±35%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>326</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: Euler-Bernoulli, pure moment (softsim.analytic.cable_beam_tip_angle)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>self_collision</td>
+<td>smallest wall gap [m]</td>
+<td>0</td>
+<td>mujoco</td>
+<td>1.868e-04</td>
+<td>+0.000187</td>
+<td>±0.0003</td>
+<td>✅ pass</td>
+<td>2 mm (1586 tets)</td>
+<td>11</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>self_collision</td>
+<td>smallest wall gap [m]</td>
+<td>0</td>
+<td>sofa</td>
+<td>9.998e-05</td>
+<td>+0.0001</td>
+<td>±0.0003</td>
+<td>✅ pass</td>
+<td>2 mm (1586 tets)</td>
+<td>15</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: contact (the walls touch, neither goes through)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sliding_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0.06979</td>
+<td>fem</td>
+<td>0.07045</td>
+<td>+0.9%</td>
+<td>±3%</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>107</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>sliding_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0.06979</td>
+<td>mujoco</td>
+<td>0.07035</td>
+<td>+0.8%</td>
+<td>±3%</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>6</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>sliding_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0.06979</td>
+<td>sofa</td>
+<td>0.07039</td>
+<td>+0.9%</td>
+<td>±3%</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>183</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: Coulomb friction, rigid block (softsim.analytic.sliding_block_travel)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sticking_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0</td>
+<td>fem</td>
+<td>1.006e-05</td>
+<td>+1.01e-05</td>
+<td>±5e-05</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>109</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>sticking_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0</td>
+<td>mujoco</td>
+<td>4.296e-05</td>
+<td>+4.3e-05</td>
+<td>±5e-05</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>6</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>sticking_block</td>
+<td>travel at 300 ms [m]</td>
+<td>0</td>
+<td>sofa</td>
+<td>3.123e-05</td>
+<td>+3.12e-05</td>
+<td>±5e-05</td>
+<td>✅ pass</td>
+<td>5 mm (768 tets)</td>
+<td>181</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: Coulomb friction, sticking (F &lt; mu m g)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>tension_test</td>
+<td>pull [N]</td>
+<td>0.9089</td>
+<td>fem</td>
+<td>0.9089</td>
+<td>-0.0%</td>
+<td>±0.1%</td>
+<td>✅ pass</td>
+<td>2.5 mm (768 tets)</td>
+<td>20</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>tension_test</td>
+<td>pull [N]</td>
+<td>0.9089</td>
+<td>mujoco</td>
+<td>0.9173</td>
+<td>+0.9%</td>
+<td>±1.5%</td>
+<td>✅ pass</td>
+<td>2.5 mm (768 tets)</td>
+<td>4</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>tension_test</td>
+<td>pull [N]</td>
+<td>0.9089</td>
+<td>sofa</td>
+<td>0.9174</td>
+<td>+0.9%</td>
+<td>±1.5%</td>
+<td>✅ pass</td>
+<td>2.5 mm (768 tets)</td>
+<td>29</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: exact homogeneous uniaxial stress (softsim.analytic.uniaxial_force)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>tip_load_cantilever</td>
+<td>tip deflection [m]</td>
+<td>8.640e-04</td>
+<td>fem</td>
+<td>8.662e-04</td>
+<td>+0.3%</td>
+<td>±3%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>701</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>tip_load_cantilever</td>
+<td>tip deflection [m]</td>
+<td>8.640e-04</td>
+<td>rod</td>
+<td>8.635e-04</td>
+<td>-0.1%</td>
+<td>±2%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>2</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>tip_load_cantilever</td>
+<td>tip deflection [m]</td>
+<td>8.640e-04</td>
+<td>mujoco</td>
+<td>6.005e-04</td>
+<td>-30.5%</td>
+<td>±35%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>43</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>tip_load_cantilever</td>
+<td>tip deflection [m]</td>
+<td>8.640e-04</td>
+<td>sofa</td>
+<td>6.005e-04</td>
+<td>-30.5%</td>
+<td>±35%</td>
+<td>✅ pass</td>
+<td>2 mm (4500 tets)</td>
+<td>323</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: Euler-Bernoulli F L^3 / (3 E I)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="full-tier">Full tier<a class="headerlink" href="#full-tier" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Quantity</th>
+<th>Truth</th>
+<th>Backend</th>
+<th>Value</th>
+<th>Error</th>
+<th>Tolerance</th>
+<th>Status</th>
+<th>Mesh</th>
+<th>Wall [s]</th>
+<th>Run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hard_magnetic_cantilever</td>
+<td>tip deflection [m]</td>
+<td>0.001018</td>
+<td>fem</td>
+<td>0.001033</td>
+<td>+1.5%</td>
+<td>±2%</td>
+<td>✅ pass</td>
+<td>1 mm (5760 tets)</td>
+<td>765</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: Euler-Bernoulli under a uniform couple c = mu0 M_r H A</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>wang_finger</td>
+<td>chord angle [deg] vs pressure</td>
+<td>8 points</td>
+<td>fem</td>
+<td>curve</td>
+<td>0.76 RMS</td>
+<td>≤1 RMS</td>
+<td>✅ pass</td>
+<td>1.5mm (41739 tets)</td>
+<td>5436</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>wang_finger</td>
+<td>chord angle [deg] vs pressure</td>
+<td>8 points</td>
+<td>mujoco</td>
+<td>curve</td>
+<td>18.01 RMS</td>
+<td>≤2 RMS</td>
+<td>❌ fail (known)</td>
+<td>1.5 mm (41739 tets)</td>
+<td>11998</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td>wang_finger</td>
+<td>chord angle [deg] vs pressure</td>
+<td>8 points</td>
+<td>sofa</td>
+<td>curve</td>
+<td>18.86 RMS</td>
+<td>≤2 RMS</td>
+<td>❌ fail (known)</td>
+<td>1.5 mm (41739 tets)</td>
+<td>403</td>
+<td>2026-11-12 93c5483</td>
+</tr>
+<tr>
+<td></td>
+<td><em>truth: measured, Wang et al. 2026 Table 5 (doi:10.3390/act15090488)</em></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="cases">Cases<a class="headerlink" href="#cases" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>cable_cantilever</strong>: 10 x 10 x 60 mm beam (E 500 kPa) bent by a cable 3 mm off its axis, anchored 5 mm below the top, 0.7 N: a pure moment, so Euler-Bernoulli gives the tip rotation exactly at any angle (with the Neo-Hookean tangent under the cable's pre-compression). Notes: rod: a materially linear beam, so it misses the 2.8% Neo-Hookean stiffening under the cable pre-compression (2T/EA); mujoco: linear tetrahedra lock in bending; sofa: linear tetrahedra lock in bending.</li>
+<li><strong>hard_magnetic_cantilever</strong>: A 4 x 4 x 60 mm bar magnetised along its length (100 kA/m, hard-magnetic) in a 30 A/m field across it: the couple mu0 M_r x H bends it by Euler-Bernoulli's c L^3 / (3 E I), c = mu0 M_r H A. Reference only (MuJoCo and SOFA have no magnetism). Notes: fem: +1.1% at a 1 mm mesh in tests/test_magnetic.py (second order).</li>
+<li><strong>self_collision</strong>: A two-link cable finger (Ecoflex 00-30, one 2 mm slot) whose tendon pulls the slot shut: with self-collision on, the slot's two walls must not pass through each other. The quantity is the smallest signed gap between the walls over the run (negative: one inside the other); the truth is contact, a gap of zero, and the tolerance the contact skin. Without self-collision the walls pass 1.3-1.4 mm through each other (tests/test_self_collision.py). Notes: mujoco: the gap left is MuJoCo's contact margin; sofa: the gap left is the contact distance.</li>
+<li><strong>sliding_block</strong>: A 40 x 40 x 10 mm silicone block (17.1 g) on the ground, friction 0.5, pushed by 0.12 N spread over its top face (ramped over 50 ms, then held): Coulomb sliding, a = (F - mu m g) / m. The travel after 300 ms against the rigid block's exact travel (the block's own shear adds about 0.01 mm).</li>
+<li><strong>sticking_block</strong>: The same block pushed by 0.06 N, 0.71 of the friction limit (0.084 N): Coulomb says it sticks, so the top face moves only by the block's shear (about 0.005 mm). MuJoCo's friction is a soft constraint and creeps at a steady rate instead (about 0.13 mm/s here), which is what a held grasp does on MuJoCo; the tolerance is that creep over 300 ms. Notes: fem: creeps at about 0.005 mm/s with the default contact.slip_speed (1e-5 m/s); the old per-step smoothing (slip_speed null) crept 0.233 mm/s at 2 ms (docs/decisions.md, entry 6); mujoco: soft-constraint friction creeps at about 0.13 mm/s while sticking.</li>
+<li><strong>tension_test</strong>: Roller tension test, 10 x 10 x 20 mm Neo-Hookean bar (E 100 kPa, nu 0.45) pulled 10% by prescribed motion; the pull at the hold is the homogeneous uniaxial stress times the area, which linear and quadratic tetrahedra both represent exactly. MuJoCo and SOFA run the stable Neo-Hookean of Smith et al., 0.9% stiffer at 10%. Notes: mujoco: stable Neo-Hookean is 0.9% stiffer than the split form at 10%; sofa: stable Neo-Hookean is 0.9% stiffer than the split form at 10%.</li>
+<li><strong>tip_load_cantilever</strong>: The same beam under a 5 mN dead load along +x spread over its top face. Euler-Bernoulli F L^3 / (3 E I) = 0.864 mm; the reference converges to it (Timoshenko's 2.4% shear is offset by the fully clamped root). Notes: mujoco: linear tetrahedra lock in bending; sofa: linear tetrahedra lock in bending.</li>
+<li><strong>wang_finger</strong>: Cast ribbed pneumatic finger of Wang et al., Actuators 15(9), 488 (2026), CC BY 4.0: geometry from the paper's Abaqus mesh, Yeoh card from its tensile data, plane strain as in the paper; chord angle against the eight measured points, 5-40 kPa (one finger, one ascending sequence; reading uncertainty about 1 deg). Notes: mujoco: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md); sofa: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

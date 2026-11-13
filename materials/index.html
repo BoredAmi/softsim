@@ -1,0 +1,2257 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../architecture/">
+      
+      
+        <link rel="next" href="../material_library/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Materials - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#materials-cards-parameters-and-what-a-card-does" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Materials
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A card
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The library
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The library">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fast-rate-dependence-impacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast rate dependence (impacts)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-card-does-homogeneous-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a card does: homogeneous tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#from-a-physical-card-to-a-backend-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a physical card to a backend (transfer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#joint-fits-lab-tests-and-dynamic-data-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Joint fits: lab tests and dynamic data together
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../magnetic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../experiments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A card
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The library
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The library">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fast-rate-dependence-impacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast rate dependence (impacts)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-card-does-homogeneous-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a card does: homogeneous tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#from-a-physical-card-to-a-backend-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a physical card to a backend (transfer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#joint-fits-lab-tests-and-dynamic-data-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Joint fits: lab tests and dynamic data together
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="materials-cards-parameters-and-what-a-card-does">Materials: cards, parameters and what a card does<a class="headerlink" href="#materials-cards-parameters-and-what-a-card-does" title="Permanent link">&para;</a></h1>
+<p>A softsim material is a <strong>card</strong>: one YAML file (or mapping) that holds
+everything about a soft material that a simulation needs, plus where the
+numbers come from and how far they can be trusted. Every number on a card can
+be changed the same way as any other config value.</p>
+<h2 id="a-card">A card<a class="headerlink" href="#a-card" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_silicone</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">What it is.</span>
+<span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Where every number comes from. Say "uncalibrated" or "fitted to X" honestly.</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">physical</span><span class="w">                </span><span class="c1"># physical | effective (see below)</span>
+<span class="nt">density</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1070 kg/m^3</span>
+<span class="nt">elastic</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yeoh</span><span class="w">                 </span><span class="c1"># linear | stvk | neo_hookean | stable_neo_hookean | mooney_rivlin | yeoh</span>
+<span class="w">  </span><span class="nt">c10</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12 kPa</span><span class="w">                 </span><span class="c1">#   | ogden | gent | arruda_boyce | magneto_active</span>
+<span class="w">  </span><span class="nt">c20</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8 kPa</span>
+<span class="w">  </span><span class="nt">poisson_ratio</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.49</span><span class="w">         </span><span class="c1"># or bulk_modulus: 1.2 MPa</span>
+<span class="nt">damping</span><span class="p">:</span><span class="w">                      </span><span class="c1"># optional</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prony</span><span class="w">                </span><span class="c1"># prony (a material model) | rayleigh | kelvin_voigt (numerical damping)</span>
+<span class="w">  </span><span class="nt">g</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.2</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">tau</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">50 ms</span><span class="p p-Indicator">]</span>
+<span class="nt">friction</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">sliding</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
+<span class="nt">adhesion</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">strength</span><span class="p">:</span><span class="w"> </span><span class="nv">14 kPa</span><span class="p p-Indicator">,</span><span class="nt"> range</span><span class="p">:</span><span class="w"> </span><span class="nv">0.3 mm</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># optional tack (cohesive law)</span>
+<span class="nt">validity</span><span class="p">:</span><span class="w">                     </span><span class="c1"># where the data behind the card was taken</span>
+<span class="w">  </span><span class="nt">strain</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-0.5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3.0</span><span class="p p-Indicator">]</span><span class="w">         </span><span class="c1"># nominal uniaxial strain range</span>
+<span class="w">  </span><span class="nt">strain_rate</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0 1/s</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300 1/s</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">23 degC</span>
+<span class="nt">uncertainty</span><span class="p">:</span><span class="w">                  </span><span class="c1"># one standard deviation (normal, lognormal) or half-width (uniform)</span>
+<span class="w">  </span><span class="nt">elastic.c10</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">rel</span><span class="p">:</span><span class="w"> </span><span class="nv">0.08</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">damping.g[0]</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">abs</span><span class="p">:</span><span class="w"> </span><span class="nv">0.05</span><span class="p p-Indicator">,</span><span class="nt"> dist</span><span class="p">:</span><span class="w"> </span><span class="nv">uniform</span><span class="p p-Indicator">}</span>
+<span class="nt">references</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">doi</span><span class="p">:</span><span class="w"> </span><span class="nv">10.1089/soro.2019.0115</span><span class="p p-Indicator">,</span><span class="nt"> note</span><span class="p">:</span><span class="w"> </span><span class="nv">uniaxial tension data</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p><strong>Elastic laws.</strong> All laws accept unit strings ("12 kPa"). Their parameters:</p>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>parameters</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>linear</code>, <code>stvk</code>, <code>neo_hookean</code>, <code>stable_neo_hookean</code></td>
+<td>any two of <code>youngs_modulus</code>, <code>poisson_ratio</code>, <code>shear_modulus</code>, <code>bulk_modulus</code></td>
+<td>stored as E and ν</td>
+</tr>
+<tr>
+<td><code>mooney_rivlin</code></td>
+<td><code>c10</code>, <code>c01</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>yeoh</code></td>
+<td><code>c10</code>, <code>c20</code>, <code>c30</code></td>
+<td>often the best simple fit for silicones</td>
+</tr>
+<tr>
+<td><code>ogden</code></td>
+<td><code>mu: [...]</code>, <code>alpha: [...]</code></td>
+<td>N terms</td>
+</tr>
+<tr>
+<td><code>gent</code></td>
+<td><code>mu</code>, <code>jm</code></td>
+<td>stiffens without bound as I1 − 3 → J_m</td>
+</tr>
+<tr>
+<td><code>arruda_boyce</code></td>
+<td><code>mu</code>, <code>lambda_m</code></td>
+<td>five-term series (Abaqus form); locking stretch λ_m</td>
+</tr>
+<tr>
+<td><code>magneto_active</code></td>
+<td><code>matrix</code> (any hyperelastic law above), <code>susceptibility</code> or <code>particle_volume_fraction</code>, <code>along</code>, <code>normal</code>, <code>demagnetization</code></td>
+<td>iron-filled (MRE): soft-magnetic in the scene's <code>magnetic_field</code>; reference backend only (<a href="../magnetic/">magnetic.md</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>The laws with a bulk modulus take <code>bulk_modulus</code> or <code>poisson_ratio</code>.
+<code>softsim material show &lt;card&gt;</code> prints the small-strain equivalents (E0, μ0,
+κ, ν0), wave speeds and explicit time-step estimates of any card.</p>
+<p><strong>Rate dependence.</strong> <code>prony</code> is a material model: generalised Maxwell
+relaxation of the shear (isochoric) part, G(t) = G0 (1 − Σ g_i (1 − e^(−t/τ_i))).
+The elastic constants are the instantaneous ones, so the long-term shear
+modulus is G0 (1 − Σ g). <code>rayleigh</code> and <code>kelvin_voigt</code> are numerical damping:
+their loss grows without bound with frequency. They help stabilise or match
+one experiment, but they are not a description of a silicone.</p>
+<p>Prony runs on every solver with the same update and energies:</p>
+<ul>
+<li>the reference FEM and the homogeneous tests;</li>
+<li>MuJoCo and SOFA. There the backend's own elasticity carries the long-term
+  law, and the decaying Maxwell overstresses are added as vertex forces each
+  step (<code>softsim/materials/viscoelastic.py</code>). These forces are explicit, so
+  <code>softsim check</code> verifies that the time step resolves them.</li>
+</ul>
+<p>Prony needs a law with an isochoric/volumetric split, so not <code>linear</code> or
+<code>stvk</code>.</p>
+<p><strong>Physical and effective cards.</strong> <code>kind: physical</code> means that the numbers
+describe the material and should hold on any solver that represents the law
+well. <code>kind: effective</code> means the numbers reproduce data only with one
+backend, mesh and contact model. Calibrating a backend against an experiment
+produces such cards (the <code>*_drop_fit*</code> presets). An effective card must name
+<code>backend</code> and <code>mesh_size</code> in its <code>provenance</code>.</p>
+<h2 id="the-library">The library<a class="headerlink" href="#the-library" title="Permanent link">&para;</a></h2>
+<p><code>softsim materials</code> lists every card.</p>
+<ul>
+<li><strong>Preferred physical cards:</strong> the <code>*_roels2025</code> cards for 7 silicones
+  (Ecoflex 00-20/00-30/00-50, Dragon Skin 20/30, Mold Max 14NV,
+  Mold Star 30). They are fitted to tension and compression specimens together
+  (Roels et al. 2025, CC-BY-4.0), with a measured slow Prony series (1 s to
+  3 h). Ecoflex 00-30 and 00-50 also carry measured <strong>fast</strong> relaxation for
+  impacts (see below).</li>
+<li><strong>Older physical cards:</strong> the <code>*_marechal2021</code> cards for 18 silicones
+  (Marechal et al. 2021), from tension only. Their moduli are probably ~3×
+  too low, because the strain was measured at the crosshead.</li>
+<li>All are listed with their fit quality and caveats in
+  <a href="../material_library/">material_library.md</a>.</li>
+<li><strong>Datasheet estimates:</strong> <code>ecoflex_00_10</code>, <code>ecoflex_00_30</code>, <code>dragon_skin_10</code>.</li>
+<li><strong>Effective drop-test fits:</strong> <code>ecoflex_00_10_drop_fit*</code>.</li>
+</ul>
+<p>To fit your own data, write a <code>kind: material_tests</code> dataset file and run the
+commands below. See <code>datasets/roels2025_elastomers.yaml</code> for several test
+kinds and specimens per material, or <code>datasets/marechal2021_srmd.yaml</code> for
+one curve.</p>
+<div class="highlight"><pre><span></span><code>softsim<span class="w"> </span>fetch<span class="w"> </span>datasets/marechal2021_srmd.yaml<span class="w">                     </span><span class="c1"># downloads + checks the archive</span>
+softsim<span class="w"> </span>fit-material<span class="w"> </span>datasets/marechal2021_srmd.yaml<span class="w"> </span>ecoflex_00_30<span class="w"> </span>--strain-max<span class="w"> </span><span class="m">1</span>.0
+<span class="c1"># every law: cards with uncertainty, report.yaml, fit.png in runs/material_fits/...</span>
+softsim<span class="w"> </span>material<span class="w"> </span>project<span class="w"> </span>ecoflex_00_30_marechal2021<span class="w"> </span>--to<span class="w"> </span>neo_hookean<span class="w"> </span>--strain-range<span class="o">=</span>-0.3,0.6<span class="w"> </span>--out<span class="w"> </span>eco30_nh.yaml
+</code></pre></div>
+<p><code>fit-material</code> fits neo_hookean, mooney_rivlin, yeoh, ogden1, ogden2, gent
+and arruda_boyce. It ranks them by AIC, reports parameter uncertainties, and
+flags laws that lose stability (stress decreasing with stretch) in uniaxial,
+equibiaxial or planar loading within the fitted range.</p>
+<p><code>project</code> fits another law to a card's own response, for backends that lack
+the card's law. MuJoCo has only stable Neo-Hookean, and its refusal message
+points to this command.</p>
+<h3 id="fast-rate-dependence-impacts">Fast rate dependence (impacts)<a class="headerlink" href="#fast-rate-dependence-impacts" title="Permanent link">&para;</a></h3>
+<p>Tension tests run at about 0.4/s, while an impact loads the material within
+milliseconds. Silicones are much stiffer and lossier there. Ecoflex 00-30, for
+example, is 1.65× stiffer at 100 Hz and 2.2× at 1 kHz than in its tension
+test. A card without fast-rate data is therefore too soft and too bouncy in
+impacts.</p>
+<p>If you have a frequency-domain fit (DMA, rheometer, guided waves) as a
+fractional Kelvin–Voigt model μ0 (1 + (iωτ)ⁿ), convert it to Prony branches
+and add them to a card. The response at the test rate stays as fitted:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">softsim.materials</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_material</span><span class="p">,</span> <span class="n">save_material</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">softsim.materials.viscoelastic</span><span class="w"> </span><span class="kn">import</span> <span class="n">prony_from_fractional</span><span class="p">,</span> <span class="n">with_fast_relaxation</span>
+
+<span class="n">a</span><span class="p">,</span> <span class="n">taus</span><span class="p">,</span> <span class="n">rms</span> <span class="o">=</span> <span class="n">prony_from_fractional</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mf">0.20</span><span class="p">,</span> <span class="n">tau</span><span class="o">=</span><span class="mf">2.9e-3</span><span class="p">,</span> <span class="n">band</span><span class="o">=</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2000.0</span><span class="p">))</span>   <span class="c1"># Hz</span>
+<span class="n">card</span> <span class="o">=</span> <span class="n">with_fast_relaxation</span><span class="p">(</span><span class="n">load_material</span><span class="p">(</span><span class="s2">"my_silicone"</span><span class="p">),</span> <span class="n">a</span><span class="p">,</span> <span class="n">taus</span><span class="p">)</span>
+<span class="n">save_material</span><span class="p">(</span><span class="n">card</span><span class="p">,</span> <span class="s2">"my_silicone_rate.yaml"</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><strong>Band:</strong> branches are placed only inside the band. Keep its top below
+  1/(2π·dt) of the backend you run, and its bottom where your measured
+  relaxation starts, so nothing is counted twice.</li>
+<li><strong>Source of the library's values:</strong> Croquette et al. 2026
+  (arXiv:2604.27722), who measured Ecoflex 00-30 and 00-50 with guided elastic
+  waves and checked them against a rheometer from 1 to 100 Hz.</li>
+<li><strong>Assumption:</strong> only the shape of their curve relative to the test rate is
+  used, applied to the isochoric part at large strain. Their samples were
+  about 2× softer than Roels', so their static modulus is not used.</li>
+</ul>
+<h2 id="changing-values">Changing values<a class="headerlink" href="#changing-values" title="Permanent link">&para;</a></h2>
+<p>Every value is a dotted key, the same everywhere:</p>
+<div class="highlight"><pre><span></span><code>softsim<span class="w"> </span>params<span class="w"> </span>scenarios/drop_test/cases/w050.yaml<span class="w"> </span>--grep<span class="w"> </span>material<span class="w">   </span><span class="c1"># every key, value, unit, allowed range</span>
+softsim<span class="w"> </span>run<span class="w"> </span>scenarios/drop_test/cases/w050.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--set<span class="w"> </span>specimen.material.elastic.youngs_modulus<span class="o">=</span><span class="s1">'40 kPa'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--set<span class="w"> </span>specimen.material.damping.model<span class="o">=</span>prony<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--set<span class="w"> </span><span class="s1">'specimen.material.damping.g=[0.6]'</span><span class="w"> </span>--set<span class="w"> </span><span class="s1">'specimen.material.damping.tau=[2 ms]'</span>
+softsim<span class="w"> </span>material<span class="w"> </span>show<span class="w"> </span>ecoflex_00_10<span class="w"> </span>--set<span class="w"> </span>elastic.model<span class="o">=</span>gent<span class="w"> </span>--set<span class="w"> </span>elastic.mu<span class="o">=</span><span class="s1">'30 kPa'</span><span class="w"> </span>--set<span class="w"> </span>elastic.jm<span class="o">=</span><span class="m">20</span>
+</code></pre></div>
+<ul>
+<li><strong>Switching a law:</strong> setting <code>elastic.model</code> (or <code>damping.model</code>) keeps
+  only the parameters the new law understands. Going from an E/ν law to one
+  with a bulk modulus carries ν over.</li>
+<li><strong>List entries</strong> are indexed: <code>elastic.mu[1]</code>, <code>damping.tau[0]</code>.</li>
+<li><strong>Sweeps:</strong> the same keys work in sweep grids (<code>softsim sweep</code>).</li>
+<li><strong>Which values matter:</strong> <code>softsim sensitivity</code> runs a Morris screening over
+  value ranges and reports each parameter's influence (μ*) and
+  non-linearity/interaction (σ) on any summary metric:
+  <div class="highlight"><pre><span></span><code>softsim<span class="w"> </span>sensitivity<span class="w"> </span>scenarios/drop_test/cases/w050.yaml<span class="w"> </span>--metric<span class="w"> </span>peak_indentation<span class="w"> </span>--jobs<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--param<span class="w"> </span><span class="s2">"specimen.material.elastic.youngs_modulus=30 kPa:150 kPa"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--param<span class="w"> </span><span class="s2">"specimen.material.damping.beta=0.1 ms:3 ms"</span><span class="w"> </span>--param<span class="w"> </span><span class="s2">"drop.height=0.2:0.4"</span>
+</code></pre></div></li>
+<li><strong>Uncertainty propagation:</strong> <code>softsim sweep sweep.yaml --sample 32 --seed 0</code>
+  (or a <code>sample:</code> block in the sweep file) crosses the grid with 32
+  variants of the material, drawn from its card's <code>uncertainty</code>. The drawn
+  values become <code>sample.&lt;key&gt;</code> columns of <code>results.parquet</code>.</li>
+<li><strong>Python:</strong>
+  <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">softsim.materials</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_material</span><span class="p">,</span> <span class="n">sample</span>
+<span class="n">m</span> <span class="o">=</span> <span class="n">load_material</span><span class="p">(</span><span class="s2">"ecoflex_00_10"</span><span class="p">,</span> <span class="n">overrides</span><span class="o">=</span><span class="p">[</span><span class="s2">"elastic.youngs_modulus=40 kPa"</span><span class="p">])</span>
+<span class="n">m2</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">with_overrides</span><span class="p">([</span><span class="s2">"elastic.model=yeoh"</span><span class="p">,</span> <span class="s2">"elastic.c10=12 kPa"</span><span class="p">])</span>
+<span class="n">variants</span> <span class="o">=</span> <span class="n">sample</span><span class="p">(</span><span class="n">card_with_uncertainty</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># draws from `uncertainty`</span>
+</code></pre></div></li>
+<li><strong>At run time:</strong></li>
+<li><code>Simulation.set_material(body, material, overrides)</code> rebuilds the model;</li>
+<li><code>set_material(body, None, overrides)</code> changes the current material;</li>
+<li>ROS: the <code>set_material</code> service takes the same <code>overrides</code> list.</li>
+</ul>
+<h2 id="what-a-card-does-homogeneous-tests">What a card does: homogeneous tests<a class="headerlink" href="#what-a-card-does-homogeneous-tests" title="Permanent link">&para;</a></h2>
+<p><code>softsim.materials.homogeneous</code> computes the exact response of a card in the
+standard laboratory tests, without a mesh or a backend. It needs the <code>fem</code>
+extra (JAX). The energies and the Prony update are those of the reference FEM.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">softsim.materials.homogeneous</span><span class="w"> </span><span class="kn">import</span> <span class="n">curve</span><span class="p">,</span> <span class="n">relaxation</span><span class="p">,</span> <span class="n">constant_rate</span><span class="p">,</span> <span class="n">dma</span>
+<span class="n">curve</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">"uniaxial"</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">])</span>        <span class="c1"># also equibiaxial, planar, simple_shear, volumetric, confined</span>
+<span class="n">curve</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">"uniaxial"</span><span class="p">,</span> <span class="p">[</span><span class="mf">1.5</span><span class="p">],</span> <span class="s2">"instantaneous"</span><span class="p">)</span> <span class="c1"># infinitely fast; default "relaxed" = equilibrium</span>
+<span class="n">relaxation</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">strain</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>                   <span class="c1"># ramp-and-hold</span>
+<span class="n">constant_rate</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">"uniaxial"</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># strain rate in 1/s</span>
+<span class="n">dma</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">])</span>                         <span class="c1"># storage and loss modulus vs frequency</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>softsim<span class="w"> </span>material<span class="w"> </span>plot<span class="w"> </span>ecoflex_00_10<span class="w"> </span>my_silicone.yaml<span class="w"> </span>--tests<span class="w"> </span>uniaxial,simple_shear,relaxation,dma<span class="w"> </span>--out<span class="w"> </span>cards.png
+</code></pre></div>
+<p>These are checked against closed forms for every law (<code>tests/test_homogeneous.py</code>):</p>
+<ul>
+<li>uniaxial, biaxial and planar stresses;</li>
+<li>small-strain moduli;</li>
+<li>Prony relaxation;</li>
+<li>DMA against the analytic G*(ω).</li>
+</ul>
+<h2 id="from-a-physical-card-to-a-backend-transfer">From a physical card to a backend (transfer)<a class="headerlink" href="#from-a-physical-card-to-a-backend-transfer" title="Permanent link">&para;</a></h2>
+<p>A physical card holds on any solver that represents its law well. The
+tetrahedral backends don't fully do so: linear elements lock, and MuJoCo's
+contact loses energy. To find the parameters with which a backend reproduces
+a physical card in a given scenario:</p>
+<ol>
+<li><strong>Run the card on the locking-free reference</strong> with the scenario's
+   conditions, and save the runs as tracks. <code>tools/make_reference_tracks.py</code>
+   does this for the drop test with each recording's measured impact
+   (<code>softsim.experiments.reference_tracks</code>).</li>
+<li><strong>Calibrate the backend against those tracks.</strong> This is an ordinary
+   <code>softsim calibrate</code> (e.g. <code>calibrations/transfer_ecoflex_00_10_mujoco.yaml</code>).
+   The result is the backend's <code>effective</code> card, and the remaining NRMSE is
+   its error bar against the physical card.</li>
+</ol>
+<p>For Ecoflex 00-10 in the drop test, the physical values are 143 kPa, 0.69
+and 2 ms. With a 5 mm mesh:</p>
+<ul>
+<li>MuJoCo reproduces the card within 3–10% using E0 = 66 kPa, g = 0.94,
+  τ = 5.5 ms;</li>
+<li>SOFA within 3–7% using 79.6 kPa, 0.77 and 2.7 ms
+(<a href="../experiments/#a-physical-card-on-the-3d-reference-fem-backend">experiments.md</a>).</li>
+</ul>
+<p>A transferred card is only valid for loads like the ones it was transferred
+on. The MuJoCo card above (fitted on 20 and 50 g) relaxes 94% within a few
+milliseconds. Under 500 g it crushes the specimen until MuJoCo's tetrahedra
+invert, and the run stops with "simulation diverged".</p>
+<h2 id="joint-fits-lab-tests-and-dynamic-data-together">Joint fits: lab tests and dynamic data together<a class="headerlink" href="#joint-fits-lab-tests-and-dynamic-data-together" title="Permanent link">&para;</a></h2>
+<p>Lab tests fix the quasi-static stiffness. An impact sees the instantaneous
+one and how fast it relaxes. Neither alone pins down a viscoelastic card:</p>
+<ul>
+<li>tension data can't tell how much of the stiffness relaxes within
+  milliseconds;</li>
+<li>the drop data can't tell what the material does a second later.</li>
+</ul>
+<p>A calibration file can therefore include material-test terms next to its
+simulated cases (<code>softsim.experiments.calibrate</code>). They are evaluated on the
+card's homogeneous-test curves, take milliseconds, and add to the same cost:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">cases</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">w020</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">,</span><span class="nt"> w050</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
+<span class="nt">material_tests</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># specimens from a dataset, one term per test kind and strain window</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">dataset</span><span class="p">:</span><span class="w"> </span><span class="nv">../datasets/roels2025_elastomers.yaml</span><span class="p p-Indicator">,</span><span class="nt"> material</span><span class="p">:</span><span class="w"> </span><span class="nv">ecoflex_00_30</span><span class="p p-Indicator">,</span><span class="nt"> kind</span><span class="p">:</span><span class="w"> </span><span class="nv">tension</span><span class="p p-Indicator">,</span><span class="nt"> strain</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]}</span>
+<span class="w">  </span><span class="c1"># relaxation: the normalised hold, so it tests rate dependence only</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">dataset</span><span class="p">:</span><span class="w"> </span><span class="nv">../datasets/roels2025_elastomers.yaml</span><span class="p p-Indicator">,</span><span class="nt"> material</span><span class="p">:</span><span class="w"> </span><span class="nv">ecoflex_00_30</span><span class="p p-Indicator">,</span><span class="nt"> kind</span><span class="p">:</span><span class="w"> </span><span class="nv">relaxation</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="c1"># or inline points: a datasheet's "100% modulus" is often all there is</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">datasheet_100pct</span><span class="p p-Indicator">,</span><span class="nt"> points</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">strain</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1.0</span><span class="p p-Indicator">],</span><span class="nt"> stress</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">55 kPa</span><span class="p p-Indicator">]},</span><span class="nt"> weight</span><span class="p">:</span><span class="w"> </span><span class="nv">0.5</span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>A term's cost is its RMSE relative to the largest stress, averaged over
+specimens. The term is compared with the card's <strong>fully relaxed</strong> curve,
+unless it has a test rate: the dataset's <code>strain_rate</code>, or <code>rate:</code> in the
+entry. With a rate, a Prony card is loaded at that rate.</p>
+<p>A <code>relaxation</code> term ramps the card to each recording's hold strain at
+<code>rate</code> (default 0.4/s) and holds it. Both curves are divided by their value
+at the start of the recorded hold, which begins <code>hold_offset</code> (default
+1.3 s) after the ramp, as in Roels et al. 2025. Ecoflex 00-30's library card
+matches its 3-hour hold within 0.35%; without damping it is off by 1.4%.</p>
+<p><strong>Example: Ecoflex 00-10.</strong> The drop-only fit on the 3D reference
+(E0 ≈ 150 kPa, g ≈ 0.7) relaxes to E∞ ≈ 44 kPa. The datasheet's 100% modulus
+(55 kPa) implies about 94 kPa. Every point that drop-only fit has evaluated
+misses the datasheet by 40–60%. <code>calibrations/ecoflex_00_10_drop_fem_joint.yaml</code>
+fits both together. After 80 evaluations: E0 = 190 kPa, g = 0.60, τ = 0.58 ms,
+E∞ = 76 kPa, the datasheet term 20% off (from 40–60%), the 20 g first contact
+14% and the 50 g one 3%
+(<a href="../experiments/#joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02">experiments.md</a>).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

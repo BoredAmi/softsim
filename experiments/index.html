@@ -1,0 +1,3251 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../validation/">
+      
+      
+        <link rel="next" href="../design/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Experiments and calibration - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#experiments-tracking-and-calibration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Experiments and calibration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../materials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../magnetic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dataset-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset description
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tracking-softsimexperimentsvideo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracking (softsim/experiments/video/)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tracking (softsim/experiments/video/)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#findings-about-the-recordings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings about the recordings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calibration-softsimexperimentscalibratepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calibration (softsim/experiments/calibrate.py)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Calibration (softsim/experiments/calibrate.py)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-this-does-and-does-not-show" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does and does not show
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fitting-any-scenario-to-a-measured-table-softsim-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fitting any scenario to a measured table (softsim fit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends-and-material-models-m4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends and material models (M4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#after-the-first-contact-tack-and-the-hopping-specimen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        After the first contact: tack and the hopping specimen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="After the first contact: tack and the hopping specimen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#every-weight-whole-bounce-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every weight, whole bounce (validation)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-500-g-first-contact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The 500 g first contact
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-fitted-modulus-means" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the fitted modulus means
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-physical-card-on-the-3d-reference-fem-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A physical card on the 3D reference (fem backend)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A physical card on the 3D reference (fem backend)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Joint fit: the drop and the datasheet (GPU box, 2026-11-02)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dataset-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset description
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tracking-softsimexperimentsvideo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracking (softsim/experiments/video/)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tracking (softsim/experiments/video/)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#findings-about-the-recordings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings about the recordings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calibration-softsimexperimentscalibratepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calibration (softsim/experiments/calibrate.py)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Calibration (softsim/experiments/calibrate.py)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-this-does-and-does-not-show" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does and does not show
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fitting-any-scenario-to-a-measured-table-softsim-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fitting any scenario to a measured table (softsim fit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends-and-material-models-m4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends and material models (M4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#after-the-first-contact-tack-and-the-hopping-specimen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        After the first contact: tack and the hopping specimen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="After the first contact: tack and the hopping specimen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#every-weight-whole-bounce-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every weight, whole bounce (validation)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-500-g-first-contact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The 500 g first contact
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-fitted-modulus-means" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the fitted modulus means
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-physical-card-on-the-3d-reference-fem-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A physical card on the 3D reference (fem backend)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A physical card on the 3D reference (fem backend)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Joint fit: the drop and the datasheet (GPU box, 2026-11-02)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="experiments-tracking-and-calibration">Experiments: tracking and calibration<a class="headerlink" href="#experiments-tracking-and-calibration" title="Permanent link">&para;</a></h1>
+<div class="highlight"><pre><span></span><code>softsim<span class="w"> </span>track<span class="w"> </span>datasets/czopek2026_ecoflex_drop.yaml<span class="w"> </span>--jobs<span class="w"> </span><span class="m">5</span><span class="w">        </span><span class="c1"># about 3 min; data/processed/&lt;dataset&gt;/</span>
+softsim<span class="w"> </span>calibrate<span class="w"> </span>calibrations/ecoflex_00_10_drop.yaml<span class="w"> </span>--jobs<span class="w"> </span><span class="m">3</span><span class="w">      </span><span class="c1"># about 4 min; runs/calibration/...</span>
+</code></pre></div>
+<h2 id="dataset-description">Dataset description<a class="headerlink" href="#dataset-description" title="Permanent link">&para;</a></h2>
+<p><code>datasets/czopek2026_ecoflex_drop.yaml</code> records the DOI, licence, camera,
+specimen and, per case, the zip archive, the scenario config and how the
+weight looks. Frames are read directly from the zips (<code>FrameSource</code>); nothing
+is extracted or redistributed.</p>
+<h2 id="tracking-softsimexperimentsvideo">Tracking (<code>softsim/experiments/video/</code>)<a class="headerlink" href="#tracking-softsimexperimentsvideo" title="Permanent link">&para;</a></h2>
+<p><strong>Segmentation.</strong> The backdrop is saturated green with no red, and shadows on
+it stay red-free. A per-pixel reference background (the median of the first
+frames) separates three classes:</p>
+<ul>
+<li>the translucent specimen: red present, bluish;</li>
+<li>brass weights: red present, neutral;</li>
+<li>black weights: much darker than the background behind them.</li>
+</ul>
+<p><strong>Scale and camera.</strong> The specimen's resting silhouette width equals its
+diameter, giving about 5.5 px/mm. Its silhouette height, H·cos e + D·sin e,
+gives a camera elevation of e ≈ 17–20°. Vertical motion therefore scales by
+cos e.</p>
+<p><strong>Weight motion.</strong> The weight is followed as a rigid body (x, y and in-plane
+rotation) by incremental ECC alignment of its upper part, frame to frame. The
+upper part keeps the specimen and the weight's shadow out of the mask. The
+weights rotate strongly during impact (the 20 g seats with about 10° of
+rocking, the 100 g rolls about 100°), and a translation-only template loses
+them. The tracked point is the silhouette centroid, which is close to the
+centre of mass.</p>
+<p><strong>Contact.</strong> Contact is the first frame where the centre of mass departs from
+a local free-fall parabola by more than 0.5 px (about 0.1 mm). The same rule is
+applied to simulations (<code>compare.simulated_indentation</code>).</p>
+<p><strong>Compared quantity.</strong> <code>indentation_rel</code> is the centre-of-mass displacement
+since contact, relative to the specimen base.</p>
+<h3 id="findings-about-the-recordings">Findings about the recordings<a class="headerlink" href="#findings-about-the-recordings" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Impact speed</th>
+<th>Offset</th>
+<th>Spin</th>
+<th>Usable?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g (brass)</td>
+<td>2.67 m/s</td>
+<td>+6 mm</td>
+<td>317 °/s</td>
+<td>yes; lands slightly tilted and rocks while seating</td>
+</tr>
+<tr>
+<td>50 g (brass)</td>
+<td>2.47 m/s</td>
+<td>0 mm</td>
+<td>48 °/s</td>
+<td>yes for the first contact; tumbles off afterwards</td>
+</tr>
+<tr>
+<td>100 g (black, no knob)</td>
+<td>2.47 m/s</td>
+<td>+14 mm</td>
+<td>27 °/s</td>
+<td><strong>no</strong>: hits the specimen edge and rolls off</td>
+</tr>
+<tr>
+<td>200 g (black)</td>
+<td>2.62 m/s</td>
+<td>−13 mm</td>
+<td>−59 °/s</td>
+<td><strong>no</strong>: tilted edge impact</td>
+</tr>
+<tr>
+<td>500 g (black)</td>
+<td>2.65 m/s</td>
+<td>−6 mm</td>
+<td>~0</td>
+<td>first contact only; see below</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Frame rate is 2999.3 fps</strong> (overlay timestamps). Impact speeds are 2–10%
+  below the nominal 2.73 m/s, so simulations use the measured value per case.</li>
+<li><strong>Local free-fall fit.</strong> Just before contact the tracker fits a free quadratic
+  to the weight's height. Its apparent acceleration comes out at only
+  3–4 m/s², but over the 8 ms fit window that is a difference of about 1 px
+  from free fall. M3 blamed perspective; that is not established (the
+  specimen's hop, below, decelerates <em>faster</em> than g). It doesn't matter for
+  contact detection, and the fitted impact speeds agree with the nominal drop
+  speed.</li>
+<li><strong>The specimen hops; the table does not move.</strong> After impact the specimen
+  rises 8–20 mm and lands again 70–110 ms later. The green cloth it sits on
+  rises next to it (most near the specimen, less 55 mm away, with ripples
+  spreading out), while the backdrop lighting band stays within ±1 px, so the
+  camera is still. The 200 g specimen visibly tilts and slides in mid-air.
+  The tacky specimen sticks to the cloth and drags it up, which is also why
+  its hop decelerates at 13–20 m/s², faster than g. <em>Correction:</em> M3 read this
+  as the table moving and discarded everything after the first contact; see
+  <a href="#after-the-first-contact-tack-and-the-hopping-specimen">After the first contact</a>.</li>
+<li><strong>Out-of-plane tilt can't be measured</strong> from a single side view. Simulations
+  get the measured horizontal offset and in-plane spin; tilt stays zero.</li>
+<li><strong>Rotation is the less precise output.</strong> On synthetic sequences the tracker
+  recovers position to about 2% of the motion and rotation to about 20%.</li>
+<li><strong>Correction to Step 0:</strong> the 4 mm preview estimate for 20 g happens to match
+  (3.7 mm). The method was unreliable, though: it used the weight's bottom
+  edge, which the specimen rim hides.</li>
+</ul>
+<h2 id="calibration-softsimexperimentscalibratepy">Calibration (<code>softsim/experiments/calibrate.py</code>)<a class="headerlink" href="#calibration-softsimexperimentscalibratepy" title="Permanent link">&para;</a></h2>
+<p><code>calibrations/ecoflex_00_10_drop.yaml</code> fits stable Neo-Hookean E and Rayleigh
+β (in log space) on MuJoCo to the 20, 50 and 500 g cases at once:</p>
+<ul>
+<li><strong>Optimizer:</strong> a coarse 4×4 grid, then Nelder-Mead, 50 evaluations.</li>
+<li><strong>Simulations:</strong> each case uses its measured impact conditions and a 5 mm
+  mesh.</li>
+<li><strong>Cost:</strong> the mean of RMSE divided by the experimental peak over the first
+  contact phase.</li>
+<li><strong>Outputs:</strong> the fitted preset (with provenance), the evaluation history,
+  <code>report.yaml</code> and plots.</li>
+<li><strong>Failures and resuming:</strong> an unstable parameter set, or one that crashes its
+  worker process outright, gets the maximum per-case cost (10) instead of
+  stopping the run. Each evaluation is appended to <code>&lt;output&gt;/evaluations.jsonl</code>.
+  Re-running the calibration replays those evaluations, so an interrupted
+  multi-hour run resumes where it stopped. Changing <code>max_evaluations</code>, <code>grid</code>,
+  bounds or initial values keeps them. The log does not know about code
+  changes: delete it after changing simulation code. The history also records
+  each case's maximum ground penetration, which flags contact artefacts.</li>
+</ul>
+<p><strong>Result:</strong> E = 54.8 kPa and β = 0.31 ms. This is preset
+<a href="https://github.com/BoredAmi/softsim/blob/main/softsim/materials/presets/ecoflex_00_10_drop_fit.yaml"><code>ecoflex_00_10_drop_fit</code></a>.
+E is lower than the 91 kPa datasheet-derived starting estimate, and very close
+to the datasheet's 100% modulus (55 kPa).</p>
+<p><img alt="Simulation vs experiment, before and after calibration" src="../media/calibration_overlay.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Peak exp</th>
+<th>Peak, preset (91 kPa)</th>
+<th>Peak, fitted</th>
+<th>t_peak exp / fitted</th>
+<th>NRMSE fitted</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g</td>
+<td>3.74 mm</td>
+<td>1.40 mm</td>
+<td>3.32 mm</td>
+<td>3.3 / 3.2 ms</td>
+<td>15%</td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>4.31 mm</td>
+<td>2.16 mm</td>
+<td>4.20 mm</td>
+<td>3.7 / 3.6 ms</td>
+<td>3%</td>
+</tr>
+<tr>
+<td>500 g</td>
+<td>4.52 mm</td>
+<td>8.01 mm</td>
+<td>10.97 mm</td>
+<td>2.7 / 6.6 ms</td>
+<td>113%</td>
+</tr>
+<tr>
+<td>100 g, 200 g</td>
+<td>edge impacts, not fitted</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Peak indentation and time to peak vs mass" src="../media/calibration_peaks.png" /></p>
+<h3 id="what-this-does-and-does-not-show">What this does and does not show<a class="headerlink" href="#what-this-does-and-does-not-show" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>For light weights the model works.</strong> For 20 g and 50 g (local indentation
+  by a weight smaller than the specimen), a Neo-Hookean solid with one Rayleigh
+  damping coefficient reproduces the whole first contact (loading, peak and
+  unloading) within 3–15%.</li>
+<li><strong>For the 500 g weight it fails.</strong> That weight is wider than the specimen and
+  compresses its whole face. In the recording it stops within 4.5 mm in 2.7 ms,
+  while the model needs about 11 mm and 6.6 ms. No single (E, β) fits both
+  regimes. The measured peak indentation is almost independent of mass (3.7 →
+  4.5 mm for 25× the energy). Candidate explanations, none verified:</li>
+<li>rate-dependent stiffening of the silicone, which Rayleigh damping can't
+    represent;</li>
+<li>stronger large-strain stiffening than Neo-Hookean;</li>
+<li>near-incompressibility under full-face confinement (the model uses ν = 0.45);</li>
+<li>energy absorbed by the compliant table, which is measurable here but not
+    modelled.</li>
+</ul>
+<p>M4 tested the material-law and compressibility candidates on SOFA; see
+  <a href="#backends-and-material-models-m4">below</a>.
+- <strong>The fit depends on the mesh.</strong> With the fitted values, the 20 g peak goes
+  3.32 → 3.55 → 3.79 mm as the mesh refines from 5 to 3.5 to 2.5 mm. Use the
+  preset with <code>specimen.mesh.size=5mm</code>, or refit at the target resolution.
+- <strong>50 g after first contact isn't modelled.</strong> In reality the weight tumbles
+  off after the first contact, so later times shouldn't be compared.</p>
+<h2 id="fitting-any-scenario-to-a-measured-table-softsim-fit">Fitting any scenario to a measured table (<code>softsim fit</code>)<a class="headerlink" href="#fitting-any-scenario-to-a-measured-table-softsim-fit" title="Permanent link">&para;</a></h2>
+<p><code>softsim calibrate</code> is built around the drop test's tracked videos. <code>softsim fit</code>
+is the scenario-neutral version: any observable column of any scenario against
+a measured table, registered with its source. A fit file is a transfer file
+(<code>config</code>, <code>backend</code>, <code>overrides</code>, <code>parameters</code>, <code>checks</code>, <code>max_evaluations</code>,
+<code>output</code>, see <code>softsim/transfer.py</code>) whose <code>reference:</code> is replaced by <code>data:</code>
+(<code>softsim/experiments/fit.py</code> has the full description):</p>
+<div class="highlight"><pre><span></span><code><span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">...</span><span class="p p-Indicator">,</span><span class="nt"> doi</span><span class="p">:</span><span class="w"> </span><span class="nv">10.xxxx/...</span><span class="p p-Indicator">,</span><span class="nt"> licence</span><span class="p">:</span><span class="w"> </span><span class="nv">CC-BY-4.0</span><span class="p p-Indicator">,</span><span class="nt"> file</span><span class="p">:</span><span class="w"> </span><span class="nv">../data/processed/x/table.csv</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curve</span><span class="w">                      </span><span class="c1"># y against a simulated x (a quasi-static ramp), or series: y(t)</span>
+<span class="w">  </span><span class="nt">filter</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">tilt</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">}</span><span class="w">                </span><span class="c1"># rows with these column values</span>
+<span class="w">  </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">column</span><span class="p">:</span><span class="w"> </span><span class="nv">p_kPa</span><span class="p p-Indicator">,</span><span class="nt"> scale</span><span class="p">:</span><span class="w"> </span><span class="nv">1000</span><span class="p p-Indicator">,</span><span class="nt"> sim</span><span class="p">:</span><span class="w"> </span><span class="nv">cavity_pressure</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">column</span><span class="p">:</span><span class="w"> </span><span class="nv">theta_deg</span><span class="p p-Indicator">,</span><span class="nt"> scale</span><span class="p">:</span><span class="w"> </span><span class="nv">0.0174533</span><span class="p p-Indicator">,</span><span class="nt"> sim</span><span class="p">:</span><span class="w"> </span><span class="nv">bend_angle</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">relative_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">first</span><span class="w">               </span><span class="c1"># compare changes from the first sample (zero offsets in the data)</span>
+</code></pre></div>
+<p><code>source</code> must give <code>name</code>, <code>doi</code>, <code>licence</code> and <code>file</code>, so a number in a
+report can be traced. The error is the NRMSE of the transfer (RMS difference
+over the largest measured change); the report adds the data's own noise floor
+(the scatter at repeated x over the same range), because a fit cannot be
+better than that. The fitted card is <code>kind: physical</code> on the reference
+(<code>--backend fem</code>), <code>effective</code> on the linear-tet backends, and it names the
+measurement in its provenance.</p>
+<p><strong>Check (a twin experiment, <code>tests/test_fit.py</code>):</strong> the "measurement" is the
+sphere's pressure-volume curve at a hidden E = 45 kPa. Fitting from 25 kPa
+gives back 45.18 kPa from the clean curve (0.4%), and 46.6 kPa from the same curve with 1% noise (3.5%, a cost of
+0.018, about the noise). A wrong modulus costs more than 10 times the right
+one on a time series, and four mutants of the code (dropped unit scale, dropped
+baseline, whole run instead of the loading branch, ignored filter) are caught.
+This tests the machinery against a known answer; it says nothing about a real
+actuator. That needs a measurement with a known geometry and material.</p>
+<h2 id="backends-and-material-models-m4">Backends and material models (M4)<a class="headerlink" href="#backends-and-material-models-m4" title="Permanent link">&para;</a></h2>
+<p>Same cases, cost and procedure on the SOFA backend, which offers more material
+laws. The question: can a different material law reproduce 500 g together with
+20 and 50 g? Both SOFA fits use a 5 mm mesh and dt = 0.05 ms (0.1 ms diverges
+for 500 g) and took about 1 h and 2.7 h on 8 cores.</p>
+<table>
+<thead>
+<tr>
+<th>Fit</th>
+<th>Parameters</th>
+<th>Cost</th>
+<th>20 g</th>
+<th>50 g</th>
+<th>500 g peak / t_peak (exp 4.52 mm / 2.7 ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MuJoCo, stable NH (<a href="https://github.com/BoredAmi/softsim/blob/main/softsim/materials/presets/ecoflex_00_10_drop_fit.yaml"><code>ecoflex_00_10_drop_fit</code></a>)</td>
+<td>E 54.8 kPa, ν 0.45, β 0.31 ms</td>
+<td>0.44</td>
+<td>15%</td>
+<td>3%</td>
+<td>11.0 mm / 6.6 ms</td>
+</tr>
+<tr>
+<td>SOFA, stable NH (<a href="https://github.com/BoredAmi/softsim/blob/main/calibrations/ecoflex_00_10_drop_sofa_stable_nh.yaml">calibration</a>)</td>
+<td>E 105 kPa, ν 0.45, β 0.89 ms</td>
+<td>0.54</td>
+<td>49%</td>
+<td>37%</td>
+<td>8.3 mm / 5.7 ms</td>
+</tr>
+<tr>
+<td>SOFA, one-term Ogden (<a href="https://github.com/BoredAmi/softsim/blob/main/softsim/materials/presets/ecoflex_00_10_drop_fit_sofa_ogden.yaml"><code>ecoflex_00_10_drop_fit_sofa_ogden</code></a>)</td>
+<td>μ 22.9 kPa, α 1.20, K 200 kPa, β 0.28 ms</td>
+<td>0.24</td>
+<td>3%</td>
+<td>11%</td>
+<td>9.0 mm / 5.3 ms</td>
+</tr>
+</tbody>
+</table>
+<p>(Percentages are NRMSE over the first contact phase. Reproduce the figures
+with <code>python tools/make_model_comparison.py</code>.)</p>
+<p><img alt="Best fit per backend and material model vs experiment" src="../media/model_comparison_overlay.png" /></p>
+<p><strong>What M4 shows:</strong></p>
+<ul>
+<li><strong>No material law fits 500 g.</strong> Each fit leaves 500 g about twice too deep
+  and twice too slow. The SOFA stable-NH fit is a compromise that fits nothing:
+  it stiffens to help 500 g and then misses 20 and 50 g by 37–49%.</li>
+<li><strong>Large-strain stiffening isn't the explanation.</strong> The Ogden fit chooses
+  α ≈ 1.2, <em>less</em> stiffening than Neo-Hookean (α = 2), and fits 20 and 50 g
+  within 3–11%, the best of the three. The M3 candidate "stronger large-strain
+  stiffening" is ruled out for this data.</li>
+<li><strong>Same model, different backend, different parameters.</strong> Stable NH on
+  MuJoCo and SOFA ends at E = 55 vs 105 kPa (compliant vs hard contact,
+  integrator damping; see <a href="../backends/sofa/">sofa.md</a>). Fitted values are
+  effective parameters of a backend + mesh + model combination.</li>
+<li><strong>Compressibility matters for the full-face impact.</strong> At peak, the SOFA fits
+  lose 27% (Ogden) and 36% (stable NH) of the specimen's volume. Silicone is
+  practically incompressible, so ν = 0.45–0.47 is wrong here; under local
+  indentation the material can flow aside and ν matters much less. Single runs
+  of the Ogden fit with a higher bulk modulus (not refitted):</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Bulk modulus (ν)</th>
+<th>20 g peak (exp 3.74)</th>
+<th>500 g peak (exp 4.52)</th>
+<th>500 g t_peak (exp 2.7)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200 kPa (0.466), fitted</td>
+<td>3.82 mm</td>
+<td>8.96 mm</td>
+<td>5.3 ms</td>
+</tr>
+<tr>
+<td>1 MPa (0.493)</td>
+<td>3.54 mm</td>
+<td>7.65 mm</td>
+<td>5.2 ms</td>
+</tr>
+<tr>
+<td>5 MPa (0.499)</td>
+<td>3.31 mm</td>
+<td>6.54 mm</td>
+<td>4.6 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Near-incompressibility closes about 45% of the 500 g peak gap while 20 g
+  stiffens 12%, partly linear-tetrahedron locking. A joint refit with the bulk
+  modulus free is prepared but <strong>not run yet</strong>
+  (<a href="https://github.com/BoredAmi/softsim/blob/main/calibrations/ecoflex_00_10_drop_sofa_ogden_bulk.yaml"><code>ecoflex_00_10_drop_sofa_ogden_bulk.yaml</code></a>,
+  about 3–4 h; repeat at a 3.5 mm mesh to separate locking from material).
+- <strong>The remaining gap</strong> (500 g still about 45% too deep and 70% too slow at
+  ν ≈ 0.5) points to what no tested model has: rate-dependent stiffening
+  (Prony viscoelasticity; Rayleigh β can't represent it) and/or the compliant
+  table.
+- <strong>SOFA contact failed at extreme rim flaring (fixed).</strong> In the Ogden 500 g run the
+  specimen's rim spreads to 45 mm radius and, from 7.6 ms (after the peak at
+  5.3 ms), rim vertices passed up to 8.5 mm through the ground. No element
+  inverts. The cause was the intersection's alarm distance (0.4 mm) against the
+  rim's 0.6 mm per step when it snaps back onto the ground; the backend now
+  widens it to the fastest vertex's travel
+  (<a href="../backends/sofa/#known-limits">backends/sofa.md</a>: 2.83 mm to 0.006 mm at 8.8 ms, peak unchanged). The
+  500 g peak and timing were before this and are reproduced (9.0 mm / 5.3 ms); the fit's stored 500 g NRMSE
+  (58%) included the artefact, and re-simulated without it the 500 g NRMSE is 79% (2026-11-12). The Ogden fit's
+  cost of 0.24 above was minimised with the artefact in its 500 g term.
+- <strong>Re-simulating these fits needs their own setup.</strong> They were made (28-29 Oct) before the measured 11° in-plane
+  landing tilt of the 500 g drop was applied to every re-simulation (31 Oct); with the tilt, both SOFA fits blow up
+  at 5 mm / 0.05 ms (8.3-8.4 ms, a real instability, not the speed guard) and the figures were left without 500 g.
+  Their calibration files now say <code>tilt: false</code>, and <code>tools/make_model_comparison.py</code> re-simulates each fit as it
+  was fitted. Whether SOFA survives the tilted impact at a finer mesh or step is open.</p>
+<h2 id="after-the-first-contact-tack-and-the-hopping-specimen">After the first contact: tack and the hopping specimen<a class="headerlink" href="#after-the-first-contact-tack-and-the-hopping-specimen" title="Permanent link">&para;</a></h2>
+<p>M3 and M4 compared only the first ~8 ms, because M3 had read the later motion
+as the table moving. That was wrong (see the findings above): the specimen
+itself hops. The whole first 100 ms is usable data, and it shows that the
+simulations got the physics after the first contact wrong. Without any
+adhesion, the simulated 20 g weight flies off at 1.2 m/s and rises 70 mm. The
+real one never leaves the specimen.</p>
+<p><strong>What the recordings show:</strong></p>
+<ul>
+<li><strong>20 g: the weight sticks.</strong> It comes off the compressed material at
+  1.0–1.2 m/s relative to the base, as fast as in the simulation, and then
+  stops within about 1 mm and stays there for 90 ms while rocking. Momentum
+  says why: 20 g × 1.0 m/s ≈ 42 g × 0.45 m/s, and weight plus specimen then
+  hop together at about 0.45 m/s (7.6 mm apex). The weight is stuck to the
+  tacky Ecoflex and pulls the whole specimen off the cloth.</li>
+<li><strong>50 g: the weight peels off.</strong> With 2.5× the momentum, the bond can't hold
+  the weight. It separates while rotating (a peel from one edge) at about
+  1 m/s relative to the specimen, the same as the simulation up to 22 ms.
+  After that it tumbles away from the camera and lands on the table <em>behind</em>
+  the specimen (it lies still there from ~210 ms). Its image height then mixes
+  height with depth, so the side view can't measure its rebound. The specimen
+  still hops 8 mm.</li>
+<li><strong>500 g: the weight lifts the specimen with it</strong> by 20 mm, and separates
+  only around 70–100 ms.</li>
+<li><strong>The cloth comes along.</strong> The green cloth next to the specimen rises with
+  it and ripples, and the hop decelerates at 13–20 m/s², faster than g: the
+  specimen sticks to the cloth too.</li>
+</ul>
+<p><strong>Model.</strong> Two scene elements, both general features of softsim:</p>
+<ul>
+<li><strong>Adhesion</strong> (<code>material.adhesion: {strength, range}</code>), an exponential
+  cohesive law for the normal traction between the soft surface and what it
+  touches (t = σ (g/δ) e^(1 − g/δ); work of separation e·σ·δ). Bonds form on
+  contact and break beyond 6δ. Verified against analytic equilibria on MuJoCo
+  and SOFA (<code>tests/test_adhesion.py</code>).</li>
+<li><strong>A compliant support</strong> (<code>support:</code> in the drop test): a carrier plate under
+  the specimen that can lift off the table against a spring and damper. It is
+  a lumped stand-in for the cloth, and its parameters are effective ones.</li>
+</ul>
+<p><strong>Fit</strong> (<code>calibrations/ecoflex_00_10_drop_adhesion_support.yaml</code>, MuJoCo,
+5 mm mesh). Compared quantities:</p>
+<ul>
+<li>20 g: weight position relative to the specimen base and specimen lift over
+  0–100 ms;</li>
+<li>50 g: relative position over 0–15 ms (later, the flipping weight's centroid
+  is not its centre of mass) and specimen lift over 0–100 ms.</li>
+</ul>
+<p>500 g is not used (below).</p>
+<p>Only the tack and support are fitted; the bulk material stays at its M3
+first-contact values (preset
+<a href="https://github.com/BoredAmi/softsim/blob/main/softsim/materials/presets/ecoflex_00_10_drop_fit_tacky.yaml"><code>ecoflex_00_10_drop_fit_tacky</code></a>;
+<code>softsim sweep scenarios/drop_test/sweeps/fitted_tack_support.yaml</code> runs all five weights with it):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Fitted value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tack strength σ</td>
+<td>14.6 kPa</td>
+</tr>
+<tr>
+<td>tack range δ</td>
+<td>0.29 mm (work of separation e·σ·δ ≈ 11.6 J/m²)</td>
+</tr>
+<tr>
+<td>support stiffness, damping, mass</td>
+<td>33 N/m, 0.35 N·s/m, 45 g</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Observable</th>
+<th>Without tack (rigid table)</th>
+<th>With tack + support</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g</td>
+<td>weight rel. to base, 0–100 ms</td>
+<td>flies off (−75 mm at 100 ms)</td>
+<td>stays seated; NRMSE 25%</td>
+</tr>
+<tr>
+<td>20 g</td>
+<td>specimen hop</td>
+<td>6.2 mm, too slow</td>
+<td>7.0 mm (exp. 7.8), lands at ~80 ms; NRMSE 12%</td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>weight rel. to base, 0–15 ms</td>
+<td></td>
+<td>NRMSE 6% (first contact and separation)</td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>specimen hop</td>
+<td>29 mm</td>
+<td>8 mm (exp. 9); NRMSE 11%</td>
+</tr>
+</tbody>
+</table>
+<p>Total cost 0.133 (90 evaluations, flat from about the 55th), against 0.48 at
+the first initial guess.</p>
+<p><strong>What to make of it:</strong></p>
+<ul>
+<li><strong>Tack, not dissipation, is why the simulations flew too high.</strong> In the
+  MuJoCo model the weight already leaves the compressed specimen at the
+  measured speed. What was missing is that it stays stuck.</li>
+<li><strong>The parameters are effective, and tied to the mesh.</strong> The tack is a
+  cohesive law whose process zone (~4 mm) the 5 mm mesh doesn't resolve. On a
+  3.5 mm mesh the same values let the 20 g weight peel off. The support is a
+  lumped stand-in for a cloth that sticks, stretches and ripples, so 45 g and
+  33 N/m are not the cloth's mass and stiffness.</li>
+<li><strong>Checked:</strong> halving the timestep changes the errors by less than 0.01.</li>
+<li><strong>The cloth pulls back harder than gravity</strong> (13–20 m/s² in the
+  recordings). The fit captures that through the spring, which is why the
+  simulated hop is about 10% too low but lands on time.</li>
+<li><strong>500 g is outside this model</strong> (below). With its first contact 2.4× too
+  deep, the weight rebounds too fast for any bond and tears off.</li>
+</ul>
+<p><img alt="Whole trajectories after contact: simulation vs experiment" src="../media/after_contact_trajectories.png" /></p>
+<h3 id="every-weight-whole-bounce-validation">Every weight, whole bounce (validation)<a class="headerlink" href="#every-weight-whole-bounce-validation" title="Permanent link">&para;</a></h3>
+<p><code>python tools/validate_drop_bounces.py</code> (about 1 min on 8 cores) runs all five
+weights with each recording's measured impact for 200 ms. It compares the
+first contact, the weight's rebound (its height above its contact height) and
+the specimen's hop (<code>runs/bounce_validation/metrics.csv</code>, figure
+<code>docs/media/bounce_validation.png</code>). It covers the two MuJoCo models above
+and, since 2026-10-31, the MuJoCo and SOFA transfers of the physical card,
+plus the 3D reference's first contacts.</p>
+<ul>
+<li>The transfers reproduce the first contact best: 6–8% at 20 g, 8–14% at
+  50 g.</li>
+<li>They have no tack, so the weight then flies 38 mm high instead of staying
+  seated.</li>
+<li>They diverge where their strong relaxation lets heavy weights crush the
+  specimen: MuJoCo from 100 g, SOFA at 500 g.</li>
+</ul>
+<p>(Those numbers are for the transfers of the earlier physical card, 143 kPa /
+0.69 / 2 ms, run on 2026-10-31. With the joint card below (2026-11-02), the
+table's first-contact NRMSE against the recordings is 13% (MuJoCo) and 4% (SOFA)
+at 20 g and 6% and 5% at 50 g; the 3D reference itself gives 14% and 3%. The
+weight now rises 72 (MuJoCo) and 64 mm (SOFA) at 20 g, still with no tack. MuJoCo
+diverges only at 500 g, like SOFA: its 200 g run completes. The run was done
+with the MuJoCo timing fix of that day, see below.)</p>
+<p><code>python tools/make_comparison_media.py</code> writes <code>docs/media/compare_wXXX.gif</code>:
+for each weight, the recording next to the MuJoCo tack-and-support model,
+with the same scale and view angle.</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th></th>
+<th>First peak mm (t ms)</th>
+<th>Weight max rise mm</th>
+<th>Specimen hop mm (t ms)</th>
+<th>Specimen landed ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g</td>
+<td>experiment</td>
+<td>3.7 (3.3)</td>
+<td>9.1</td>
+<td>7.8 (33)</td>
+<td>73</td>
+</tr>
+<tr>
+<td></td>
+<td>rigid, no tack</td>
+<td>3.3 (3.0)</td>
+<td><strong>71</strong></td>
+<td>6.2 (44)</td>
+<td>83</td>
+</tr>
+<tr>
+<td></td>
+<td>tack + support</td>
+<td>3.5 (3.2)</td>
+<td>7.5</td>
+<td>7.0 (41)</td>
+<td>74</td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>experiment</td>
+<td>4.3 (3.7)</td>
+<td>10.1 (to 15 ms)</td>
+<td>9.2 (48)</td>
+<td>79</td>
+</tr>
+<tr>
+<td></td>
+<td>rigid, no tack</td>
+<td>4.3 (3.6)</td>
+<td>10.8</td>
+<td><strong>29</strong> (85)</td>
+<td>161</td>
+</tr>
+<tr>
+<td></td>
+<td>tack + support</td>
+<td>4.5 (3.8)</td>
+<td>9.2</td>
+<td>7.8 (44)</td>
+<td>78</td>
+</tr>
+<tr>
+<td>100 g (edge)</td>
+<td>experiment</td>
+<td>rolls off the rim</td>
+<td>falls 25 mm beside it</td>
+<td>11.4 (48)</td>
+<td>94</td>
+</tr>
+<tr>
+<td></td>
+<td>tack + support</td>
+<td>8.1 (6.1)</td>
+<td>48 (bounces up)</td>
+<td>0.1</td>
+<td></td>
+</tr>
+<tr>
+<td>200 g (edge)</td>
+<td>experiment</td>
+<td>4.5 (3.3)</td>
+<td>42</td>
+<td>18.9 (50)</td>
+<td>108</td>
+</tr>
+<tr>
+<td></td>
+<td>tack + support</td>
+<td>8.7 (4.6)</td>
+<td>96</td>
+<td>0.3</td>
+<td></td>
+</tr>
+<tr>
+<td>500 g</td>
+<td>experiment</td>
+<td>4.5 (2.7)</td>
+<td>31</td>
+<td>21.8 (66)</td>
+<td>after 200</td>
+</tr>
+<tr>
+<td></td>
+<td>tack + support</td>
+<td>9.0 (5.0)</td>
+<td>105</td>
+<td><strong>20.1 (62)</strong></td>
+<td>111</td>
+</tr>
+<tr>
+<td></td>
+<td>(same, dropped flat)</td>
+<td>10.7 (6.7)</td>
+<td>126</td>
+<td>10.4 (54)</td>
+<td>93</td>
+</tr>
+</tbody>
+</table>
+<p>The 100, 200 and 500 g simulations get each recording's measured in-plane tilt
+at contact (−7.6°, −8.7° and −11.0°; <code>tools/measure_tilts.py</code>,
+<code>softsim.experiments.video.tilt</code>). It is measured from the straight side edges
+of the dark weights' silhouettes 15 frames before contact, with 0.5–1.6 px
+residuals and less than 1.3° of spread. The brass weights' reflections and
+knobs make their edges unusable, so 20 and 50 g stay untilted. The rigid model
+gives the same as tack + support for 100–500 g within a few mm. All weight
+numbers after 15 ms are unusable for 50 g: the weight flips.</p>
+<p><img alt="Every weight: first contact, weight rebound and specimen hop vs experiment" src="../media/bounce_validation.png" /></p>
+<ul>
+<li><strong>20 g and 50 g are reproduced over the whole bounce:</strong> hop height within
+  10–15%, landing time within 2 ms, and the 20 g weight stays seated. That is
+  what the tack and the support were fitted to.</li>
+<li><strong>100, 200 and 500 g all fail.</strong> In every simulation the weight
+  rebounds 45–130 mm and leaves the specimen behind. The real heavy weights
+  rise only 30–40 mm (or roll off) and carry the specimen up 11–22 mm with
+  them. Two of the three are not comparable impacts, though: the simulations
+  drop every weight flat, and the heavy weights don't land flat.</li>
+<li><strong>200 g</strong> comes down strongly tilted: its bottom face is visible from
+    the camera above. It digs in with its edge and keeps rotating, so its
+    shallow 4.5 mm "first contact" is an edge impact, not evidence of a
+    stiffer material.</li>
+<li><strong>100 g</strong> lands 14 mm off centre and tilted. It rolls off the rim,
+    falls 25 mm beside the specimen and still drags the specimen up 11 mm.</li>
+<li><strong>500 g</strong> lands least tilted: 11° in the image plane, rotating only 2°
+    in the first 20 ms, with an unknown out-of-plane tilt.<ul>
+<li>Applying the measured tilt brings the specimen's hop from 10 to 20 mm
+  (measured 21.8 mm) and its first contact from 10.7 to 9.0 mm.</li>
+<li>It still stops at 4.5 mm in 2.7 ms in the recording.</li>
+<li>Its rise height means an upward speed of about 0.8 m/s (restitution
+  about 0.3), against about 1.4 m/s simulated, so the real impact is
+  still stiffer and more lossy than the model.</li>
+<li>The tack doesn't change it.</li>
+</ul>
+</li>
+<li><strong>Next:</strong> compare the heavy weights only with the measured attitude. The
+  in-plane tilt can be measured. The out-of-plane tilt needs either a second
+  view or a 3D fit in which it is a free parameter. Until then, the material
+  question rests on the flat impacts (20 and 50 g) and on 500 g (below).</li>
+</ul>
+<h3 id="the-500-g-first-contact">The 500 g first contact<a class="headerlink" href="#the-500-g-first-contact" title="Permanent link">&para;</a></h3>
+<p>The 500 g weight stops within 4.5 mm in 2.7 ms. No simulation so far gets
+close: every material law, both backends and a near-incompressible bulk
+modulus leave it at 6.5–11 mm and 4.6–6.6 ms (M4). Three checks so far:</p>
+<ul>
+<li><strong>The tracking is right.</strong> Tracking the top edge of the weight's knob
+  against the plain backdrop, independently of the tracker, gives the same
+  motion within 0.5–1 mm. The weight travels almost freely for the first
+  ~1 ms, then decelerates at ~1750 m/s² (~900 N), and comes back up at
+  ~0.85 m/s.</li>
+<li><strong>It lands tilted, which explains part of it.</strong> Before impact the weight
+  is tilted by 11° in the image plane (side-edge fits, see the bounce
+  validation). The simulation with that tilt peaks at 9.0 mm at 5.0 ms
+  instead of 10.7 mm at 6.7 ms: closer, but not close.</li>
+<li><strong>No elastomer explanation fits.</strong> As a linear spring, the stop needs
+  ~170 kN/m, an effective modulus above 1 MPa, against ~55 kPa from the light
+  weights. That is 19× the 50 g case's stiffness, with a shorter time to peak
+  than 20 g despite 25× the mass. No string or guide is visible above the
+  weight.</li>
+<li>
+<p><strong>It is not a modelling artefact of the tetrahedral backends.</strong> The
+  locking-free axisymmetric reference (<a href="../reference_fem/">reference_fem.md</a>)
+  is nearly incompressible (ν = 0.4995) with sticking contact on both faces,
+  so it has none of the suspects: locking, volume loss, friction slip. It
+  still peaks at 8.1 mm (E = 100 kPa) and 6.4 mm (E = 200 kPa), against the
+  measured 4.5 mm. Statically, sticking faces stiffen 26% compression only
+  1.7× over frictionless.</p>
+</li>
+<li>
+<p><strong>Rate dependence does not explain it either.</strong> This was tested with Prony
+  viscoelasticity on MuJoCo: 48 combinations of instantaneous modulus
+  E0 = 100–800 kPa, relaxing fraction g = 0.5–0.95 and τ = 0.3–3 ms, each case
+  with its measured impact. Every material that stops 500 g near the
+  measured depth stops 50 g at a quarter of its measured depth. For example,
+  E0 = 800 kPa, g = 0.5, τ = 1 ms gives 3.85 mm at 2.9 ms for 500 g (measured
+  4.52 mm at 2.7 ms) but 1.10 mm at 1.1 ms for 50 g (measured 4.31 mm at
+  3.7 ms). Both weights hit at the same speed, so their strain rates are
+  similar, and no linear viscoelastic spectrum can stiffen one and not the
+  other. (Materials with a soft long-term modulus made MuJoCo diverge under
+  500 g; the trend is clear without them.)</p>
+</li>
+<li><strong>It does not land flat.</strong> The frame montages show the weight squashing
+  the specimen into a wedge, and it rotates only 2° in the first 20 ms. Its
+  side edges give an 11° in-plane tilt (the earlier 7° estimate is
+  superseded). With that tilt, MuJoCo's first contact goes from 10.7 to
+  9.0 mm and the specimen's hop from 10 to 20 mm (measured 21.8 mm).</li>
+<li><strong>Out-of-plane tilt does not explain it.</strong> That tilt can't be seen from one
+  view, so it was swept on MuJoCo (<code>python tools/sweep_out_of_plane_tilt.py</code>,
+  first-contact fit card, measured impact and in-plane tilt):</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Out-of-plane tilt</th>
+<th>0°</th>
+<th>5°</th>
+<th>10°</th>
+<th>15°</th>
+<th>20°</th>
+<th>measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>First contact [mm]</td>
+<td>9.08</td>
+<td>8.69</td>
+<td>8.42</td>
+<td>8.04</td>
+<td>7.53</td>
+<td><strong>4.52</strong></td>
+</tr>
+<tr>
+<td>Time of peak [ms]</td>
+<td>4.8</td>
+<td>4.6</td>
+<td>4.4</td>
+<td>4.2</td>
+<td>4.0</td>
+<td><strong>2.67</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Even 20°, more than the side view could hide, takes off only 17% of a 2×
+  gap. The MuJoCo transfer of the physical card (Prony g = 0.94) inverts
+  elements under 500 g and can't be used for this case.</p>
+<ul>
+<li><strong>The force the film implies.</strong> The force on the
+  weight at its peak indentation is m·(a + g), with the deceleration a taken
+  from a parabola through the tracked indentation (±0.8 ms around the peak):</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Weight</th>
+<th>Peak indentation</th>
+<th>Time of peak</th>
+<th>Deceleration at peak</th>
+<th>Force at peak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g</td>
+<td>3.74 mm</td>
+<td>3.33 ms</td>
+<td>750 m/s²</td>
+<td>15 N</td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>4.31 mm</td>
+<td>3.67 ms</td>
+<td>1285 m/s²</td>
+<td>65 N</td>
+</tr>
+<tr>
+<td>200 g (tilted)</td>
+<td>4.47 mm</td>
+<td>3.33 ms</td>
+<td>615 m/s²</td>
+<td>125 N</td>
+</tr>
+<tr>
+<td>500 g</td>
+<td>4.52 mm</td>
+<td>2.67 ms</td>
+<td>1572 m/s²</td>
+<td>791 N</td>
+</tr>
+</tbody>
+</table>
+<p>The tracked decelerations hardly depend on the mass, which spans 25×. 50 and
+  500 g hit at the same speed and reach nearly the same indentation: 4.3
+  against 4.5 mm, in 3.7 against 2.7 ms. The 500 g recording needs 12× the
+  force. <strong>This is not model-free, and it does not rule the specimen out.</strong> The
+  two weights do not deform the specimen the same way: the 50 g weight is 27 mm
+  wide and indents a 40 mm face, the 500 g weight is 43 mm wide and compresses
+  all of it, so the same depth need not mean the same force. What stands is the
+  simulations above: full-face runs on the reference still stop at 6.4-8.1 mm.</p>
+<p>The cause is still unknown. The candidates left are the material under
+full-face confinement, the setup and the measurement:</p>
+<ul>
+<li>what is under the specimen (cloth and table compliance, a stiffer support
+  under heavy loads);</li>
+<li>the side view's projection of depth motion: the camera looks down at 18.6°,
+  so a weight moving away from it appears to rise by 0.32× that motion.</li>
+</ul>
+<p>500 g is kept out of the fits because no model matches it and the cause is open.</p>
+<h2 id="what-the-fitted-modulus-means">What the fitted modulus means<a class="headerlink" href="#what-the-fitted-modulus-means" title="Permanent link">&para;</a></h2>
+<p>All fits on this page are <em>effective</em> models of a backend, mesh and contact
+model, not the silicone's material constants. The axisymmetric reference
+solver (<a href="../reference_fem/">reference_fem.md</a>) cross-checks this:</p>
+<ul>
+<li>it agrees with MuJoCo's 3.5 mm mesh within 2–5% for static indentation;</li>
+<li>in the drop, MuJoCo's impact loses energy to friction slip and contact
+  mechanics that the reference doesn't have;</li>
+<li>on the reference, the first contacts need <strong>E ≈ 100–130 kPa</strong> plus some
+  damping, consistent with the datasheet (≈ 94 kPa). MuJoCo's 55 kPa
+  compensates for MuJoCo's own losses.</li>
+</ul>
+<p>Use the MuJoCo presets with MuJoCo at their mesh size. Take the material's
+actual modulus from the reference.</p>
+<h2 id="a-physical-card-on-the-3d-reference-fem-backend">A physical card on the 3D reference (fem backend)<a class="headerlink" href="#a-physical-card-on-the-3d-reference-fem-backend" title="Permanent link">&para;</a></h2>
+<p>The 3D locking-free reference (<a href="../reference_fem/">reference_fem.md</a>) runs the
+drop test with each recording's measured offset, spin and tilt. It answers
+the material question without the axisymmetric solver's limits: the 20 g
+weight lands 6 mm off centre and spinning. The card:</p>
+<ul>
+<li>Neo-Hookean, E0 = 143 kPa, ν = 0.4995;</li>
+<li>one Prony term, g = 0.69 at τ = 2 ms;</li>
+<li>sticking contact.</li>
+</ul>
+<p>These are the axisymmetric fit's values. Nothing was refitted for 3D.</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Measured first contact</th>
+<th>3D reference, physical card</th>
+<th>NRMSE (first contact)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 g (6 mm off centre, 317°/s)</td>
+<td>3.74 mm at 3.33 ms</td>
+<td>3.94 mm at 3.00 ms</td>
+<td><strong>6.6%</strong></td>
+</tr>
+<tr>
+<td>50 g</td>
+<td>4.31 mm at 3.67 ms</td>
+<td>4.41 mm at 3.40 ms</td>
+<td><strong>9.9%</strong></td>
+</tr>
+<tr>
+<td>500 g (11° in-plane tilt)</td>
+<td>4.52 mm at 2.67 ms</td>
+<td>7.41 mm at 4.20 ms</td>
+<td>60% (over 0–6 ms)</td>
+</tr>
+</tbody>
+</table>
+<p>(Each run takes 4–9 minutes on a laptop with a 5 mm quadratic mesh.)</p>
+<ul>
+<li><strong>One physical, locking-free material reproduces both light weights within
+  10%.</strong> The axisymmetric joint fit's 20 g/50 g conflict (15–20%) was the
+  centred approximation of the off-centre 20 g, not the material.</li>
+<li><strong>The card describes the silicone at impact rates.</strong> Its instantaneous
+  modulus is 143 kPa, relaxing about 70% within a few milliseconds, so the
+  long-term modulus is about 45 kPa. The Marechal et al. tension data give
+  31 kPa (Neo-Hookean over 0–200%) at 0.23/s. Those data probably understate
+  the modulus, since their strain was measured at the crosshead. So the
+  slow tension test and the relaxed drop card are consistent within that
+  uncertainty, while impacts see a 3× stiffer material.</li>
+<li><strong>500 g is not reproduced</strong> here either, now without any backend artefact:
+  no locking, no contact losses, the measured tilt, a material that fits the
+  light weights. It stops 1.6× deeper and 1.6× later than recorded. The
+  out-of-plane tilt and the model-free force check above show it isn't the
+  material.</li>
+<li><strong>Transfer to MuJoCo.</strong> The reference runs are saved as tracks
+  (<code>tools/make_reference_tracks.py</code>), and MuJoCo is calibrated against them
+  (<code>calibrations/transfer_ecoflex_00_10_mujoco.yaml</code>, 3 min). At a 5 mm
+  mesh and ν = 0.45, MuJoCo reproduces the physical card with E0 = 66 kPa,
+  g = 0.94, τ = 5.5 ms, within <strong>3.4% (50 g) and 9.7% (20 g)</strong> of the
+  reference. Those are MuJoCo's effective values for this card, and its
+  error bar.</li>
+<li><strong>Transfer to SOFA</strong> (<code>calibrations/transfer_ecoflex_00_10_sofa.yaml</code>,
+  43 min): E0 = 79.6 kPa, g = 0.77, τ = 2.7 ms, within <strong>2.6% (50 g) and
+  6.8% (20 g)</strong>. SOFA needs much less extra relaxation than MuJoCo (g 0.77
+  against 0.94), because MuJoCo loses impact energy on its own through
+  friction slip and numerical damping
+  (<a href="../backends/mujoco/#energy-and-contact-fidelity">backends/mujoco.md</a>).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>E0</th>
+<th>g</th>
+<th>τ</th>
+<th>Error vs reference (20 / 50 g)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Physical (3D reference)</td>
+<td>143 kPa</td>
+<td>0.69</td>
+<td>2.0 ms</td>
+<td>–</td>
+</tr>
+<tr>
+<td>SOFA, 5 mm, ν = 0.45</td>
+<td>79.6 kPa</td>
+<td>0.77</td>
+<td>2.7 ms</td>
+<td>6.8% / 2.6%</td>
+</tr>
+<tr>
+<td>MuJoCo, 5 mm, ν = 0.45</td>
+<td>66 kPa</td>
+<td>0.94</td>
+<td>5.5 ms</td>
+<td>9.7% / 3.4%</td>
+</tr>
+<tr>
+<td>- <strong>Refined in 3D</strong> (E0, g, τ free, both cases;</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>calibrations/ecoflex_00_10_drop_fem_prony.yaml</code>, 40 evaluations, 5.4 h):</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>E0 = 147 kPa, g = 0.70, τ = 2.24 ms. The cost falls only from 0.084 to</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>0.080 (first contact NRMSE 9.5% for 20 g and 6.4% for 50 g; peak indentation</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3.86 vs 3.74 mm and 4.31 vs 4.31 mm). The 3D fit confirms the card: E0 and</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>g move by 3% or less, τ by 12%, all within the spread between the two</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>weights. The card and its transfers keep the values above.</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02">Joint fit: the drop and the datasheet (GPU box, 2026-11-02)<a class="headerlink" href="#joint-fit-the-drop-and-the-datasheet-gpu-box-2026-11-02" title="Permanent link">&para;</a></h3>
+<p>The drop-only card relaxes to E∞ = E0 (1 − g) = 44 kPa, about half the ~94 kPa
+that the datasheet's 100% modulus (55 kPa) implies: impacts alone cannot say how
+much of the stiffness relaxes within milliseconds. <code>calibrations/ecoflex_00_10_drop_fem_joint.yaml</code>
+fits the 20 and 50 g drops and that datasheet point together (weight 0.5; the
+datasheet moduli are approximate: Roels et al. measured 93 kPa against a
+datasheet 69 kPa for Ecoflex 00-30). The first 40 evaluations ran on the
+laptop; the next 40 resumed from their log here.</p>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>E0</th>
+<th>g</th>
+<th>τ</th>
+<th>E∞</th>
+<th>20 g / 50 g NRMSE</th>
+<th>Datasheet term</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drop only (40 evaluations)</td>
+<td>147 kPa</td>
+<td>0.70</td>
+<td>2.24 ms</td>
+<td>44 kPa</td>
+<td>9.5% / 6.4%</td>
+<td>40–60% off</td>
+<td>0.080</td>
+</tr>
+<tr>
+<td>Joint, after 40 evaluations</td>
+<td>143 kPa</td>
+<td>0.53</td>
+<td>1.23 ms</td>
+<td>68 kPa</td>
+<td>13.3% / 5.2%</td>
+<td>28%</td>
+<td>0.130</td>
+</tr>
+<tr>
+<td><strong>Joint, after 80 evaluations</strong></td>
+<td><strong>190 kPa</strong></td>
+<td><strong>0.60</strong></td>
+<td><strong>0.58 ms</strong></td>
+<td><strong>76 kPa</strong></td>
+<td>14.3% / 2.9%</td>
+<td>20%</td>
+<td><strong>0.108</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The datasheet pulls the relaxed modulus up from 44 to 76 kPa</strong> (94 kPa
+  implied) at the price of the 20 g first contact (9.5% to 14.3%); the 50 g one
+  improves (peak 4.310 vs 4.314 mm recorded). The card turns stiffer and relaxes
+  faster: 190 kPa for 0.6 ms.</li>
+<li><strong>Forty evaluations were not enough.</strong> At 40 the best point was still the last
+  one and τ was drifting down; the cost fell from 0.130 to 0.108 over the next</li>
+<li>It is nearly flat at the end (0.1099 at evaluation 70, 0.1080 at 80), but
+  not proven converged.</li>
+<li><strong>Speed.</strong> A 20 g or 50 g evaluation takes 58–69 s on the GPU and 73–83 s on the CPU of
+  this box (the laptop's was ~8 min). Replaying the first logged evaluation
+  reproduces the laptop's numbers to 5e-8 (20 g) and 7e-13 (50 g).</li>
+</ul>
+<p>The reference runs of this card (<code>tools/make_reference_tracks.py</code>) are the
+target of the backend transfers (5 mm mesh, 2 min on MuJoCo, 20 min on SOFA):</p>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>E0</th>
+<th>g</th>
+<th>τ</th>
+<th>Error vs reference (20 / 50 g)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Joint physical card (3D reference)</td>
+<td>190 kPa</td>
+<td>0.60</td>
+<td>0.58 ms</td>
+<td>–</td>
+</tr>
+<tr>
+<td>SOFA, 5 mm, ν = 0.45</td>
+<td>86.1 kPa</td>
+<td>0.70</td>
+<td>2.47 ms</td>
+<td>8.5% / 1.6%</td>
+</tr>
+<tr>
+<td>MuJoCo, 5 mm, ν = 0.45</td>
+<td>64.9 kPa</td>
+<td>0.68</td>
+<td>7.82 ms</td>
+<td>8.6% / 3.3%</td>
+</tr>
+</tbody>
+</table>
+<p>The transfers again soften the material by 55–66% (linear tetrahedra lock) and
+change the relaxation. Their peaks: 3.40 and 3.37 mm at 20 g against the
+reference's 3.85, and 4.34 and 4.50 mm at 50 g against 4.31.</p>
+<p><strong>Two things that bit on this run, both fixed.</strong>
+- <strong>Stale replays.</strong> A calibration's log was keyed by the <em>path</em> of its tracks,
+  not their contents. After the reference tracks were regenerated from the new
+  card, both transfers replayed every evaluation fitted to the old tracks and
+  finished in minutes with a result for the wrong reference. Log entries now
+  record a digest of the track files and are ignored when it differs
+  (<code>tests/test_experiments.py</code>). Logs from before the digest are still trusted.
+- <strong>Calibration on a GPU.</strong> <code>--jobs 2</code> forked its workers after the parent had
+  used CUDA, so every 3D case crashed its worker; JAX also reserved 75% of the
+  GPU per process. Workers are now spawned and memory is allocated on demand.</p>
+<p>The MuJoCo numbers above were made after a timing fix in the MuJoCo backend:
+<code>mj_step</code> computes positions before it integrates, so softsim reported
+positions one step late and evaluated its explicit forces from them. On the
+adhesion fit's best point, the fix moves the first-contact NRMSE by 1.5–3%
+(20 g 0.1822 to 0.1795, 50 g 0.0835 to 0.0808) and the 50 g time of the peak by
+one step (3.78 to 3.57 ms). The MuJoCo rows of the earlier tables (tack and
+support, rigid) were fitted with the old timing.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

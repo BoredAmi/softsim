@@ -1,0 +1,2207 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../roadmap/">
+      
+      
+        <link rel="next" href="../new_machine/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Open decisions - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#open-decisions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Open decisions
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../materials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../magnetic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../experiments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-mujoco-timing-fix-keep-or-revert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. MuJoCo timing fix: keep or revert
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-joint-drop-datasheet-fit-stop-or-continue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Joint drop + datasheet fit: stop or continue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-m7-real-data-for-the-pneumatic-finger-blocks-compare-with-a-real-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. M7 real data for the pneumatic finger (blocks "compare with a real finger")
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-m8-rod-backend-which-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. M8 rod backend: which library
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-rigid-tendon-option-for-cables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Rigid-tendon option for cables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-the-references-static-friction-creeps-at-a-rate-set-by-the-time-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. The reference's static friction creeps, at a rate set by the time step
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-mujoco-timing-fix-keep-or-revert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. MuJoCo timing fix: keep or revert
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-joint-drop-datasheet-fit-stop-or-continue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Joint drop + datasheet fit: stop or continue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-m7-real-data-for-the-pneumatic-finger-blocks-compare-with-a-real-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. M7 real data for the pneumatic finger (blocks "compare with a real finger")
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-m8-rod-backend-which-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. M8 rod backend: which library
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-rigid-tendon-option-for-cables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Rigid-tendon option for cables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-the-references-static-friction-creeps-at-a-rate-set-by-the-time-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. The reference's static friction creeps, at a rate set by the time step
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="open-decisions">Open decisions<a class="headerlink" href="#open-decisions" title="Permanent link">&para;</a></h1>
+<p>Each entry: the question, the options, what I recommend and why, and what I did
+meanwhile so nothing waits on it. Answer by editing the <strong>Decision</strong> line (or
+tell me in the chat); I will then do what the entry says.</p>
+<h2 id="1-mujoco-timing-fix-keep-or-revert">1. MuJoCo timing fix: keep or revert<a class="headerlink" href="#1-mujoco-timing-fix-keep-or-revert" title="Permanent link">&para;</a></h2>
+<p>Since the prescribed-motion work, MuJoCo's <code>step</code> is split <code>mj_step1</code> → explicit
+forces → <code>mj_step2</code>, and <code>state()</code> recomputes kinematics, because after
+<code>mj_step</code> MuJoCo's positions are one step stale (the forces and the reported
+state were a step old). It moves documented MuJoCo numbers by 1.5–3% (nrmse)
+and one 0.1 ms step in the time of a peak; the committed MuJoCo fits and
+transfers used the old timing.</p>
+<ul>
+<li><strong>Keep (recommended).</strong> The old timing is a bug (a force computed from last
+  step's positions); the new numbers are the correct ones. Cost: the committed
+  MuJoCo fits/transfers should be re-run when convenient (hours of MuJoCo time, not measured here); nothing else changes.</li>
+<li><strong>Revert.</strong> Hand-edit <code>softsim/backends/mujoco/backend.py</code> (it shares the file
+  with prescribed motion). Keeps old numbers, keeps the bug.</li>
+</ul>
+<p><strong>Decision:</strong> Keep the fix (my recommendation, applied 2026-11-03 under your "follow your recommendations"). Why: the old timing used last step's positions, a bug. Re-run on 2026-11-03 from a frozen copy of the package: the bending, inflation and PneuNet transfers reproduce the committed numbers (bending unchanged; inflation E 23.66 vs 23.7 kPa, errors 0.5/1.2/2.2% as before; PneuNet body E 91.0 kPa, layer 1.76 MPa, cost 2.9%, checks 3.2% and 4.3%, as before), so the timing fix moves the transfers by less than their rounding and the documented tables stand. The Ecoflex 00-10 drop transfer (<code>transfer_ecoflex_00_10_mujoco.yaml</code>, 40 evaluations, fresh output folder) reproduces the committed run to every digit (E 64.89 kPa, g 0.678, tau 7.82 ms, cost 0.0593, 8.6% / 3.3%), so the numbers in docs/experiments.md are those of the current code. <code>ecoflex_00_10_drop.yaml</code> (fit against the recordings, 50 evaluations) is not re-run.</p>
+<h2 id="2-joint-drop-datasheet-fit-stop-or-continue">2. Joint drop + datasheet fit: stop or continue<a class="headerlink" href="#2-joint-drop-datasheet-fit-stop-or-continue" title="Permanent link">&para;</a></h2>
+<p>The 80-evaluation joint fit is nearly flat (E0 190 kPa, g 0.60, τ 0.58 ms,
+cost 0.108) but not proven converged; at 40 evaluations it clearly was not.</p>
+<ul>
+<li><strong>Continue</strong> to 160 evaluations (80 more evaluations at 60–70 s each on the GPU box, so 1.5–2 h):
+  settles whether the datasheet term and the drop cases are compatible.</li>
+<li><strong>Stop (recommended).</strong> The cost is flat to the third digit; the remaining
+  mismatch (the 20 g first contact 14%) looks structural (the card has one
+  Prony term) rather than unconverged, so more evaluations buy little. A better
+  use of the time is a second Prony term, which changes the card, so it is your
+  call.</li>
+</ul>
+<p><strong>Decision:</strong> Stop (recommendation applied 2026-11-03). Why: cost flat to the third digit; the residual looks structural (one Prony term). A second Prony term changes the card, so it waits for you.</p>
+<h2 id="3-m7-real-data-for-the-pneumatic-finger-blocks-compare-with-a-real-finger">3. M7 real data for the pneumatic finger (blocks "compare with a real finger")<a class="headerlink" href="#3-m7-real-data-for-the-pneumatic-finger-blocks-compare-with-a-real-finger" title="Permanent link">&para;</a></h2>
+<p>The brief asks for a PneuNet against real public data with DOI and licence. What
+I found (Zenodo API, repositories, search, 2026-11-02):</p>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th>DOI</th>
+<th>Licence</th>
+<th>Has</th>
+<th>Problem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Elgeneidy, Lohse, Jackson (2017), <em>Experimental data – modelling the bending response of soft pneumatic actuators</em></td>
+<td>10.17028/rd.lboro.5509528</td>
+<td><strong>CC BY-NC 4.0</strong></td>
+<td>bending angle θ [deg] against pressure [psi] and tilt, flex-sensor volts; 1108 rows (training + testing)</td>
+<td>geometry and printed material are in the paper (Mechatronics 50, 2017, doi 10.1016/j.mechatronics.2017.10.005, open access) which I cannot download: the publisher and the repository mirrors return 403 or a bot challenge. I will not bypass that.</td>
+</tr>
+<tr>
+<td>Joshi &amp; Paik (2019), <em>Multi-DoF force characterization of soft actuators</em></td>
+<td>10.5281/zenodo.3627901</td>
+<td>CC-BY-4.0</td>
+<td>pressure, position and force for pulling, tip loading and three-point bending</td>
+<td>the actuator is a fabric-constrained film bellows (Robertson et al. 2017), not a PneuNet, and neither geometry nor material is in the record</td>
+</tr>
+<tr>
+<td>Georgopoulou et al. (2021–22)</td>
+<td>10.5281/zenodo.5841687, .5841739</td>
+<td>CC-BY-4.0</td>
+<td>stress–strain and resistance of printed TPS strips</td>
+<td>strain-sensor data; no pressure–angle pairs</td>
+</tr>
+<tr>
+<td>Omnidirectional soft sleeve (2026)</td>
+<td>10.5281/zenodo.18433594</td>
+<td>CC-BY-4.0</td>
+<td>bending angle and force files (PDF)</td>
+<td>a sleeve, not a PneuNet; plots as PDFs</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Option A (recommended): Elgeneidy.</strong> Right quantity (pressure → bending
+  angle) with a published geometry. Needs you to download the paper (open
+  access, <a href="https://doi.org/10.1016/j.mechatronics.2017.10.005">https://doi.org/10.1016/j.mechatronics.2017.10.005</a>) into
+  <code>data/raw/</code> so I can read the dimensions and the printing material and
+  build the finger. The licence is non-commercial: fine for this research use,
+  but the table must not be redistributed in the repository (as with the
+  drop-test videos: referenced by DOI, downloaded by the user; the fit file
+  points at the local copy). The data is also a free-bending angle from a
+  flex-sensor-instrumented printed actuator, so the material is likely a
+  printed elastomer rather than silicone: the card will have to be fitted, not
+  taken from a datasheet.</li>
+<li><strong>Option B:</strong> build a finger of your own and measure it (angle against
+  pressure on camera); gives full control of geometry and material, costs your
+  bench time.</li>
+<li><strong>Option C:</strong> digitise a figure from an open-access paper that gives a full
+  geometry (e.g. a CC-BY MDPI four-chamber design). Weaker: digitised points
+  carry reading error, and I would flag them as such.</li>
+</ul>
+<p><strong>Meanwhile:</strong> the machinery is done and tested on a twin experiment (<code>softsim
+fit</code>, <code>docs/experiments.md</code>), and the reference's mesh convergence on the
+existing PneuNet is measured (<code>docs/actuation.md</code>).</p>
+<p><strong>Decision:</strong> Option A chosen by recommendation. Status 2026-11-03: the paper is in data/raw/ and the table is downloaded (<code>data/raw/elgeneidy2017/data_open_access.xlsx</code>, md5 45e17500b9c3afbe926262670a08a7ac checked against figshare; gitignored, CC BY-NC 4.0). The paper says the finger is moulded from Ecoflex-50 (SmoothOn), with a paper strain-limiting layer and a flex sensor, but gives NO dimensions: they are in Elgeneidy &amp; Lohse, ASME IDETC 2016 (the Loughborough record is under permanent embargo). The table is a 100 Hz time series: P [psi], flex sensor, tilt phi [deg] (-45, 0, 45) and absolute bending angle theta [deg]; supply 8, 10, 12 psi; internal pressure up to about 7 psi (48 kPa), above the 8 kPa where the thin walls of our PneuNet already balloon. BLOCKED again on the geometry: needs the dimensions of that finger (a copy of the 2016 paper, or the user's own measurement of a finger).</p>
+<p><strong>Update 2026-11-03: Option C chosen</strong> (the 2016 paper costs money). Candidate: Wang, Zhang, Cai, Tong, Wei, <em>Design, Experimental Validation, and Pressure-Control Simulation of a Modular Pneumatic Soft-Finger Gripper</em>, Actuators 15(9), 488, doi 10.3390/act15090488, <strong>CC BY 4.0</strong> (Crossref); PDF in <code>data/raw/actuators-15-00488.pdf</code>. It has: measured chord angle at 5, 10, ..., 40 kPa (Table 5: 5.00, 10.30, 16.90, 23.20, 30.10, 34.40, 36.80, 35.00 deg; one finger, one ascending sequence, no uncertainty stated); Shore A20 silicone (Posilicone) with a third-order Yeoh fit from the same batch (Table 2: C10 0.044163 MPa, C20 5.3071e-4, C30 1.6251e-5, D1 0.226434 /MPa; monotonic uniaxial only); nine chambers, a = 89 mm, h = 10 mm, wall t = 2 mm, chamber width 20 mm, finger width 24 mm, constraint layer c = 3 mm with teeth (3 mm wide, 1 mm high, 2 mm spacing), tip reserve 10 mm; the paper's Abaqus result (Table 4) as a second reference. Chord angle = angle between the initial axis and the root-to-tip line (not the tip rotation our <code>bend_angle</code> reports; a chord metric is needed). The finger hangs vertically in the photos.
+Open: the total height, the manifold height and the chamber/wall pitch are not stated (a = 89 mm with nine chambers does not match l = 5 mm and t = 2 mm), and Figure 2 is a schematic. The supplement (https://www.mdpi.com/article/10.3390/act15090488/s1) holds the raw tensile data and the Abaqus input files, which fix the geometry. MDPI returns 403 to my fetcher, so the user downloads it. Until then the finger is not built: guessed dimensions would make the comparison meaningless.</p>
+<h2 id="4-m8-rod-backend-which-library">4. M8 rod backend: which library<a class="headerlink" href="#4-m8-rod-backend-which-library" title="Permanent link">&para;</a></h2>
+<p>M8 wants a rod (Cosserat) backend for slender bodies, cross-checked against FEM.</p>
+<ul>
+<li><strong>SOFA BeamAdapter</strong> (installed with the v26.06 plugins; no new dependency):
+  fits the existing SOFA backend; Euler–Bernoulli-like beams with fixed
+  stiffness.</li>
+<li><strong>PyElastica:</strong> a real Cosserat rod (shear, twist, dynamics), pip-installable;
+  a new dependency and a new backend to write.</li>
+<li><strong>Own implementation:</strong> most control, most work, and a verification burden
+  (it would need its own analytic checks).</li>
+</ul>
+<p><strong>Recommendation:</strong> BeamAdapter first, because it is already installed and a
+cantilever has exact solutions to check it against; PyElastica only if a
+quantity BeamAdapter cannot give (large shear, twist) is needed.</p>
+<p><strong>Decision:</strong> SOFA BeamAdapter first (recommendation applied 2026-11-03). Why: already installed, no new dependency, cantilever has exact solutions to check against.</p>
+<h2 id="5-rigid-tendon-option-for-cables">5. Rigid-tendon option for cables<a class="headerlink" href="#5-rigid-tendon-option-for-cables" title="Permanent link">&para;</a></h2>
+<p>A cable whose tendon stiffness tends to infinity (stroke imposed exactly) is
+the one case where an implicit SOFA <code>CableConstraint</code> (displacement type) would
+beat the explicit force, which is unstable for stiff tendons. It changes the
+cable model (today <code>stiffness</code> must be finite) and is SOFA-only.</p>
+<ul>
+<li><strong>Add it</strong> (config: <code>stiffness: rigid</code>): lets SOFA run stroke-controlled
+  cables at any stiffness; the reference already has a stiff-tendon test to
+  compare with. Cost: about a day, SOFA-only.</li>
+<li><strong>Skip (recommended for now).</strong> No scenario needs it; finite tendon stiffness
+  is the physical case.</li>
+</ul>
+<p><strong>Decision:</strong> Skip (recommendation applied 2026-11-03). Why: no scenario needs it; finite tendon stiffness is the physical case.</p>
+<p><strong>Status 2026-11-03, late: finger built, validation NOT yet passing.</strong> Built from the supplement's mesh: shape <code>ribbed_finger</code> (<code>softsim/geometry/soft.py</code>; solid 19,568 mm^3 and cavity 12,400 mm^3 equal the paper's mesh, tests/test_ribbed_finger.py), card <code>posilicone_a20_wang2026</code>, scenario <code>scenarios/actuation/ribbed_finger.yaml</code>, metric <code>chord_angle</code>, data <code>datasets/wang2026_finger.yaml</code>, tool <code>tools/compare_wang_finger.py</code>. First reference runs (fem, 2 mm, teeth omitted): the dynamic ramp failed to converge at ~17 kPa after 24 min; a static probe (steps of 2 kPa) gave chord 10.0 deg at 2 kPa, 18.5 at 4, 26.0 at 6, 32.4 at 8, 37.3 at 10, 41.5 at 14 kPa, then a limit point near 16 kPa (volume doubles). The paper measured 5.0 deg at 5 kPa and 10.3 at 10 kPa and its Abaqus gives 5.12 and 10.92: our finger bends about four times too much. Not explained yet. Candidates: teeth omitted (the floor is 2.6 mm thick with them, not 2), the paper's Root_Face and planar constraint, the pressure's direction/sign, or the solver. The decisive next step: load the paper's OWN mesh (the .inp corner nodes, CC BY) as a mesh file in softsim and run it with the same Yeoh card, which separates my geometry from the solver; then the same mesh with the paper's constraints. Do not report any agreement with the measurements until that is understood.</p>
+<p><strong>Update 2026-11-04: the 4x was the missing planar constraint.</strong> The paper's .inp holds <code>*Boundary AllNodesPlanar, 3, 3</code>: U3 = 0 on EVERY node (plane strain across the 24 mm width), plus <code>Root_Face, ENCASTRE</code>. Our finger had a free width. With u_y = 0 on all nodes (y is our width axis; z is the height, constraining it removes all bending), same Yeoh card, 2 mm mesh, no teeth, static, chord angle by the paper's definition:</p>
+<table>
+<thead>
+<tr>
+<th>p [kPa]</th>
+<th>ours</th>
+<th>measured</th>
+<th>paper FE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5</td>
+<td>5.03</td>
+<td>5.00</td>
+<td>5.12</td>
+</tr>
+<tr>
+<td>10</td>
+<td>10.07</td>
+<td>10.30</td>
+<td>10.92</td>
+</tr>
+<tr>
+<td>15</td>
+<td>14.92</td>
+<td>16.90</td>
+<td>17.34</td>
+</tr>
+<tr>
+<td>20</td>
+<td>19.07</td>
+<td>23.20</td>
+<td>24.09</td>
+</tr>
+<tr>
+<td>30</td>
+<td>20.85</td>
+<td>34.40</td>
+<td>35.25</td>
+</tr>
+<tr>
+<td>40</td>
+<td>4.51</td>
+<td>35.00</td>
+<td>35.38</td>
+</tr>
+</tbody>
+</table>
+<p>Agreement to 10 kPa (within 2%), then ours falls behind and peaks at 21.7 deg (27.5 kPa) before un-bending. Steps of 2.5 kPa give the same curve, so this is the equilibrium path, not a branch jump. Open: the toothless floor (2 mm instead of an effective 2.6 mm) is the leading suspect for the high-pressure gap (the floor is the strain-limiting layer); being run with teeth at 1.5 mm. The planar constraint is not yet an option of the scenario (the probe sets <code>Problem3D.fixed_dofs</code> by hand: scratch script, not in the repo). Reproduce: build the scene from scenarios/actuation/ribbed_finger.yaml with <code>body.mesh.size=2mm body.geometry.tooth_height=0 mm</code>, set <code>fixed_dofs</code> to 3*node+1 for all nodes, <code>Solid3DSolver(dynamic=False)</code>, raise <code>pressures[0]</code> in steps and read <code>chord_angle</code>.</p>
+<p><strong>Update 2026-11-04, later: validation passes with teeth.</strong> Same setup but teeth included (<code>tooth_height=1 mm</code>, mesh 1.5 mm, planar u_y = 0, static, steps of 5 kPa), chord angle [deg]:</p>
+<table>
+<thead>
+<tr>
+<th>p [kPa]</th>
+<th>ours</th>
+<th>measured</th>
+<th>paper FE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5</td>
+<td>5.04</td>
+<td>5.00</td>
+<td>5.12</td>
+</tr>
+<tr>
+<td>10</td>
+<td>10.73</td>
+<td>10.30</td>
+<td>10.92</td>
+</tr>
+<tr>
+<td>15</td>
+<td>16.99</td>
+<td>16.90</td>
+<td>17.34</td>
+</tr>
+<tr>
+<td>20</td>
+<td>23.55</td>
+<td>23.20</td>
+<td>24.09</td>
+</tr>
+<tr>
+<td>25</td>
+<td>29.73</td>
+<td>30.10</td>
+<td>30.45</td>
+</tr>
+<tr>
+<td>30</td>
+<td>34.42</td>
+<td>34.40</td>
+<td>35.25</td>
+</tr>
+<tr>
+<td>35</td>
+<td>36.30</td>
+<td>36.80</td>
+<td>37.16</td>
+</tr>
+<tr>
+<td>40</td>
+<td>34.41</td>
+<td>35.00</td>
+<td>35.38</td>
+</tr>
+</tbody>
+</table>
+<p>All eight points are within 0.5 deg of the measurement, and the peak and the fall-off after 35 kPa are reproduced. The toothless floor was the cause of the earlier gap. Still to do: make the planar constraint a scenario option, run through <code>tools/compare_wang_finger.py</code>, mesh convergence (1.5 mm vs 1 mm), a test, and the MuJoCo/SOFA transfers. Reproduce: as in the previous update, with <code>body.mesh.size=1.5mm body.geometry.tooth_height=1 mm</code>.</p>
+<p><strong>Update 2026-11-04, end-to-end: the scenario file reproduces the paper.</strong> <code>body.plane_strain: y</code> is now a scenario option (reference only; tests/test_plane_strain.py: a plane-strain beam deflects 0.8106 of a free one against 1 - nu^2 = 0.7975, and dropping the held dofs fails the test). The committed scenario, run as is on the reference (<code>softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set simulation.timestep=10ms</code>, 1.5 mm, dynamic 1 s ramp), read by <code>python tools/compare_wang_finger.py runs/wang/fem_1p5mm --plot</code> (figure docs/media/wang_finger.png): RMS error against the measurements 0.76 deg (the paper's own FE: 0.56 deg), largest error 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low, the start of the ramp, where the dynamic run lags the static value (static probe: 5.04). Open: mesh convergence (1 mm), transfers to MuJoCo/SOFA (Yeoh must be projected), docs/actuation.md section.</p>
+<p><strong>Update 2026-11-04, plane strain on MuJoCo and SOFA.</strong> <code>body.plane_strain</code> runs on all three backends. MuJoCo: the scene is lowered to a zero prescribed motion of every free vertex along the axis (<code>SoftBodySpec.lowered</code>). SOFA: the same lowering was tried first and failed the ratio test (tip deflection with the width held / free: 0.17 at nu = 0.45 and 0.14 at nu = 0.3, expected 1 - nu^2 = 0.80), so it is not locking: <code>PartialLinearMovementProjectiveConstraint</code> over every vertex with one held axis made the beam about 7x too stiff (the held axis was exactly 0, the free ones barely moved). SOFA now uses <code>PartialFixedProjectiveConstraint</code> with the axis as fixed direction: 0.85 at 3 mm in the short check, test passes at 2 mm. Caution for later: a many-vertex prescribed region holding one axis on SOFA may over-constrain the same way; tests/test_prescribed.py only covers boundary grips. tests/test_plane_strain.py: reference 0.8106 (+1.6% vs 1 - nu^2), MuJoCo and SOFA within 6% (slow-marked: 2 and 12 min).</p>
+<p><strong>Update 2026-11-04, Wang finger on MuJoCo: the transfer does not work at 2 mm, the mesh is the limit.</strong> <code>calibrations/transfer_wang_finger_mujoco.yaml</code> (stable Neo-Hookean projection of the Yeoh card, nu 0.45, 2 mm, 0.2 ms; output <code>runs/transfer/wang_finger_mujoco_2mm</code>): best E 242 kPa, cost 0.25 (raw card 0.28); cavity volume NRMSE 0.008 but chord angle NRMSE 0.49, flat across E (cost 0.25-0.45 for E 219-468 kPa; E 137 kPa diverged), so it is not a modulus problem. Mesh test at the fitted E, run as the scenario with the backend overrides: RMS error against the measurements 16.4 deg at 2 mm, 8.1 deg at 1.5 mm, reference 0.76 deg (table from <code>python tools/compare_wang_finger.py runs/wang/mujoco_2mm runs/wang/mujoco_1.5mm runs/wang/fem_1p5mm</code>). The error halves with 25% finer mesh: the 2 mm walls are about one linear tet thick and bend too stiff, and a modulus cannot compensate because the stiffening depends on the load shape. 1.5 mm on MuJoCo takes ~40 min per ramp. A finer mesh (1 mm) is untested and probably too slow. SOFA transfer not run: it uses linear tets too, so the same limit is expected; it was not tested. (compare_wang_finger.py --plot rewrote docs/media/wang_finger.png with the two MuJoCo curves added.)</p>
+<p><strong>Update 2026-11-04, Wang finger on SOFA at 1.5 mm.</strong> <code>calibrations/transfer_wang_finger_sofa.yaml</code> (stable Neo-Hookean card, nu 0.45, 1.5 mm, 2 ms, 6 evaluations, 51 min, ~9 min per ramp; output <code>runs/transfer/wang_finger_sofa_1p5mm</code>): the unfitted card (E 268 kPa) is the best point, cost 0.18 (chord angle NRMSE 0.25, cavity volume 0.11); E 293k 0.23, 219k 0.27, 370k 0.32, 468k 0.40, 137k diverged at t = 0.75 s. Chambers_5 check 0.16. So the fit finds nothing to gain from E; the remaining error is mesh/element error. Checked against the measurements (<code>python tools/compare_wang_finger.py runs/wang/sofa_1p5mm runs/wang/mujoco_1.5mm runs/wang/fem_1p5mm</code>): RMS error SOFA 1.5 mm 10.2 deg (9.3 deg low at 20 kPa), MuJoCo 1.5 mm 8.1, reference 0.76. So the earlier reading that SOFA is the usable fast backend for this finger was wrong: the NRMSE against the reference (0.25) understated a 10 deg miss, and neither fast backend reproduces the finger at 1.5 mm. Mutation tests on the finger (tests/test_ribbed_finger.py): chord measured from the origin, chord angle against the wrong vector, tooth count +1, floor height doubled each fail a test on an assertion (tooth count 20 vs 19, solid volume 20936 vs 19568 mm3). Full suite: 319 passed, 13 slow deselected.</p>
+<p><strong>Update 2026-11-05, mesh convergence of the reference (1 mm vs 1.5 mm).</strong> <code>softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set body.mesh.size=1mm --set simulation.timestep=10ms --set simulation.output_rate=100Hz --out runs/wang/fem_1mm</code>, compared with <code>python tools/compare_wang_finger.py runs/wang/fem_1mm runs/wang/fem_1p5mm</code>. RMS error against the measurements: 0.95 deg at 1 mm, 0.76 deg at 1.5 mm (paper FE 0.56). The two meshes differ by at most 0.9 deg (20-25 kPa, 1 mm lower) and 0.5 deg RMS. So the reference is converged to about 1 deg, which is also the size of its disagreement with the measurements: "0.76 deg" should be read as agreement within the discretisation error, not as a proof that the model is exact. The finer mesh is not closer to the measurements (mid-range ~1 deg low).</p>
+<p><strong>Update 2026-11-06, SOFA at 1 mm.</strong> Same run as SOFA 1.5 mm at <code>body.mesh.size=1mm</code> (73 min, <code>runs/wang/sofa_1mm</code>, read with <code>python tools/compare_wang_finger.py runs/wang/sofa_1mm runs/wang/sofa_1p5mm runs/wang/fem_1p5mm</code>): 8.14 deg RMS against the measurements, from 10.24 at 1.5 mm; the curve keeps rising to 40 kPa (27.5 deg) and shows no fall-off after 35 kPa. Past the 8 deg line set in the gripper plan, so SOFA stays out of the gripper.</p>
+<p><strong>Update 2026-11-06, the reference with the fast backends' card: the mesh claim holds, with a floor added.</strong> The 8-16 deg errors above could have been the Neo-Hookean card, not the mesh, so the reference ran that card itself (<code>--set body.material.preset=posilicone_a20_wang2026_nh --set body.material.elastic.youngs_modulus=268000 --set body.material.elastic.poisson_ratio=0.45</code>, 1.5 mm, 10 ms, <code>runs/wang/fem_nh_1p5mm</code>, read with <code>python tools/compare_wang_finger.py runs/wang/fem_nh_1p5mm runs/wang/sofa_1mm runs/wang/fem_1p5mm</code>). Over 5-35 kPa it is 3.18 deg RMS from the measurement, bending too much (+2.8 to +4.6 deg at 10-30 kPa), against 0.79 deg for the Yeoh card and 8.22 deg for SOFA at 1 mm, which bends too little. SOFA is 10.4 deg RMS below the reference on the same card, so the card does not explain SOFA's error: the under-bending is the discretisation, as claimed above. Two things change. A fast backend on this card cannot do better than about 3 deg even with a perfect mesh. And the card has no stiffening at large stretch: past about 35 kPa the reference's bend collapses (28.7 deg at 0.78 s, 12.1 deg at 0.85 s, 38.6 kPa) and Newton stops converging at 0.867 s even at 0.6 ms substeps, so that run ends at 0.85 s; the compare table's 40 kPa row shows the last frame and its overall 8.61 deg should not be read. SOFA's and MuJoCo's lack of a fall-off there is therefore not evidence of accuracy.</p>
+<h2 id="6-the-references-static-friction-creeps-at-a-rate-set-by-the-time-step">6. The reference's static friction creeps, at a rate set by the time step<a class="headerlink" href="#6-the-references-static-friction-creeps-at-a-rate-set-by-the-time-step" title="Permanent link">&para;</a></h2>
+<p>The <code>fem</code> backend smooths Coulomb friction with IPC's mollifier below a slip of <code>SLIP_TOLERANCE</code> = 1 um <strong>per step</strong>
+(<code>softsim/backends/fem/backend.py</code>): below that, friction is <code>mu N (2 y - y^2)</code> with <code>y</code> = slip / 1 um, a spring rather
+than a stick. A contact held at a fraction <code>r = F / (mu N)</code> of its limit slips <code>y = 1 - sqrt(1 - r)</code> um every step, so it
+creeps at <code>y x 1 um / dt</code>. Measured on the sliding-block benchmark at r = 0.71 (<code>benchmarks/sticking_block.yaml</code>):
+0.233 mm/s at dt 2 ms and 0.117 mm/s at 4 ms (uniform-r prediction 0.233 and 0.116). MuJoCo, known for soft-constraint
+creep, creeps less on this case (0.13 mm/s); SOFA least. Sliding is unaffected: all three backends are within
+0.8-0.94% of exact Coulomb sliding (<code>benchmarks/sliding_block.yaml</code>). The finite-element grasps (docs/gripper.md) hold
+for seconds with the same smoothing, so part of their sink is this creep.</p>
+<p><strong>Done meanwhile (no default changed):</strong> <code>contact.slip_speed</code> makes the tolerance a speed (<code>slip_speed x dt</code>, the IPC
+convention), so the creep is <code>y x slip_speed</code> at any step. Measured, 5 mm block, <code>slip_speed</code> 1e-5 m/s: 0.0052 mm/s at
+dt 2 ms and 0.0053 mm/s at 4 ms; sliding unchanged (70.45 mm). <code>tests/test_friction.py</code> checks both behaviours.</p>
+<ul>
+<li><strong>Make <code>slip_speed</code> 1e-5 m/s the default (recommended).</strong> Creep 45x lower at dt 2 ms and independent of the step. Cost:
+  the finite-element grasps (about an hour each on the GPU machine) should be re-run, and their numbers in
+  docs/gripper.md may move.</li>
+<li><strong>Keep the per-step default</strong>, and state the creep rate with every finite-element grasp.</li>
+</ul>
+<p><strong>Decision:</strong> make <code>slip_speed</code> 1e-5 m/s the default (2026-11-11, agreed with you). <code>contact.slip_speed: null</code> restores
+the old per-step smoothing. Still to do: re-run the finite-element grasps on the GPU machine and update docs/gripper.md.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

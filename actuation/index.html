@@ -1,0 +1,3818 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Validated simulation of soft materials and soft robots on MuJoCo, SOFA and a locking-free reference FEM.">
+      
+      
+      
+      
+        <link rel="prev" href="../reference_fem/">
+      
+      
+        <link rel="next" href="../control/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Actuation - softsim</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#actuation-m6-in-progress" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="softsim" class="md-header__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            softsim
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Actuation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="softsim" class="md-nav__button md-logo" aria-label="softsim" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    softsim
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BoredAmi/softsim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/first_drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First drop simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/change_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/actuated_finger/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuate a finger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../materials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Materials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../material_library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Material library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scenarios/drop_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop test scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Backends
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/mujoco/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MuJoCo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/sofa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/rod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rod (BeamAdapter)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Robots
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Robots
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#regions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Regions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pressure-actuators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pressure actuators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pressure actuators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-each-backend-applies-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How each backend applies it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification-thick-hollow-sphere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification: thick hollow sphere
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transfer-making-a-fast-backend-inflate-like-the-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transfer: making a fast backend inflate like the reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-bending-actuator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A bending actuator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cable-actuators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cable actuators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cable actuators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verification-cable-bent-cantilever" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification: cable-bent cantilever
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anchor-spread-over-a-face" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Anchor spread over a face
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stroke-control-a-servo-reeling-the-cable-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stroke control: a servo reeling the cable in
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-cable-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A cable finger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-body-that-touches-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A body that touches itself
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-two-segment-cable-arm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A two-segment cable arm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#region-forces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Region forces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#moving-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving mount
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotating-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotating mount
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prescribed-region-motion-displacement-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prescribed region motion (displacement control)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-material-bodies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-material bodies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-pneunet-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A PneuNet finger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-cast-finger-against-measured-angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A cast finger against measured angles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A cast finger against measured angles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tip-force-a-test-it-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tip force: a test it fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inverse control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../surrogate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surrogates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gymnasium environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soft gripper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo_script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gripper demo script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../drop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drop bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../magnetic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Magnetic (MRE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation on unseen data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../experiments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experiments and calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design optimisation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ROS 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Extending
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_material/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a material
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_body/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a body
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_scenario/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a scenario
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding_a_dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new_machine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving to a faster machine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#regions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Regions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pressure-actuators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pressure actuators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pressure actuators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-each-backend-applies-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How each backend applies it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification-thick-hollow-sphere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification: thick hollow sphere
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transfer-making-a-fast-backend-inflate-like-the-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transfer: making a fast backend inflate like the reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-bending-actuator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A bending actuator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cable-actuators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cable actuators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cable actuators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verification-cable-bent-cantilever" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification: cable-bent cantilever
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anchor-spread-over-a-face" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Anchor spread over a face
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stroke-control-a-servo-reeling-the-cable-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stroke control: a servo reeling the cable in
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-cable-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A cable finger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-body-that-touches-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A body that touches itself
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-two-segment-cable-arm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A two-segment cable arm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#region-forces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Region forces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#moving-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving mount
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotating-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotating mount
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prescribed-region-motion-displacement-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prescribed region motion (displacement control)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-material-bodies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-material bodies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-pneunet-finger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A PneuNet finger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-cast-finger-against-measured-angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A cast finger against measured angles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A cast finger against measured angles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tip-force-a-test-it-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tip force: a test it fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="actuation-m6-in-progress">Actuation (M6, in progress)<a class="headerlink" href="#actuation-m6-in-progress" title="Permanent link">&para;</a></h1>
+<p>Three actuators so far: pressure on a surface region, cables routed through
+the body (by tension or by stroke), and forces on a surface region. The fixed
+regions can also follow a prescribed translation (a moving mount), and any
+region can follow a prescribed path with its reaction reported (displacement
+control). See
+<a href="../roadmap/">roadmap.md</a>, M6. The scenario is <code>actuation</code> (<code>inflation</code>
+is the same scenario under its first name).</p>
+<h2 id="regions">Regions<a class="headerlink" href="#regions" title="Permanent link">&para;</a></h2>
+<p>Every soft shape names its surface regions: sets of boundary triangles with
+outward normals, found on the mesh from the shape's own geometry
+(<code>softsim/geometry/soft.py</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Shape (<code>geometry.type</code>)</th>
+<th>Regions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cylinder</code>, <code>box</code></td>
+<td><code>base</code>, <code>top</code>, <code>side</code></td>
+</tr>
+<tr>
+<td><code>hollow_sphere</code> (<code>outer_diameter</code>, <code>inner_diameter</code>)</td>
+<td><code>cavity</code>, <code>outer</code></td>
+</tr>
+<tr>
+<td><code>closed_tube</code> (<code>outer_diameter</code>, <code>inner_diameter</code>, <code>height</code>, <code>cap</code>)</td>
+<td><code>cavity</code>, <code>base</code>, <code>top</code>, <code>side</code></td>
+</tr>
+<tr>
+<td><code>pneunet</code> (see <a href="#a-pneunet-finger">below</a>)</td>
+<td><code>cavity</code>, <code>base</code>, <code>tip</code>, <code>bottom</code>, <code>top</code>, <code>side</code></td>
+</tr>
+<tr>
+<td><code>cable_finger</code> (see <a href="#a-cable-finger">below</a>)</td>
+<td><code>base</code>, <code>top</code>, <code>side</code>, <code>cable_side</code></td>
+</tr>
+<tr>
+<td><code>mesh_file</code> (STEP, STL, OBJ, <code>.msh</code>, VTK; <a href="../adding_a_body/#soft-body-from-a-file-no-code">adding_a_body.md</a>)</td>
+<td>the file's named groups, <code>surface</code>, <code>cavity</code> (found by itself), boxes you name</td>
+</tr>
+</tbody>
+</table>
+<p>The hollow shapes are meshed with gmsh (<code>pip install softsim[mesh]</code>). Regions
+fix vertices (<code>body.fixed: [base]</code> pins every vertex of the base) and carry
+loads.</p>
+<h2 id="pressure-actuators">Pressure actuators<a class="headerlink" href="#pressure-actuators" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inflation</span>
+<span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">geometry</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">closed_tube</span><span class="p p-Indicator">,</span><span class="nt"> outer_diameter</span><span class="p">:</span><span class="w"> </span><span class="nv">20 mm</span><span class="p p-Indicator">,</span><span class="nt"> inner_diameter</span><span class="p">:</span><span class="w"> </span><span class="nv">12 mm</span><span class="p p-Indicator">,</span><span class="nt"> height</span><span class="p">:</span><span class="w"> </span><span class="nv">50 mm</span><span class="p p-Indicator">,</span><span class="nt"> cap</span><span class="p">:</span><span class="w"> </span><span class="nv">4 mm</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">material</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ecoflex_00_30</span>
+<span class="w">  </span><span class="nt">fixed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">base</span><span class="p p-Indicator">]</span>
+<span class="nt">actuators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cavity</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cavity</span>
+<span class="w">    </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 kPa</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">100 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3 kPa</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">200 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3 kPa</span><span class="p p-Indicator">]]</span><span class="w">   </span><span class="c1"># linear in between, held after</span>
+</code></pre></div>
+<p>A pressure actuator loads its region with gauge pressure <code>p</code>: the traction
+<code>-p n</code> on the deforming surface (a follower load). Its value comes from the
+schedule, or from a controller:</p>
+<div class="highlight"><pre><span></span><code><span class="n">sim</span> <span class="o">=</span> <span class="n">Simulation</span><span class="p">(</span><span class="s2">"scenarios/inflation/scenario.yaml"</span><span class="p">)</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">set_control</span><span class="p">(</span><span class="s2">"cavity"</span><span class="p">,</span> <span class="mf">5e3</span><span class="p">)</span>     <span class="c1"># Pa, from the next step on</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">release_control</span><span class="p">(</span><span class="s2">"cavity"</span><span class="p">)</span>      <span class="c1"># back to the schedule</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">state</span><span class="p">()</span><span class="o">.</span><span class="n">controls</span>                       <span class="c1"># {"cavity": ...}, the values in effect</span>
+</code></pre></div>
+<p>From the CLI, any value can be changed as usual:
+<code>--set actuators[0].schedule="[[0, 0], [0.1, 4000]]"</code>.</p>
+<p>On ROS 2, <code>~/actuators/&lt;name&gt;/command</code> (std_msgs/Float64, Pa) sets the
+pressure, NaN releases it, and <code>~/actuators/&lt;name&gt;/state</code> publishes the value in
+effect (<a href="../ros2/">ros2.md</a>).</p>
+<p>The <code>inflation</code> scenario writes each actuator's pressure and cavity volume
+(<code>&lt;name&gt;_pressure</code>, <code>&lt;name&gt;_volume</code>) and the body's extent at every sample, so a
+run gives the actuator's pressure–volume curve directly.</p>
+<h3 id="how-each-backend-applies-it">How each backend applies it<a class="headerlink" href="#how-each-backend-applies-it" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>fem (reference):</strong> the potential <code>-p V</code>, with <code>V</code> the volume the region
+  encloses, integrated exactly on the quadratic faces. It is the consistent
+  follower load with a symmetric tangent, so Newton stays quadratic. The
+  pressure is the value at the end of the step (implicit). The region must be
+  closed; an open region is refused, because <code>-p V</code> is then not the follower
+  load.</li>
+<li><strong>MuJoCo, SOFA:</strong> nodal forces <code>-p A n / 3</code> on the linear surface triangles,
+  recomputed from the current positions before every step (explicit, through
+  <code>xfrc_applied</code> and a <code>ConstantForceField</code>, like adhesion).</li>
+</ul>
+<h2 id="verification-thick-hollow-sphere">Verification: thick hollow sphere<a class="headerlink" href="#verification-thick-hollow-sphere" title="Permanent link">&para;</a></h2>
+<p>The exact solution for an incompressible Neo-Hookean sphere (radii <code>a &lt; b</code>,
+shear modulus <code>mu</code>) under internal pressure, at inner hoop stretch <code>la</code>, is
+(<code>softsim.analytic.hollow_sphere_pressure</code>):</p>
+<div class="highlight"><pre><span></span><code>p = 2 mu [(1/lb + 1/(4 lb^4)) - (1/la + 1/(4 la^4))],   lb^3 = 1 + (a/b)^3 (la^3 - 1)
+</code></pre></div>
+<p>It has a maximum, the limit pressure: 0.816 mu at <code>la</code> = 1.83 for <code>b = 2a</code>.
+Above it, no inflated static state exists and a real balloon snaps through.</p>
+<p><strong>Reference (one octant, symmetry planes, nu = 0.4995, 4 mm mesh):</strong> the
+inner stretch matches the exact solution within <strong>0.1%</strong> up to <code>la</code> = 1.62
+(p = 0.8 mu), and the quasi-static solve fails above the limit pressure, as it
+must (<code>tests/test_actuation.py</code>). The symmetry planes pass through the centre,
+where <code>x . n = 0</code>, so <code>-p V</code> stays exact on the open octant.</p>
+<p><strong>Thick tube with closed ends (Lamé, free axial extension).</strong> The sphere is
+the finite-strain case; this one checks the same load on a different geometry,
+and the axial part of the closed cavity (its end walls carry the pressure
+into the tube). For a tube of radii <code>a &lt; b</code> at pressure <code>p</code>, <code>A = p a² / (b² − a²)</code>,
+<code>B = A b²</code>: <code>σ_r = A − B/r²</code>, <code>σ_θ = A + B/r²</code>, <code>σ_z = A</code>, so</p>
+<div class="highlight"><pre><span></span><code>u_r = [(1 − 2ν) A r + (1 + ν) B / r] / E,    ε_z = (1 − 2ν) A / E
+</code></pre></div>
+<p>(plane strain would have <code>ε_z = 0</code>, and a <code>(1 + ν)</code> larger <code>A</code> term). A
+100 mm long tube of 10/20 mm (E = 100 kPa, ν = 0.3, 10 mm caps) at 200 Pa,
+reference on the closed <code>closed_tube</code> body, measured over its middle (±12 mm
+for the radial displacement, ±30 mm for the axial slope):</p>
+<table>
+<thead>
+<tr>
+<th>Mesh</th>
+<th>u_r(a)</th>
+<th>u_r(b)</th>
+<th>ε_z</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 mm</td>
+<td>−10.2%</td>
+<td>−10.1%</td>
+<td>−6.4%</td>
+</tr>
+<tr>
+<td>2.5 mm</td>
+<td>−3.5%</td>
+<td>−3.2%</td>
+<td></td>
+</tr>
+<tr>
+<td>1.8 mm</td>
+<td>−1.5%</td>
+<td>−1.4%</td>
+<td>+0.3%</td>
+</tr>
+<tr>
+<td>1.3 mm</td>
+<td>−0.5%</td>
+<td>−0.4%</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Second-order convergence to the exact values (<code>tests/test_actuation.py::
+test_reference_matches_lame_closed_end_tube</code>, which runs 4 and 1.8 mm). The test
+is sensitive: loading only the tube's cylindrical wall (no end-wall pressure)
+gives an axial strain 79% too low and the outer wall 4.3% off. The four
+mid-height nodes pinned against rigid-body motion are where the symmetric solution is
+zero, so they do not disturb it. This replaces the open-lid plane-strain idea, which
+the <code>−pV</code> load cannot close.</p>
+<p><strong>Backends at the same card</strong> (<code>python tools/compare_inflation.py</code>; 40/20 mm
+sphere, Neo-Hookean E = 30 kPa, nu = 0.45, 3 kPa held):</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Cavity V/V0</th>
+<th>Volume change vs reference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>fem reference</strong> (quadratic, 3 mm)</td>
+<td>1.3336</td>
+<td>–</td>
+</tr>
+<tr>
+<td>MuJoCo, 3 mm</td>
+<td>1.2426</td>
+<td><strong>−27%</strong></td>
+</tr>
+<tr>
+<td>MuJoCo, 2 mm</td>
+<td>1.2890</td>
+<td><strong>−13%</strong></td>
+</tr>
+<tr>
+<td>SOFA, 3 mm</td>
+<td>1.2427</td>
+<td><strong>−27%</strong></td>
+</tr>
+<tr>
+<td>Linear Lamé, ν = 0.45</td>
+<td>1.2748</td>
+<td>−18%</td>
+</tr>
+<tr>
+<td>Exact incompressible solution, μ = 10.3 kPa</td>
+<td>1.3354</td>
+<td>+0.5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The reference agrees with the exact finite-strain solution within 0.5%.</strong>
+  That solution is incompressible and the card has ν = 0.45, so this is a
+  consistency check, not an exact comparison. Linear Lamé misses 18% of the
+  volume change at this 33% inflation: at actuator pressures, finite strain
+  matters.</li>
+<li><strong>MuJoCo and SOFA agree with each other to 0.01%, and both are 27% too
+  stiff at 3 mm.</strong> Two independent implementations agreeing shows the pressure
+  load is right. The gap is volumetric locking of linear tetrahedra at
+  ν = 0.45, as in the drop test (<a href="../reference_fem/">reference_fem.md</a>).</li>
+<li><strong>Locking shrinks with the mesh</strong> (−27% → −13% from 3 to 2 mm, about h^1.8),
+  but slowly and at a high cost: 2 mm is 3.4× the elements. For a pneumatic
+  actuator, either use a fine mesh, or fit an effective modulus for the fast
+  backend at its mesh against the reference (as the drop transfers do,
+  <code>calibrations/transfer_*.yaml</code>; for inflation this is still to be wired up).
+  On a coarse linear-tet mesh, a physical card makes the actuator too stiff.</li>
+</ul>
+<h2 id="transfer-making-a-fast-backend-inflate-like-the-reference">Transfer: making a fast backend inflate like the reference<a class="headerlink" href="#transfer-making-a-fast-backend-inflate-like-the-reference" title="Permanent link">&para;</a></h2>
+<p><code>softsim transfer</code> fits a fast backend's effective card at its mesh, so that
+it reproduces the reference on chosen outputs. It then checks the fit on load
+cases it never saw (<code>softsim/transfer.py</code>;
+<code>calibrations/transfer_inflation_mujoco.yaml</code>, 9 evaluations, 11 min):</p>
+<table>
+<thead>
+<tr>
+<th>Backend, 3 mm</th>
+<th>E</th>
+<th>Fitted: 3 kPa</th>
+<th>Check: 1.5 kPa</th>
+<th>Check: 4.5 kPa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MuJoCo: physical card</td>
+<td>30 kPa</td>
+<td>20%</td>
+<td>19%</td>
+<td>22%</td>
+</tr>
+<tr>
+<td><strong>MuJoCo: transferred</strong></td>
+<td><strong>23.7 kPa</strong></td>
+<td><strong>0.5%</strong></td>
+<td><strong>1.2%</strong></td>
+<td><strong>2.2%</strong></td>
+</tr>
+<tr>
+<td>SOFA, 3 mm: physical card</td>
+<td>30 kPa</td>
+<td>20%</td>
+<td>19%</td>
+<td>22%</td>
+</tr>
+<tr>
+<td><strong>SOFA, 3 mm: transferred</strong> (<code>transfer_inflation_sofa.yaml</code>)</td>
+<td><strong>23.6 kPa</strong></td>
+<td><strong>0.9%</strong></td>
+<td><strong>1.4%</strong></td>
+<td><strong>2.4%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The error is the NRMSE of the cavity-volume history against the reference.</p>
+<p>Re-run on 2026-11-03 after the MuJoCo step-timing fix: E 23.66 kPa, 0.5% / 1.2% / 2.2%, identical to the table.</p>
+<ul>
+<li><strong>One effective modulus is enough over a 3× range of pressure:</strong> fitted at
+  33% inflation, it holds at 15% and 52% inflation within 2.2%.</li>
+<li><strong>The softening is 21%,</strong> close to the locking measured above (27% too
+  little volume change). MuJoCo and SOFA need the same correction (23.7 and
+  23.6 kPa), as expected for the same linear tetrahedra on the same mesh.</li>
+<li><strong>The result is an <code>effective</code> card</strong> (<code>kind: effective</code>, with backend,
+  mesh, element and check errors in its provenance). Use it only with that
+  backend and mesh.</li>
+</ul>
+<p>The identity test (<code>tests/test_actuation.py</code>) transfers MuJoCo to itself and
+recovers the generating modulus within 1%.</p>
+<h2 id="a-bending-actuator">A bending actuator<a class="headerlink" href="#a-bending-actuator" title="Permanent link">&para;</a></h2>
+<p><code>scenarios/inflation/bending.yaml</code> is a single-material bending actuator:
+- an Ecoflex 00-30 tube, 16 mm wide and 40 mm tall, bonded at its base;
+- an 8 mm cavity moved 2 mm off-axis (<code>cavity_offset</code>), so one wall is 2 mm
+  thick and the other 6 mm.</p>
+<p>The thin wall stretches more, so the tube curls towards the thick side. The
+scenario reports the top face's tilt (<code>bend_angle</code>) and position (<code>tip_x</code>,
+<code>tip_y</code>, <code>tip_z</code>).</p>
+<table>
+<thead>
+<tr>
+<th>At 8 kPa, 2 mm mesh, same card</th>
+<th>Bend angle</th>
+<th>Tip shift</th>
+<th>Cavity V/V0</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fem reference</td>
+<td>3.45°</td>
+<td>−1.28 mm</td>
+<td>1.407</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>2.16° (−37%)</td>
+<td>−0.77 mm</td>
+<td>1.258</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The bending is strongly nonlinear:</strong> the reference bends 1.0° at 4 kPa and
+  3.4° at 8 kPa.</li>
+<li><strong>Thin walls make locking worse:</strong> MuJoCo is 37% too stiff even at 2 mm,
+  because the 2 mm wall is a single element thick.</li>
+<li><strong>This shape needs <code>simulation.iterations: 300</code> on MuJoCo.</strong> With the
+  default of 100, the stiff flex's M+K solve stops at a residual of about 1e-7,
+  and MuJoCo warns. The result doesn't change, but the config sets 300 so the
+  run is clean.</li>
+</ul>
+<p><strong>Transfer</strong> (<code>calibrations/transfer_bending_mujoco.yaml</code>; fitted on the bend
+angle and cavity volume from 0 to 8 kPa):</p>
+<table>
+<thead>
+<tr>
+<th>MuJoCo, 2 mm</th>
+<th>E</th>
+<th>Fitted: 0–8 kPa</th>
+<th>Check: 0–4 kPa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Physical card</td>
+<td>114 kPa</td>
+<td>23%</td>
+<td>18%</td>
+</tr>
+<tr>
+<td><strong>Transferred</strong></td>
+<td><strong>86.5 kPa</strong></td>
+<td><strong>4.1%</strong> (bend 3.1%, volume 5.1%)</td>
+<td><strong>8.4%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The transfer helps, but less than on the sphere. One effective modulus can't
+fully match a thin wall that locks differently as it stretches, so the error
+at half pressure is twice the fitted one. For bending actuators on linear
+tetrahedra, plan for an error bar of about 10% after transfer. Without the
+transfer, it is about 20%.</p>
+<h2 id="cable-actuators">Cable actuators<a class="headerlink" href="#cable-actuators" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actuation</span>
+<span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">geometry</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">box</span><span class="p p-Indicator">,</span><span class="nt"> size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">10 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">60 mm</span><span class="p p-Indicator">]}</span>
+<span class="w">  </span><span class="nt">fixed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">base</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="nt">actuators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cable</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cable</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">55 mm</span><span class="p p-Indicator">]]</span><span class="w">     </span><span class="c1"># body frame: from the exit to the motor, to the anchor</span>
+<span class="w">    </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 N</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">400 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.7 N</span><span class="p p-Indicator">]]</span><span class="w">    </span><span class="c1"># tension; or `tension: 0.5 N`</span>
+<span class="w">    </span><span class="c1"># spacing: 2 mm                             # via points at most this far apart (default: mesh size)</span>
+<span class="w">    </span><span class="c1"># anchor: top                               # spread the last point's load over this face (see below)</span>
+</code></pre></div>
+<p>A cable is a tendon of tension <code>T</code> through via points along <code>path</code>. The via
+points are embedded in the body's elements, so they act as frictionless guides
+that move with the material. The motor sits on the body at the first point,
+so the cable is internal: its net force and moment on the body are zero.
+<code>set_control("cable", 0.3)</code> and ROS <code>~/actuators/cable/command</code> set the tension
+in N. A cable can only pull, so a negative tension is refused.</p>
+<p>The load is the potential <code>T L(x)</code>, where <code>L</code> is the cable's length through the
+via points:
+- <strong>fem (reference):</strong> in the implicit solve. Via points use the elements'
+  quadratic shape functions. The tangent is <code>T w w^T (I - u u^T) / l</code> per
+  segment, symmetric and PSD, so Newton stays robust.
+- <strong>SOFA (tension-controlled, not anchored over a region):</strong> the same load as springs between the
+  via points whose rest lengths are reset each step, so the tangent stiffness is implicit (an explicit
+  force swung the two-cable arm in a limit cycle; <a href="../control/">control.md</a>).
+- <strong>MuJoCo, SOFA (stroke-controlled or anchored):</strong> the same forces <code>-T dL/dx</code> on the linear elements'
+  vertices, recomputed before every step (<code>softsim.actuation.cable_forces</code>).
+  They are explicit, so <code>softsim check</code> compares the cable's string stiffness
+  <code>T (1/l1 + 1/l2)</code> with the vertex masses at the timestep. It warns or refuses,
+  as for adhesion: tight via-point spacing at high tension needs a smaller
+  timestep, or a larger <code>spacing</code>.</p>
+<p>The scenario reports <code>&lt;name&gt;_tension</code> and <code>&lt;name&gt;_length</code> (the current length
+through the via points), and in the summary the cable's stroke (how far it was
+pulled in).</p>
+<h3 id="verification-cable-bent-cantilever">Verification: cable-bent cantilever<a class="headerlink" href="#verification-cable-bent-cantilever" title="Permanent link">&para;</a></h3>
+<p><code>scenarios/actuation/cable_cantilever.yaml</code>:
+- a 10 × 10 × 60 mm beam, Neo-Hookean E = 500 kPa, ν = 0.45, clamped at its
+  base, no gravity;
+- a cable 3 mm off-axis, anchored at L = 55 mm.</p>
+<p>Below the anchor the cable puts a pure moment <code>T d</code> on the beam. Euler–Bernoulli
+then gives a circular arc whose tip angle is exact at any rotation:</p>
+<div class="highlight"><pre><span></span><code>theta = T d L / (E_t I),   E_t = E (1 + 2 T / (E A))
+</code></pre></div>
+<p><code>E_t</code> is the Neo-Hookean tangent under the axial pre-compression <code>T / (E A)</code>
+that the cable also applies: 2.8% stiffer at 0.7 N.</p>
+<p><strong>The reference matches it within 0.3%</strong> at 0.1 and 0.7 N (0.04 and 0.27 rad,
+quasi-static, 2.5 mm; <code>tests/test_cable.py</code>). Two things the check taught:
+- <strong>Without <code>E_t</code>, the error grows with the load</strong> (−2.4% → −5.2% over the same
+  range). It halves on a beam twice as long at the same tip angle, so it scales
+  with strain, not rotation: material nonlinearity, as the formula says.
+- <strong>Anchor the cable inside the body, not at a point on the face where you
+  measure.</strong> A point anchor on the top face dents it, and the face's tilt then
+  reads 4–6% low. Anchored 5 mm below, the top face rotates rigidly with the
+  beam; or spread the anchor over the face, next.</p>
+<h3 id="anchor-spread-over-a-face">Anchor spread over a face<a class="headerlink" href="#anchor-spread-over-a-face" title="Permanent link">&para;</a></h3>
+<p><code>anchor: &lt;region&gt;</code> makes the last path point (it must lie on that boundary
+region, e.g. <code>top</code>) not a point load but a traction over the region: the linear
+traction with the same resultant and moment, i.e. nodal weights <code>w_j</code> with
+<code>sum w_j = 1</code> and <code>sum w_j x_j =</code> the anchor point (<code>softsim.actuation.anchor_weights</code>).
+A cable pulling the end by <code>F</code> loads the face with <code>w_j F</code>, so the end section
+carries a force <code>F</code> and a moment about the point just as the point load would,
+without the singularity. On a quadratic mesh the weights are the consistent
+nodal loads (mid-edge nodes included); on the linear meshes of MuJoCo and SOFA
+they are the corner nodes' shares. The cable length under stroke control then
+ends at the weighted point <code>sum w_j x_j</code>, which moves with the face.
+A cable 3 mm off the axis of a 10 mm section is outside the section's core
+(1.7 mm), so some weights are negative: tension on the far side, as beam theory
+has it.</p>
+<p><strong>Verification</strong> (reference, 2.5 mm quadratic, cable to the top face at
+L = 60 mm, <code>scenarios/actuation/cable_cantilever_anchored.yaml</code>;
+<code>tests/test_cable.py</code>, run <code>python -m pytest tests/test_cable.py -k anchor</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Tip angle vs Euler–Bernoulli</th>
+<th>Stroke 0.3 mm: tension / angle</th>
+<th>Stroke 3 mm: tension / angle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>anchor: top</strong> (0.7 N)</td>
+<td>+0.27% (2.5 mm), −0.44% (1.25 mm)</td>
+<td>+0.3% / +0.4%</td>
+<td>+0.5% / +0.7%</td>
+</tr>
+<tr>
+<td>point anchor on the face</td>
+<td>−2.6% (2.5 mm); Newton fails at 1.25 mm</td>
+<td>−19% / −21%</td>
+<td>−18% / −20%</td>
+</tr>
+</tbody>
+</table>
+<p>On the linear-tet backends (2 mm, 0.7 N) the angle is far under Euler–Bernoulli
+because of locking, as in the tension table above (MuJoCo 0.205 rad, SOFA
+0.205 rad, 70% of 0.294), but the spread anchor raises it by the same 2.6%
+over a point anchor (0.200 rad) as on the reference (+2.9% at 2.5 mm):
+<code>scenarios/actuation/cable_cantilever_anchored.yaml --backend mujoco|sofa</code>.</p>
+<p>The stroke columns need no stiff cap now. Corner-node-only weights on the
+quadratic mesh (not the consistent load) read +2.7% in the first column.</p>
+<p><img alt="Cable-bent cantilever: tip angle against tension, and the deformed beam against the
+Euler-Bernoulli arc" src="../media/cable_cantilever.png" /></p>
+<p><em>Left: tip angle over the whole ramp. Right: the side faces at 0.7 N, the
+reference and MuJoCo (2 mm) against the theoretical arc (<code>python
+tools/plot_cable.py</code>).</em></p>
+<p><strong>Backends at the same card</strong> (<code>python tools/compare_cable.py</code>; tip angle,
+error against Euler–Bernoulli with <code>E_t</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>0.35 N</th>
+<th>0.7 N</th>
+<th>vs reference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Euler–Bernoulli</td>
+<td>7.83°</td>
+<td>15.45°</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>fem reference</strong>, 2 mm, dynamic</td>
+<td>7.78° (−0.7%)</td>
+<td>15.34° (−0.7%)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>MuJoCo, 2 mm</td>
+<td>5.46° (−30%)</td>
+<td>10.79° (−30%)</td>
+<td>−30%</td>
+</tr>
+<tr>
+<td>SOFA, 2 mm</td>
+<td>5.45° (−30%)</td>
+<td>10.79° (−30%)</td>
+<td>−30%</td>
+</tr>
+<tr>
+<td>MuJoCo, 1 mm (via points 3 mm apart)</td>
+<td>6.96° (−11%)</td>
+<td>13.74° (−11%)</td>
+<td>−10%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The reference is right in dynamics too:</strong> a 400 ms ramp against the beam's
+  10 Hz mode is quasi-static, and the dynamic run agrees with the quasi-static
+  solve.</li>
+<li><strong>MuJoCo and SOFA agree with each other to 0.1% and bend 30% too little at
+  2 mm.</strong> Linear tetrahedra lock in bending: 5 elements across a 10 mm beam,
+  ν = 0.45. The error is the same at both tensions, so one effective modulus
+  fixes it (<code>softsim transfer</code>, as for pressure). At 1 mm it is 10%.</li>
+<li><strong>On MuJoCo and SOFA, choose the via-point spacing from the check, not the
+  mesh.</strong> On the 1 mm mesh at 1 mm spacing (ω·dt ≈ 1.4), MuJoCo tracks the ramp
+  up to 0.6 N, then rings between 14° and 18° instead of settling. Halving the
+  timestep only takes ω·dt to 1.15, because the implicit elastic stiffness
+  already dominates the step. Spacing the via points 3 mm apart (ω·dt ≈ 0.8)
+  runs clean. The cable path is straight, so it follows the beam just as well.</li>
+</ul>
+<h3 id="stroke-control-a-servo-reeling-the-cable-in">Stroke control: a servo reeling the cable in<a class="headerlink" href="#stroke-control-a-servo-reeling-the-cable-in" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">actuators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cable</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cable</span>
+<span class="w">    </span><span class="nt">control</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stroke</span><span class="w">                              </span><span class="c1"># the value is a length, not a tension</span>
+<span class="w">    </span><span class="nt">stiffness</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300 N/m</span><span class="w">                           </span><span class="c1"># the tendon's (or servo's) axial stiffness</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">58 mm</span><span class="p p-Indicator">]]</span>
+<span class="w">    </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 mm</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">400 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3 mm</span><span class="p p-Indicator">]]</span><span class="w">     </span><span class="c1"># stroke; or `stroke: 2 mm`</span>
+</code></pre></div>
+<p>A stroke-controlled cable is a tendon of stiffness <code>k</code> and free length
+<code>L0 - s</code>: <code>L0</code> is its length at rest, <code>s</code> the stroke the motor has reeled in.
+It pulls with <code>T = k max(L - L0 + s, 0)</code> and is slack when shorter. With a stiff
+tendon the stroke sets the cable's shortening (1e5 N/m: 1 mm of stroke shortens
+it by 0.996 mm), and the tension follows from the body. <code>set_control</code> and ROS
+take the stroke in m. A negative stroke pays the cable out.
+- <strong>fem (reference):</strong> <code>k/2 (L - L0 + s)^2</code> while taut, in the implicit solve.
+  The tangent adds <code>k dL dL^T</code>, which couples the whole cable, so the stiff
+  limit stays robust.
+- <strong>MuJoCo, SOFA:</strong> <code>T</code> from the current length before every step, then the
+  usual cable forces. The check adds the tendon's axial term
+  <code>k sum |dL/dx|^2 / m</code> to the string stiffness. At 0.1 ms on the 2 mm beam,
+  300 N/m runs clean and 3000 N/m is refused (ω·dt = 1.45). A stiff tendon
+  needs the reference, or a compliant one standing in for the servo.</p>
+<p>The scenario reports <code>&lt;name&gt;_command</code> (the stroke) and <code>&lt;name&gt;_tension</code>, which
+follows from the current length.</p>
+<p><strong>Anchor a stroke-controlled cable in something stiff, or spread over a face
+(<code>anchor:</code>, above).</strong> A cable ending at a
+point inside the soft body pulls that point into the material. A point load is
+singular, so how far it moves depends on the mesh, and under stroke control
+that local give counts as cable shortening: 10% less tension and tip angle
+here. <code>scenarios/actuation/cable_cantilever_stroke.yaml</code> anchors the cable
+3 mm into a 5 mm tip cap (a 50 MPa zone), as a real finger anchors its tendon
+in a rigid tip.</p>
+<p><strong>Verification:</strong> Euler–Bernoulli puts the beam's compliance along the cable in
+series with the tendon (<code>softsim.analytic.cable_beam_stroke</code>):
+<code>s = T/k + L (a^2 T / (E_t I) + T / (E A))</code>. The axial term is as large as the
+bending term on this beam.</p>
+<table>
+<thead>
+<tr>
+<th>Model, 2 mm</th>
+<th>0.3 mm: tension</th>
+<th>0.3 mm: tip angle</th>
+<th>3 mm: tension</th>
+<th>3 mm: tip angle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Euler–Bernoulli</td>
+<td>0.0534 N</td>
+<td>1.209°</td>
+<td>0.536 N</td>
+<td>11.91°</td>
+</tr>
+<tr>
+<td><strong>fem reference</strong> (2.5 mm, quasi-static)</td>
+<td>0.0537 N (+0.5%)</td>
+<td>1.204° (−0.4%)</td>
+<td>0.540 N (+0.8%)</td>
+<td>11.90° (−0.1%)</td>
+</tr>
+<tr>
+<td>fem, point anchor, no cap</td>
+<td>0.0480 N (−10%)</td>
+<td>1.084° (−10%)</td>
+<td>0.483 N (−10%)</td>
+<td>10.71° (−10%)</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td></td>
+<td></td>
+<td>0.584 N (+9%)</td>
+<td>8.79° (−26%)</td>
+</tr>
+<tr>
+<td>SOFA (1 ms)</td>
+<td></td>
+<td></td>
+<td>0.584 N (+9%)</td>
+<td>8.79° (−26%)</td>
+</tr>
+</tbody>
+</table>
+<p>MuJoCo and SOFA agree to 0.01%. Their beam is too stiff (the locking of the
+tension-controlled table), so the same stroke takes more tension and bends it
+less. The stroke run's equilibrium is the tension run's at the tension it
+found (<code>tests/test_cable.py</code>).</p>
+<h2 id="a-cable-finger">A cable finger<a class="headerlink" href="#a-cable-finger" title="Permanent link">&para;</a></h2>
+<p><code>geometry: {type: cable_finger, ...}</code> is a tendon-driven finger: a block
+(<code>width</code> × <code>depth</code> × <code>length</code>, base at z = 0, centred on the z axis) cut into
+<code>segments</code> links by <code>segments − 1</code> transverse slots (<code>slot_width</code> along z,
+<code>slot_depth</code> into the +x face). The tendon runs along z at <code>tendon_offset</code> from the +x
+face, through the web the slots leave (<code>tendon_offset &gt; slot_depth</code> is checked), and
+pulls that side shut: the finger curls towards +x. <code>path: geometry</code> on the cable
+takes this path from the shape, and <code>anchor: top</code> spreads its end over the tip face
+(above). With <code>segments: 1</code> the finger is a plain beam. The shape writes CAD like the
+others (<code>softsim export ... --cad</code>). <code>scenarios/actuation/cable_finger.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">geometry</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">cable_finger</span><span class="p p-Indicator">,</span><span class="nt"> length</span><span class="p">:</span><span class="w"> </span><span class="nv">60 mm</span><span class="p p-Indicator">,</span><span class="nt"> width</span><span class="p">:</span><span class="w"> </span><span class="nv">12 mm</span><span class="p p-Indicator">,</span><span class="nt"> depth</span><span class="p">:</span><span class="w"> </span><span class="nv">10 mm</span><span class="p p-Indicator">,</span><span class="nt"> segments</span><span class="p">:</span><span class="w"> </span><span class="nv">4</span><span class="p p-Indicator">,</span>
+<span class="nt">             slot_width</span><span class="p">:</span><span class="w"> </span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="nt"> slot_depth</span><span class="p">:</span><span class="w"> </span><span class="nv">3 mm</span><span class="p p-Indicator">,</span><span class="nt"> tendon_offset</span><span class="p">:</span><span class="w"> </span><span class="nv">4.5 mm</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">material</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">preset</span><span class="p">:</span><span class="w"> </span><span class="nv">ecoflex_00_30</span><span class="p p-Indicator">,</span><span class="nt"> damping</span><span class="p">:</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># E = 114 kPa</span>
+<span class="w">  </span><span class="nt">mesh</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="nv">1.5 mm</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">gmsh</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">fixed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">base</span><span class="p p-Indicator">]</span>
+<span class="nt">actuators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">cable</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">cable</span><span class="p p-Indicator">,</span><span class="nt"> path</span><span class="p">:</span><span class="w"> </span><span class="nv">geometry</span><span class="p p-Indicator">,</span><span class="nt"> anchor</span><span class="p">:</span><span class="w"> </span><span class="nv">top</span><span class="p p-Indicator">,</span><span class="nt"> schedule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 N</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">400 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.2 N</span><span class="p p-Indicator">]]}</span>
+</code></pre></div>
+<p><strong>Verification</strong> (reference, quasi-static, 0.2 N, tip-face rotation;
+<code>tests/test_cable_finger.py</code>):
+- <strong>The mesh is the geometry:</strong> the tetrahedra's volume is the block minus the slots, to
+  rounding (relative 1e-9); the slots sit at the segment boundaries; base, top, side
+  and cable-side regions are where they should be; the tendon runs through solid
+  along its whole length.
+- <strong>One segment is Euler–Bernoulli:</strong> <code>theta = T d L / (E_t I)</code> (<code>softsim.analytic.cable_beam_tip_angle</code>,
+  d = 1.5 mm) is 0.1065 rad; the reference gives 0.1055 (2.5 mm, −0.9%) and 0.1051 (1.5 mm, −1.4%).
+- <strong>The slots add compliance, and the 1-D model understates it:</strong> the four-link finger
+  rotates 0.2677 rad (2.5 mm) and 0.2664 rad (1.5 mm; the mesh changes it by 0.5%), 2.54 times the plain
+  beam. A beam with plane sections through each slot (the web's own centroid and
+  moment of inertia) predicts 1.55 times: the slots are short for their depth, and
+  the material beside them takes part. Treat that estimate as a lower bound, not a prediction.
+- <strong>Direction and ordering:</strong> a deeper slot (3.5 mm) rotates more; MuJoCo bends towards the tendon.</p>
+<p>Reproduce: <code>python -m pytest tests/test_cable_finger.py</code>, or
+<code>softsim run scenarios/actuation/cable_finger.yaml --backend fem --set simulation.timestep=2ms</code>.</p>
+<h2 id="a-body-that-touches-itself">A body that touches itself<a class="headerlink" href="#a-body-that-touches-itself" title="Permanent link">&para;</a></h2>
+<p><code>body.self_collision: true</code> makes a soft body's own faces collide (default <code>false</code>). MuJoCo turns on the flex's
+self-contact (<code>&lt;contact selfcollide="auto"&gt;</code>); SOFA sets <code>selfCollision</code> on the body's triangle, line and point collision
+models. The fem and rod backends have no self-contact and refuse such a scene (<code>UnsupportedFeatureError</code>,
+capability <code>soft-body self-collision</code>); it is not implemented in the finite-element solver.</p>
+<p>The check is <code>scenarios/actuation/self_collision_finger.yaml</code>: a two-link cable finger (30 mm, one 2 mm slot) pulled to
+0.6 N, which closes the slot. The gauge <code>body.gaps: [{name: slot, between: [slot1_lower, slot1_upper]}]</code> outputs
+<code>slot_gap</code>, the signed gap between the slot's two walls (each wall's vertices against the other wall's triangles,
+<code>softsim.contact.gap</code>); the summary gives <code>slot_min_gap</code>. Shapes name regions: the cable finger gives <code>slot&lt;i&gt;_lower</code> and
+<code>slot&lt;i&gt;_upper</code> for each slot.</p>
+<table>
+<thead>
+<tr>
+<th>backend</th>
+<th>self-collision</th>
+<th>min gap, 200 ms</th>
+<th>final bend angle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MuJoCo</td>
+<td>on</td>
+<td>+0.19 mm</td>
+<td>0.290 rad</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>off</td>
+<td>-1.35 mm</td>
+<td>0.374 rad</td>
+</tr>
+<tr>
+<td>SOFA (0.5 ms step)</td>
+<td>on</td>
+<td>+0.10 mm</td>
+<td>0.309 rad</td>
+</tr>
+<tr>
+<td>SOFA (0.5 ms step)</td>
+<td>off</td>
+<td>-1.40 mm</td>
+<td>0.371 rad</td>
+</tr>
+</tbody>
+</table>
+<p>With it off the walls pass through each other by 1.3-1.4 mm; with it on neither backend lets them overlap (the positive gap
+is the contact skin, 0.1 mm, plus MuJoCo's soft constraint). The test accepts down to -0.1 mm with it on and demands
+under -0.5 mm with it off.</p>
+<p>Limits: SOFA needs line collision models as well as points and triangles; with points and triangles only the walls still
+overlapped by 0.75 mm. Self-contact is frictionless unless the material has friction; only this one slot geometry is
+verified (a 2 mm mesh, so each wall is a few elements wide), not a general proof for folded or thin-walled bodies. The
+bend angle with self-collision on is not a clean comparison between backends (different time steps and solvers).</p>
+<p>Reproduce: <code>python -m pytest tests/test_self_collision.py</code> (the SOFA case is marked slow and needs <code>SOFA_ROOT</code>).</p>
+<h2 id="a-two-segment-cable-arm">A two-segment cable arm<a class="headerlink" href="#a-two-segment-cable-arm" title="Permanent link">&para;</a></h2>
+<p><code>scenarios/actuation/cable_arm.yaml</code> is a continuum arm made from features
+already described: a 12 × 12 × 120 mm Ecoflex 00-30 column with two stiff
+disks (50 MPa zones, 4 mm, at z = 38–42 and 78–82 mm) and two cables on opposite
+sides (x = ±4 mm). Cable A ends in the lower disk, cable B passes through it
+and ends in the upper one, as in a tendon-driven arm with spacer disks.</p>
+<p>The lower segment carries both moments, <code>(T_A − T_B) d</code>, under the axial force
+<code>T_A + T_B</code>; the upper one only B's, <code>−T_B d</code>; the disks are rigid and the tail
+above the second disk is unloaded. Euler–Bernoulli per soft length,
+<code>θ = Σ M L / (E_t I)</code> with <code>E_t = E (1 + 2N / (E A))</code>, predicts 0.2157 rad
+after the first segment and 0.1080 rad at the tip (T_A = 0.45 N, T_B = 0.15 N). The
+reference (2 mm quadratic, quasi-static) gives 0.2119 rad (−1.8%) and 0.1074 rad
+(−0.6%): the arm bends one way below the first disk and back above it (an S),
+the disks turn rigidly, and the tail stays straight. With cable B ending in the
+first disk instead, nothing bends the upper segment and the whole arm above the
+disk is straight (<code>tests/test_cable_arm.py</code>).</p>
+<p>MuJoCo (2 mm, 0.1 ms, 20 min for 0.5 s because the stiff disks make the flex
+ill-conditioned) ends at a tip rotation of 0.161 rad and a tip displacement of 17.9 mm,
+against the reference's 0.107 rad and 14.9 mm. This is an observation, not a
+comparison: the beam is undamped and still swinging at 500 ms (the tension
+ramp ends at 400 ms), and the tip rotation is the difference of two segment
+rotations, each affected by linear-tet locking, so a quasi-static run with the
+transferred modulus would be needed to say anything. Not done.</p>
+<p>The <strong>rod backend</strong> (<a href="../backends/rod/">backends/rod.md</a>) runs this arm in seconds and gives the linear
+piecewise Euler–Bernoulli S (0.2298, 0.1221 rad); the reference sits 8% lower from the compression stiffening.</p>
+<h2 id="region-forces">Region forces<a class="headerlink" href="#region-forces" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">actuators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tip_force</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">force</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">top</span><span class="w">                 </span><span class="c1"># any surface region</span>
+<span class="w">    </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]</span><span class="w">        </span><span class="c1"># world frame, normalised</span>
+<span class="w">    </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 mN</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">400 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5 mN</span><span class="p p-Indicator">]]</span><span class="w">     </span><span class="c1"># total force [N]; or `force: 5 mN`</span>
+</code></pre></div>
+<p>A total force along a fixed direction, spread over a surface region by area:
+a dead load, such as a payload or a probe pressing on a fingertip. A negative
+force pushes the other way.
+- <strong>fem (reference):</strong> the consistent load of a uniform traction on the
+  quadratic faces. It is all on the mid-edge nodes, a third of each face's
+  area each.
+- <strong>MuJoCo, SOFA:</strong> a third of each triangle's share to each of its vertices.</p>
+<p>It doesn't depend on positions, so it needs no stability check. Outputs:
+<code>&lt;name&gt;_force</code> and <code>&lt;name&gt;_displacement</code>, the region's area-weighted centre
+moving along the force. Force against displacement is the body's stiffness
+there.</p>
+<p><strong>Verification:</strong> <code>scenarios/actuation/tip_load_cantilever.yaml</code>, the beam
+above with 5 mN on its top face. Euler–Bernoulli gives 0.864 mm. Timoshenko
+adds 2.4% of shear (0.884 mm,
+<code>softsim.analytic.cantilever_tip_deflection</code>). The reference converges to
+0.870, 0.867, then 0.864 mm at 2.5, 2 and 1.25 mm (<code>tests/test_region_force.py</code>),
+between the two. On this short beam (L/h = 6), the fully clamped root (no
+warping, no Poisson contraction) offsets the shear. On MuJoCo and SOFA, the
+vertex forces sum to the commanded force exactly. Both deflect 0.602 mm at
+2 mm, 30% stiff: the locking of the cable tables, now under a known force.</p>
+<h2 id="moving-mount">Moving mount<a class="headerlink" href="#moving-mount" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">fixed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">base</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">mount_path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">200 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">20 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">400 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">20 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10 mm</span><span class="p p-Indicator">]]]</span>
+</code></pre></div>
+<p>The fixed regions follow a prescribed translation, such as a finger on a robot
+arm. Waypoints are displacements from rest (the first is zero). Between
+waypoints the mount moves point to point with minimum jerk: at rest at every
+waypoint, continuous acceleration, no overshoot. After the last one it holds.</p>
+<p>Every backend simulates in the mount's frame. For a translation that is exact:
+the pinned vertices stay put, and every element feels the inertial force
+<code>-rho a(t)</code>, so gravity becomes <code>g - a(t)</code> (<code>Backend.mount_gravity</code>, set before
+every step). Positions and velocities are reported in the world, with the
+mount's added back (<code>Backend._to_world</code>). A rotating mount would also need
+centrifugal and Coriolis terms, and the ground and rigid bodies would have to
+move with the frame, so those are refused.</p>
+<p><strong>Verification:</strong> the reference run two ways on
+<code>scenarios/actuation/moving_mount.yaml</code> (the beam, its base sliding 20 mm in
+200 ms):
+- in the mount's frame;
+- in the world, with the base nodes driven along the path
+  (<code>Solid3DSolver.fixed_motion</code>, Newmark-consistent).</p>
+<p>With the trapezoidal rule the tip trajectories agree to 0.10% of the tip's lag
+at 2 ms and 0.026% at 1 ms. That is second order: the two formulations converge
+to one solution (<code>tests/test_moving_mount.py</code>). With the default numerically
+damped Newmark (first order) the gap is 2.2% at 2 ms and halves with the step.
+On MuJoCo and SOFA the base vertices follow the path exactly, and the tip lags
+while the mount accelerates.</p>
+<table>
+<thead>
+<tr>
+<th>Model, 2 mm</th>
+<th>Tip's peak lag</th>
+<th>Swing after the mount stops</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>fem reference</strong> (2 ms)</td>
+<td>2.15 mm at 64 ms</td>
+<td>0.51 mm</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>1.47 mm (−32%) at 56 ms</td>
+<td>0.94 mm</td>
+</tr>
+<tr>
+<td>SOFA (1 ms)</td>
+<td>1.40 mm (−35%) at 56 ms</td>
+<td>0.75 mm</td>
+</tr>
+</tbody>
+</table>
+<p>The locked beams of MuJoCo and SOFA are stiffer, so they lag about a third
+less and ring at a higher frequency. The swing left after the stop depends on
+where in its cycle the beam is when the mount stops, so it differs more.
+SOFA's implicit Euler also damps it.</p>
+<p><strong>Closed-loop control from Python:</strong> <code>Simulation.run(controller=f)</code> calls
+<code>f(sim)</code> before every output interval. <code>f</code> reads <code>sim.time</code>, <code>sim.metrics()</code>
+and <code>sim.state()</code>, and returns the actuator values to hold, <code>{name: value}</code>;
+NaN hands an actuator back to its schedule (<code>Simulation.apply_controls</code>). In
+<code>tests/test_cable.py</code>, a PI loop on the cable tension holds the lightly damped
+beam at a 0.1 rad tip angle on MuJoCo, within 3%.</p>
+<h2 id="rotating-mount">Rotating mount<a class="headerlink" href="#rotating-mount" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">fixed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">base</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">mount_rotation</span><span class="p">:</span><span class="w">                      </span><span class="c1"># composes with mount_path</span>
+<span class="w">    </span><span class="nt">axis</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]</span><span class="w">                    </span><span class="c1"># normalised</span>
+<span class="w">    </span><span class="nt">center</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]</span><span class="w">                  </span><span class="c1"># a point of the axis (rest frame)</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 deg</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">300 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">90 deg</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">800 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0 deg</span><span class="p p-Indicator">]]</span><span class="w">   </span><span class="c1"># angle from rest, minimum jerk</span>
+<span class="w">    </span><span class="c1"># or turning steadily: a waypoint [time, angle, rate] is passed at that rate</span>
+<span class="w">    </span><span class="c1"># path: [[0 ms, 0 rad], [200 ms, 6 rad, 60 rad/s], [500 ms, 24 rad, 60 rad/s]]   # spin up, then 60 rad/s on</span>
+</code></pre></div>
+<p>The fixed regions turn about an axis, such as a finger on a spinning arm or a
+gripper wrist. In the mount's frame every point feels, per unit mass, gravity
+<code>R^T (g - p'')</code> and the fictitious accelerations <code>-alpha x r - omega x (omega x
+r) - 2 omega x v</code> (Euler, centrifugal, Coriolis), with <code>r</code> measured from the
+centre (<code>softsim.scene.MountFrame</code>; <code>MountFrame.fictitious</code> and <code>.gravity</code> are
+used by every backend). Positions and velocities are reported in the world.</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Frame</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MuJoCo</td>
+<td>the mount's</td>
+<td>gravity rotated each step, the three forces <code>m a</code> as explicit vertex forces at the step's middle</td>
+</tr>
+<tr>
+<td>SOFA</td>
+<td>the mount's</td>
+<td>the same, in a <code>ConstantForceField</code>, at the step's end like gravity</td>
+</tr>
+<tr>
+<td>fem (reference)</td>
+<td>the <strong>world</strong></td>
+<td>the pinned nodes follow <code>R (X - c) + c + p</code> exactly: no fictitious forces to get wrong. Trapezoidal rule</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Constant rate.</strong> A waypoint may carry a rate, <code>[time, angle, rate]</code>. Between waypoints the path is a quintic
+Hermite with zero acceleration at both ends, so two waypoints <code>w T</code> apart that both carry <code>w</code> are exactly a
+constant rate; after the last waypoint the mount keeps its last rate. Without rates every waypoint is at rest,
+as before (<code>mount_path</code> takes the same rule through <code>softsim.scene.MountMotion.velocities</code>). Check
+(<code>tests/test_rotating_mount.py</code>): spun up in 200 ms, then turned at 60 rad/s, MuJoCo's beam settles to a steady
+stretch 3.0% below the rotating rod's <code>rho w^2 L^3 / (3 E)</code> and stays straight to 0.003 mm. The spin-up whips the
+beam, so the check damps it (Rayleigh, which cannot change a steady spin's state).</p>
+<p>Region forces and prescribed regions are refused with a
+rotating mount: their directions are world directions and would have to turn
+with the frame.</p>
+<p><strong>Verification</strong>, five independent checks (<code>tests/test_rotating_mount.py</code>,
+figure <code>docs/media/rotating_mount.png</code>, <code>python tools/plot_spin.py</code>):</p>
+<ol>
+<li><strong>The terms.</strong> A free particle moves on a known world trajectory. The same
+   path in the mount's frame, differentiated numerically twice, gives the
+   acceleration <code>MountFrame</code> says it has. Any wrong sign or factor of Euler,
+   centrifugal, Coriolis or the rotated gravity fails it (5 mutants).</li>
+<li><strong>The plumbing.</strong> From the state a backend reports, with a tilted axis through
+   an off-centre point, the force it applied to each vertex equals <code>m</code> times that
+   acceleration to 2e-4, on MuJoCo and SOFA (mutants: the skin offset, the
+   frame's time, the mass). A velocity left unrotated is an equivalent mutant:
+   an unrotated body's vertex axes are the world's.</li>
+<li><strong>Centrifugal stretch.</strong> A beam spinning about an axis across it, at 60 rad/s
+   without angular acceleration, stretches by <code>rho w^2 L^3 / (3 E)</code> = 0.555 mm:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Stretch against that</th>
+<th>Lateral deflection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>reference, 5 ms / 2.5 ms</td>
+<td>+3.35% / +2.83% (+2.7% extrapolated, the 3D rod against the 1D formula)</td>
+<td>0.39 / 0.12 mm</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>-1.6%</td>
+<td>0.01 mm</td>
+</tr>
+<tr>
+<td>SOFA</td>
+<td>-2.3%</td>
+<td>0.01 mm</td>
+</tr>
+<tr>
+<td>reference, default Newmark (damping 0.25), 5 ms</td>
+<td><strong>-32%</strong></td>
+<td><strong>4.6 mm</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The default scheme's numerical damping dissipates the rotation's centripetal
+   balance, so a rotating mount uses the trapezoidal rule (second order: the
+   lateral deflection falls 3.2x when the step is halved).
+4. <strong>The Euler force.</strong> From rest, the beam's tip is left behind: when a rigidly
+   turning tip would have moved 1 mm (3.3 ms, before the elastic signal from the
+   clamp arrives), it has moved 0.0% of that on the reference, 4.2% on MuJoCo
+   and 21.7% on SOFA (the cause is not investigated). Without the force it
+   moves 100%.
+5. <strong>Spinning is invisible to a round beam.</strong> A round beam bends alike in every
+   direction, so in the world its tip moves as without the spinning clamp, whatever
+   its stiffness: the rotated gravity, centrifugal and Coriolis forces must all be
+   right. The beam of <code>scenarios/actuation/spinning_cantilever.yaml</code> spins
+   twice in 0.5 s under horizontal gravity:</p>
+<p><img alt="Tip trajectories with the mount spinning and not, and with a fictitious force removed" src="../media/rotating_mount.png" /></p>
+<p>Largest tip difference from the not spinning run, as a fraction of the sag:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Difference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>reference (world frame, 2.5 ms)</td>
+<td>6.4%</td>
+</tr>
+<tr>
+<td>MuJoCo, 3 mm elements</td>
+<td>20.8%</td>
+</tr>
+<tr>
+<td>SOFA, 3 mm elements</td>
+<td>16.9%</td>
+</tr>
+<tr>
+<td>SOFA without the Coriolis force</td>
+<td>131%</td>
+</tr>
+<tr>
+<td>SOFA without the centrifugal force</td>
+<td>48%</td>
+</tr>
+<tr>
+<td>SOFA, Coriolis force reversed</td>
+<td>355%</td>
+</tr>
+<tr>
+<td>SOFA, centrifugal force reversed</td>
+<td>70%</td>
+</tr>
+</tbody>
+</table>
+<p>The 17-21% of MuJoCo and SOFA is not the forces (check 2) but their
+   linear tetrahedra, in two parts. (a) At 3 mm the mesh is anisotropic: the
+   beam sags 4.2% differently along different directions (0.3% at 1.5 mm), and
+   a spinning beam at 0.7 of its bending frequency amplifies that. (b) Implicit
+   Euler damps a mode by an amount that depends on its frequency in the
+   integrated frame; the two whirl components have other frequencies in the
+   mount's frame than the still beam's, so they decay differently. On the 2 mm
+   mesh, SOFA's difference is 9.6, 7.3 and 6.3% at steps of 1, 0.5 and 0.25 ms.
+   Across meshes at 1 ms: 23.9% (4 mm), 16.9% (3 mm), 9.6% (2 mm), 11.1%
+   (1.5 mm).</p>
+<p><strong>The reference's step.</strong> The undamped trapezoidal rule is only reliable for a
+small rotation per step. On this beam, at 2.5 ms (0.11 rad per step at the peak
+rate) the reference agrees with the still run (6.4%, the same bending frequency
+to four digits). At 5 ms (0.23 rad per step) a whirl grows: 6 mm lateral
+deflection, and the run-to-run scatter of the GPU's rounding gives anything from
+31% to 198% apart (three identical runs). The stability check warns above 0.15 rad per step
+(<code>spin-step</code>) and when the centrifugal strain <code>rho w^2 r^2 / 3E</code> of the
+farthest point exceeds 20% (<code>spin-centrifugal</code>: a soft beam spun fast enough has
+no equilibrium).</p>
+<h2 id="prescribed-region-motion-displacement-control">Prescribed region motion (displacement control)<a class="headerlink" href="#prescribed-region-motion-displacement-control" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">prescribed</span><span class="p">:</span><span class="w">                    </span><span class="c1"># any surface region, along its own path</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="nv">base</span><span class="p p-Indicator">,</span><span class="nt"> path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">300 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]]]}</span><span class="w">   </span><span class="c1"># a roller: held in z only</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="nv">top</span><span class="p p-Indicator">,</span><span class="nt">  path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">]],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">200 ms</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2 mm</span><span class="p p-Indicator">]]]}</span>
+</code></pre></div>
+<p>Every vertex of a region moves along <code>path</code> (waypoints from rest, minimum
+jerk, held after the last; with a moving mount it is relative to the mount).
+<code>null</code> leaves an axis free in every waypoint. This is the grip of a tension
+test, a probe pressing in, or a servo-driven clamp. The reaction is what the
+motion needs, which a force actuator can't tell you. Outputs, per held axis:
+<code>&lt;region&gt;_reaction_&lt;axis&gt;</code> [N], the force the support exerts on the body, and
+<code>&lt;region&gt;_displacement_&lt;axis&gt;</code> [m], the region's centroid motion.</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>How</th>
+<th>Reaction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fem (reference)</td>
+<td>the region's dofs (vertices and the mid-edge nodes between them) are fixed to the path at each step's end</td>
+<td>the converged residual at those dofs: <code>sum(M a) - weight</code> for a free body, exact to Newton's tolerance</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>a joint equality per held axis of each vertex, <code>timeconst</code> 2 steps, the path's velocity fed forward</td>
+<td>the sum of their constraint forces</td>
+</tr>
+<tr>
+<td>SOFA</td>
+<td><code>PartialLinearMovementProjectiveConstraint</code> with a key per step</td>
+<td><code>sum m dv/dt - f</code> over the region, <strong>one step back</strong>: approximate in fast motion</td>
+</tr>
+</tbody>
+</table>
+<p>Details that were measured, not assumed:
+- A MuJoCo soft constraint trails a moving target by <code>2 timeconst v</code>
+  (0.75 um on a 200 um pull in 0.2 s, measured on a bar with direct joint
+  equalities). Feeding the velocity forward cancels it: 0.006 um. The tracking
+  test allows 0.04 um and fails without the feed-forward.
+- SOFA's constraint takes the key of the step's <em>start</em> time, so each key holds
+  the path at the step's end. Without the shift the region trails by a step
+  (9.4 um at 94 mm/s and 0.1 ms).
+- On a rotated body MuJoCo's vertices slide along the body's axes, so holding
+  only some world axes is refused.</p>
+<p><strong>Verification:</strong> <code>scenarios/actuation/tension_test.yaml</code>, a 10 x 10 x 20 mm
+bar on a roller pulled 10% in 200 ms. The state is homogeneous uniaxial stress,
+which every element type represents exactly, so the reaction per area is the
+material's nominal stress at stretch 1.1
+(<code>softsim.materials.homogeneous.curve</code>, <code>tests/test_prescribed.py</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Pull at 10%</th>
+<th>Against the exact 0.908919 N</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>fem reference</strong> (neo-Hookean)</td>
+<td>0.908919 N</td>
+<td>1e-7; at 30% stretch 1e-5, with the sideways contraction 0.9582 on every vertex to 1e-8 m</td>
+</tr>
+<tr>
+<td>MuJoCo (stable neo-Hookean)</td>
+<td>0.917325 N</td>
+<td>+0.92%</td>
+</tr>
+<tr>
+<td>SOFA (stable neo-Hookean)</td>
+<td>0.917381 N</td>
+<td>+0.93%</td>
+</tr>
+</tbody>
+</table>
+<p>MuJoCo and SOFA agree to 6e-5. Their stable neo-Hookean law is 0.9% stiffer
+than the split neo-Hookean of the reference at 10%, a difference in the law,
+not locking (a uniform stretch cannot lock). On every backend, a force
+actuator on the top face with the force the displacement run reported
+stretches the bar by the prescribed 2 mm to 0.2%: the reaction is the force
+the motion needs.</p>
+<p><img alt="Reaction against stretch up to 30%, three backends and the exact curve" src="../media/prescribed_tension.png" /></p>
+<p><code>tools/plot_tension.py</code> pulls the bar to 30% in 400 ms on each backend. The
+reference follows the exact curve to 1e-5 (the table's last row: 2.335002 against
+2.335007 N). MuJoCo and SOFA are 2.6% above it at 30%, the stable neo-Hookean
+law. SOFA's curve also sits below the others early in the pull (-5% at 0.5%
+stretch, -0.3% at 10%): its reaction is one step (1 ms) old, and against the
+current stretch that is stiffness x speed x 1 ms, a constant offset that is large
+only where the force is small. It is gone at the hold (the first table).</p>
+<p>A fast pull (1 mm in 20 ms, about 2.5 axial periods, under gravity, with a heavy
+top layer of 20 000 kg/m^3 so that the held face's own inertia is a third of
+the reaction) checks that the reaction carries the inertia: reaction + weight =
+rate of change of the body's momentum. Reference: 1.4e-6 of the peak reaction.
+MuJoCo: 1.6e-4. SOFA: 0.9%, one step back, because SofaPython3 does not expose
+implicit Euler's end-of-step forces. The quasi-static reactions are exact on all
+three. Without the held region's inertia SOFA's reaction is off by 41% here (a
+mutation test); on a uniform light bar the region is 2% of the mass, which
+SOFA's own error hides.</p>
+<h2 id="multi-material-bodies">Multi-material bodies<a class="headerlink" href="#multi-material-bodies" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">body</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">geometry</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="nv">box</span><span class="p p-Indicator">,</span><span class="nt"> size</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">10 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">60 mm</span><span class="p p-Indicator">]}</span>
+<span class="w">  </span><span class="nt">material</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">density</span><span class="p">:</span><span class="w"> </span><span class="nv">1070 kg/m^3</span><span class="p p-Indicator">,</span><span class="nt"> elastic</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="nv">stable_neo_hookean</span><span class="p p-Indicator">,</span><span class="nt"> youngs_modulus</span><span class="p">:</span><span class="w"> </span><span class="nv">500 kPa</span><span class="p p-Indicator">,</span><span class="nt"> poisson_ratio</span><span class="p">:</span><span class="w"> </span><span class="nv">0.45</span><span class="p p-Indicator">}}</span>
+<span class="w">  </span><span class="nt">zones</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layer</span><span class="w">                     </span><span class="c1"># e.g. a strain-limiting layer</span>
+<span class="w">      </span><span class="nt">material</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">density</span><span class="p">:</span><span class="w"> </span><span class="nv">1070 kg/m^3</span><span class="p p-Indicator">,</span><span class="nt"> elastic</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="nv">stable_neo_hookean</span><span class="p p-Indicator">,</span><span class="nt"> youngs_modulus</span><span class="p">:</span><span class="w"> </span><span class="nv">5 MPa</span><span class="p p-Indicator">,</span><span class="nt"> poisson_ratio</span><span class="p">:</span><span class="w"> </span><span class="nv">0.45</span><span class="p p-Indicator">}}</span>
+<span class="w">      </span><span class="nt">box</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">-5 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-5 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-3 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5 mm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">60 mm</span><span class="p p-Indicator">]]</span><span class="w">   </span><span class="c1"># elements whose centroid is inside (body frame)</span>
+</code></pre></div>
+<p>A zone gives some elements their own material. Make the mesh resolve the
+zone: a zone smaller than the elements catches only the elements whose centroid
+falls inside it. A zone selects elements by <code>box</code> or by a shape's volume
+region (<code>region: layer</code> on a <code>pneunet</code>, a named 3D group of a mesh file).</p>
+<p>A zone may have its own density: every element carries its material's
+density, and the vertex masses are lumped from them (a <code>body.mass</code> override
+scales all densities alike). All three backends use these masses (MuJoCo per
+vertex body, SOFA a per-element <code>massDensity</code>, the reference in its consistent
+mass matrix). Under gravity, a cantilever whose outer half is four times as
+dense sags 3.56 times as much as a uniform one. That is Euler–Bernoulli's ratio
+(3.562). The reference is within 0.15% of the theory's tip deflection
+(<code>tests/test_zones.py</code>).</p>
+<p><strong>A zone may have its own damping, in the reference only.</strong> Each zone then
+carries its own Prony series (or none: a stiff cap that does not relax) with its
+own viscous memory; a zone without a <code>damping:</code> entry of its own is undamped,
+not the body's. Rayleigh and Kelvin–Voigt damping are not in the reference at
+all, MuJoCo has one damping coefficient per flex, and SOFA's Rayleigh damping
+belongs to the solver (a force field's own <code>rayleighStiffness</code> is not used by
+its elastic force fields; measured: no effect on the decay), so a zone whose
+damping differs from the body's is refused there, naming the zone.
+<code>Scene</code> knows them as <code>SoftBodySpec.zone_damping_differs()</code>.</p>
+<p><strong>Verification</strong> (<code>tests/test_fem_3d.py::test_zone_prony_follows_its_own_series</code>,
+quasi-static ramp and hold, 5 mm): a quarter of a box's cross-section is a zone
+with series B (g 0.3, τ 5 ms) in a body with series A (g 0.6, τ 20 ms), compressed
+uniformly. The elastic cards are equal and the material is near-incompressible,
+so the strain state stays homogeneous and the plate force must be the
+area-weighted sum of what each series gives alone (<code>softsim.materials.homogeneous.history</code>):
+0.75 F_A + 0.25 F_B. At 0.1 s the reference gives 1.457 N (F_A = 1.232 N,
+F_B = 2.135 N; the sum is 1.457 N); a global series would give 1.232 N. The
+same test with an undamped zone passes too. With the zone given the body's own
+series, or the whole body B, the reference reproduces the homogeneous history
+to 6e-5.</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Zones</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fem (reference)</td>
+<td>any law per zone; each zone has its own Prony series (or none)</td>
+</tr>
+<tr>
+<td>SOFA</td>
+<td>one force field per material, each in a child node on that material's elements</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>the body's elastic model (Stable Neo-Hookean or StVK, one per flex), any modulus and Poisson's ratio. MuJoCo precomputes 24 values per element: the material constants times the element's geometry, plus geometry alone. A zone's rows are copied from a model compiled with the zone's material, so they match it exactly (<code>tests/test_zones.py</code>). Scaling the rows is wrong, because it also scales the geometry-only value.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verification: a two-material cable beam</strong>
+(<code>scenarios/actuation/cable_cantilever_layered.yaml</code>,
+<code>python tools/compare_cable.py --layered</code>). This is the cable cantilever with
+a 2 mm layer, ten times stiffer, on the face away from the cable. In composite
+Euler–Bernoulli (<code>softsim.analytic.cable_beam_tip_angle</code>):
+- the neutral axis moves to x = −2.57 mm;
+- EI grows 2.3×;
+- the cable's moment arm grows to 5.57 mm.</p>
+<p>The tip angle at 0.7 N falls from 15.4° to 12.7°.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>0.35 N</th>
+<th>0.7 N</th>
+<th>Layered ÷ homogeneous, 0.7 N</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Composite Euler–Bernoulli</td>
+<td>6.36°</td>
+<td>12.66°</td>
+<td>0.820</td>
+</tr>
+<tr>
+<td><strong>fem reference</strong>, 2 mm</td>
+<td>6.28° (−1.4%)</td>
+<td>12.35° (−2.4%)</td>
+<td>0.805</td>
+</tr>
+<tr>
+<td>SOFA, 2 mm</td>
+<td>4.18° (−34%)</td>
+<td>8.35° (−34%)</td>
+<td>0.774</td>
+</tr>
+<tr>
+<td>MuJoCo, 2 mm</td>
+<td>4.20° (−34%)</td>
+<td>8.35° (−34%)</td>
+<td>0.774</td>
+</tr>
+<tr>
+<td>MuJoCo StVK, 2 mm</td>
+<td>3.48° (−45%)</td>
+<td>7.07° (−44%)</td>
+<td>0.745</td>
+</tr>
+<tr>
+<td>MuJoCo StVK, 1 mm</td>
+<td>5.16° (−19%)</td>
+<td>10.51° (−17%)</td>
+<td>0.772</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The reference matches composite beam theory</strong> within 0.55% at 0.1 N
+  (<code>tests/test_zones.py</code>). Its gap at 0.7 N is Neo-Hookean nonlinearity, not a
+  zone error: the stiff layer works in compression and the soft part in
+  tension, so the two no longer cancel as in one material. The gap halves on a
+  beam twice as long at the same angle.</li>
+<li><strong>MuJoCo and SOFA agree on the layered beam to 0.1%</strong> (8.35° both), with
+  two independent zone implementations.</li>
+<li><strong>A zone with the body's own material reproduces the plain body exactly</strong>
+  (to 1e-9 on MuJoCo, 1e-6 on SOFA, and on the reference). SOFA needs a child
+  node per material: a force field's <code>topology</code> link is ignored, and two force
+  fields in one node both act on every element. The identity test caught that.</li>
+<li><strong>On MuJoCo and SOFA the layer stiffens the beam more than theory says</strong>
+  (ratio 0.75–0.77, against 0.82). With linear tetrahedra, a stiff layer one
+  element thick locks even more than the soft body does. At 1 mm the MuJoCo
+  ratio moves from 0.745 to 0.772, towards theory, so this is discretisation.
+  Resolve a stiff layer with two or more elements, or transfer the card
+  (<code>softsim transfer</code>).</li>
+<li><strong>MuJoCo's StVK flex locks more than its Stable Neo-Hookean flex</strong> in bending
+  (−39% against −30% at 2 mm), so prefer Stable Neo-Hookean.</li>
+</ul>
+<h2 id="a-pneunet-finger">A PneuNet finger<a class="headerlink" href="#a-pneunet-finger" title="Permanent link">&para;</a></h2>
+<p><code>geometry: {type: pneunet, ...}</code> is a parametric PneuNet bending actuator:
+- a block along +x, its base face at x = 0;
+- <code>chambers</code> closed chambers in its upper part, joined by a channel just above
+  a solid base slab, so they form one cavity;
+- an optional strain-limiting <code>layer</code> at the bottom of the slab. The mesh
+  conforms to it, and a zone takes it by name (<code>region: layer</code>).</p>
+<p>Regions: <code>cavity</code>, <code>base</code>, <code>tip</code>, <code>bottom</code>, <code>top</code>, <code>side</code>. The tip angle is
+the <code>tip</code> face's rotation from its rest orientation.</p>
+<p><code>scenarios/actuation/pneunet.yaml</code>:
+- six 6 mm chambers in Ecoflex 00-30 (datasheet card), 54 × 16 × 16 mm;
+- 2 mm walls, a 5 mm slab whose bottom 1.5 mm is a 1 MPa silicone layer;
+- base bonded, no gravity, a smooth ramp to 8 kPa
+  (<code>python tools/compare_pneunet.py</code>; 1.5 mm mesh, 17.9k tetrahedra).</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>4 kPa: tip angle</th>
+<th>4 kPa: V/V0</th>
+<th>8 kPa: tip angle</th>
+<th>8 kPa: V/V0</th>
+<th>Wall time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>fem reference</strong></td>
+<td>5.29°</td>
+<td>1.232</td>
+<td>13.51°</td>
+<td>1.562</td>
+<td>7 min</td>
+</tr>
+<tr>
+<td>MuJoCo</td>
+<td>4.29° (−19%)</td>
+<td>1.169 (−27%)</td>
+<td>10.25° (−24%)</td>
+<td>1.404 (−28%)</td>
+<td>6.4 min</td>
+</tr>
+<tr>
+<td>SOFA</td>
+<td>4.22° (−20%)</td>
+<td>1.168 (−28%)</td>
+<td>10.25° (−24%)</td>
+<td>1.404 (−28%)</td>
+<td>17 min</td>
+</tr>
+</tbody>
+</table>
+<p>(Volume errors are relative to the reference's volume change.)</p>
+<ul>
+<li><strong>MuJoCo and SOFA agree with each other</strong> to 0.1% at 8 kPa, and both bend
+  24% less than the reference, as on the beams. Locking is the same story with
+  2 mm walls only one or two elements thick.</li>
+<li><strong><code>softsim transfer</code> fixes it, with both moduli fitted together</strong>
+  (<code>calibrations/transfer_pneunet_mujoco.yaml</code>, 13 MuJoCo runs, 1.8 h). It
+  fits the body and the layer on the 0–8 kPa bend-angle and cavity-volume
+  histories. MuJoCo at 1.5 mm needs body E 114 → 91.0 kPa and layer
+  E 1 → 1.76 MPa. The error (NRMSE against the reference) falls from 17.7% to
+  2.9% (bend angle 4.6%, volume 1.2%). It holds on cases the fit never saw:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Raw card</th>
+<th>Transferred cards</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11 kPa (larger strain)</td>
+<td>21.5%</td>
+<td>3.2%</td>
+</tr>
+<tr>
+<td>4 chambers (a shorter finger)</td>
+<td>17.1%</td>
+<td>4.3%</td>
+</tr>
+</tbody>
+</table>
+<p>The fit softens the body, where the thin walls lock, and stiffens the layer:
+  its bending resistance is the other half of the curl. The transfer writes
+  one effective card per fitted material
+  (<code>ecoflex_00_30_mujoco_transfer.yaml</code>, <code>ecoflex_00_30_layer_mujoco_transfer.yaml</code>).
+  They are valid for MuJoCo, linear tetrahedra and 1.5 mm.
+  Re-run after the MuJoCo timing fix (2026-11-03): body E 91.0 kPa, layer 1.76 MPa, 2.9%, checks 3.2% and 4.3%, unchanged.
+- <strong>Above about 15 kPa the walls balloon.</strong> On MuJoCo the volume runs away:
+  V/V0 2.85 and 39° at 16 kPa, then the run diverges. These thin Ecoflex
+  chambers approach their limit pressure, like the sphere. The reference,
+  which is softer, gets there sooner, so this scenario stops at 8 kPa.
+- <strong>How converged is the reference itself?</strong> Quasi-static runs on the GPU,
+  same finger, 1.5 mm down to 0.7 mm (152k tetrahedra, 709k dofs; the largest
+  needed the element kernels chunked, below):</p>
+<table>
+<thead>
+<tr>
+<th>Mesh</th>
+<th>Tetrahedra</th>
+<th>4 kPa: tip angle</th>
+<th>8 kPa: tip angle</th>
+<th>8 kPa: V/V0</th>
+<th>Wall time (4 loads)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.5 mm</td>
+<td>17.9k</td>
+<td>5.316°</td>
+<td>13.496°</td>
+<td>1.5616</td>
+<td>40 s</td>
+</tr>
+<tr>
+<td>1.2 mm</td>
+<td>34.1k</td>
+<td>5.377°</td>
+<td>13.628°</td>
+<td>1.5688</td>
+<td>104 s</td>
+</tr>
+<tr>
+<td>1.0 mm</td>
+<td>52.1k</td>
+<td>5.511°</td>
+<td>13.921°</td>
+<td>1.5766</td>
+<td>200 s</td>
+</tr>
+<tr>
+<td>0.8 mm</td>
+<td>101.7k</td>
+<td>5.519°</td>
+<td>13.943°</td>
+<td>1.5809</td>
+<td>804 s</td>
+</tr>
+<tr>
+<td>0.7 mm</td>
+<td>152.7k</td>
+<td>5.544°</td>
+<td>13.997°</td>
+<td>1.5827</td>
+<td>1506 s</td>
+</tr>
+</tbody>
+</table>
+<p>The tip angle rises monotonically and the steps shrink (0.4% from 0.8 to
+  0.7 mm at 8 kPa), but it is not yet flat: <strong>the 1.5 mm reference used for
+  the transfers is 3.6% under-bent (volume change −3.6%) against 0.7 mm</strong>, and
+  0.7 mm itself is probably still a fraction of a percent low. The earlier
+  steps are not a clean power law (0.13°, 0.29°, 0.02°, 0.05°), so I do not
+  extrapolate; the mesh sequence from the gmsh generator is not
+  uniformly refined. Consequence for the transfers: they reproduce the
+  1.5 mm reference, and carry its few-percent bias.
+- <strong>Real data is a different finger.</strong> These PneuNet numbers check the backends against each other and the
+  reference, not against reality. The reference is compared with measured angles on the cast finger of the next
+  section ("A cast finger against measured angles"), not on this PneuNet.</p>
+<h2 id="a-cast-finger-against-measured-angles">A cast finger against measured angles<a class="headerlink" href="#a-cast-finger-against-measured-angles" title="Permanent link">&para;</a></h2>
+<p><code>scenarios/actuation/ribbed_finger.yaml</code> is the finger of Wang et al., <em>Actuators</em> 15(9), 488 (2026),
+doi:10.3390/act15090488 (CC BY 4.0): 103 x 24 x 16 mm, seven 5 mm chambers on one manifold, a 2 mm floor with 19
+teeth (shape <code>ribbed_finger</code>; solid 19,568 mm^3 and cavity 12,400 mm^3 equal the paper's mesh, tests/test_ribbed_finger.py),
+Posilicone Shore A20 as the paper's own third-order Yeoh fit (<code>posilicone_a20_wang2026</code>), base clamped, 0-40 kPa.
+The measured angle is the <strong>chord angle</strong> (change in direction of the root-to-tip line, metric <code>chord_angle</code>), which
+is not the tip face's rotation (tested). Data: <code>datasets/wang2026_finger.yaml</code> (measured and the paper's FE).</p>
+<p>Two details decide the result (found by elimination, docs/decisions.md decision 3):</p>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>chord at 5 / 10 / 40 kPa [deg]</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>free width, no teeth</td>
+<td>10 / 37 / (limit point at 16 kPa)</td>
+</tr>
+<tr>
+<td>width held (<code>plane_strain: y</code>), no teeth</td>
+<td>5.0 / 10.1 / 4.5 (stalls at 21.7 deg)</td>
+</tr>
+<tr>
+<td>width held, teeth (the committed scenario)</td>
+<td>5.0 / 10.7 / 34.4</td>
+</tr>
+<tr>
+<td>measured</td>
+<td>5.0 / 10.3 / 35.0</td>
+</tr>
+</tbody>
+</table>
+<p>The paper's Abaqus model holds <code>U3 = 0</code> on every node (<code>AllNodesPlanar</code>): <code>body.plane_strain: y</code> does that (reference
+only; a plane-strain beam deflects 1/(1-nu^2) less, tests/test_plane_strain.py). The teeth thicken the floor, the strain-limiting
+layer, to an effective 2.6 mm.</p>
+<p>Result of the committed scenario on the reference (1.5 mm mesh, dynamic 1 s ramp): RMS error against the measurements
+0.76 deg, the paper's FE 0.56 deg; worst point 1.3 deg (30 kPa); the 5 kPa point is 1.15 deg low (ramp lag, static 5.04). A 1 mm mesh gives 0.95 deg and differs from 1.5 mm by 0.5 deg
+RMS: read the result as agreement within about 1 deg of discretisation error. MuJoCo (2 mm: 16.4 deg, 1.5 mm: 8.1) and
+SOFA (1.5 mm: 10.2) do not reproduce the finger; see docs/decisions.md. Reproduce:</p>
+<div class="highlight"><pre><span></span><code>softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --set simulation.timestep=10ms --out runs/wang/fem_1p5mm
+python tools/compare_wang_finger.py runs/wang/fem_1p5mm --plot      # table and docs/media/wang_finger.png
+</code></pre></div>
+<h3 id="tip-force-a-test-it-fails">Tip force: a test it fails<a class="headerlink" href="#tip-force-a-test-it-fails" title="Permanent link">&para;</a></h3>
+<p>The paper also measured the force the tip presses with (Table 7: 0.47, 0.77 and 0.96 N at 20, 30 and 35 kPa) and has no
+FE of it. Nothing here was fitted to it. Holding the tip face in z (a roller) and reading its reaction:</p>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>bending, RMS against Table 5</th>
+<th>tip force / measured, 20 / 30 / 35 kPa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>width held, published card (the committed scenario)</td>
+<td>0.76 deg</td>
+<td>0.18 / 0.19 / 0.17 (0.085 / 0.146 / 0.165 N)</td>
+</tr>
+<tr>
+<td>free width, card 2.8x stiffer</td>
+<td>3.15 deg</td>
+<td>0.53 / 0.55 / 0.54 (0.247 / 0.423 / 0.521 N)</td>
+</tr>
+<tr>
+<td>free width, card 4x stiffer</td>
+<td>4.53 deg (bends too little)</td>
+<td>0.48 / 0.49 / 0.48</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Held across only, the validated finger pushes about 5.5 times too weakly</strong>, at every pressure. Releasing the width does
+most of the change; stiffening the card does not close the rest, and no model here matches both bending and force that way.</p>
+<p><strong>Update 2026-11-11: the gap is the gauge, not the finger.</strong> Held across only is a frictionless gauge that the tip slides
+along. A tip that sticks to the gauge (held along the finger and across it) pushes far harder, mostly along the finger,
+because the inflated finger tries to lengthen:</p>
+<table>
+<thead>
+<tr>
+<th>p [kPa]</th>
+<th>held across only (sliding)</th>
+<th>stuck: along / across / total</th>
+<th>measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20</td>
+<td>0.085 N</td>
+<td>1.02 / 0.19 / 1.04 N</td>
+<td>0.47 N</td>
+</tr>
+<tr>
+<td>30</td>
+<td>0.146 N</td>
+<td>1.14 / 0.33 / 1.19 N</td>
+<td>0.77 N</td>
+</tr>
+</tbody>
+</table>
+<p>The same validated finger reads anything from 0.085 to 1.04 N at 20 kPa depending on how its tip meets the gauge, and the
+measurement lies inside that range: a gauge whose normal is tilted 17 deg (20 kPa) to 25 deg (30 kPa) from the bending
+direction, with the tip stuck, reads it; the tilt growing with pressure fits a finger curling onto the gauge. The paper
+records neither the contact point nor the direction, so <strong>the tip force cannot test this model</strong>: it neither confirms nor
+contradicts it. A beam check agrees: a blocked bending actuator pushes about 1.5 M / L, nearly independent of its
+stiffness, so a transverse force 5.5 times higher at the same bend angle would need 5.5 times the pressure's bending moment,
+which no linear-elastic finger of this shape has. Read the chord-angle agreement as the validation, and the force as
+unchecked. The gripper's held and dropped limits (docs/gripper.md) use the sliding contact, the conservative case.</p>
+<div class="highlight"><pre><span></span><code>softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --out runs/wang/blocked_1p5mm \
+    --set simulation.timestep=10ms --set simulation.duration=900ms \
+    --set "body.prescribed=[{region: tip, path: [[0 ms, [null, null, 0 mm]], [900 ms, [null, null, 0 mm]]]}]"   # about 16 min
+python tools/compare_wang_tip_force.py runs/wang/blocked_1p5mm
+# the tip stuck to the gauge (held along and across; about 35 min on the laptop, Newton fails past ~34 kPa):
+softsim run scenarios/actuation/ribbed_finger.yaml --backend fem --out runs/wang/stuck_tip_1p5mm \
+    --set simulation.timestep=20ms --set simulation.output_rate=50Hz --set simulation.duration=650ms \
+    --set "body.prescribed=[{region: tip, path: [[0 ms, [0 mm, null, 0 mm]], [650 ms, [0 mm, null, 0 mm]]]}]"
+# free width, card S times stiffer: add these to the run above (blocked) and to one without the prescribed tip (bending)
+#   --set body.plane_strain=null --set body.material.elastic.c10=&lt;44163*S&gt; \
+#   --set body.material.elastic.c20=&lt;530.71*S&gt; --set body.material.elastic.c30=&lt;16.251*S&gt;
+python tools/compare_wang_finger.py runs/wang/&lt;free run&gt;
+</code></pre></div>
+<p>Not done: MuJoCo and SOFA (they refuse Yeoh: <code>softsim material project</code>, then
+<code>softsim transfer</code>). The interactive slider viewer of recorded runs is <code>tools/make_viewer.py</code> (docs/viewer/*.html).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
