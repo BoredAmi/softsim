@@ -27,7 +27,7 @@ dependencies = [
     "pyyaml>=5.4",
     "pydantic>=2,<3",
     "pandas>=2,<3",
-    "pyarrow>=14",
+    "pyarrow>=14,<26",         # 26 is built against NumPy 2 and does not import with numpy<2
 ]
 
 [project.optional-dependencies]
