@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **fem: the smallest substeps get 300 Newton iterations** (was 60). A fingertip going over a box's corner needed 76, so
+  the 30 g grasp stopped at t = 1.04 s with the default friction. Re-run, it drops the box as the earlier run with the old
+  friction smoothing did (grip while holding 0.073 against 0.074 N). Runs that converged before are unchanged.
+
 ## 0.1.0 (2026-11-13)
 
 The first release: a validated core, three robot families and the reference solver they are checked against.

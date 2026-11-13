@@ -1197,8 +1197,9 @@ class Solid3DSolver:
         return True
 
     def advance(self, dt: float, depth: int = 4) -> bool:
-        """Advance by ``dt``, splitting into halves (recursively, ``depth`` levels) where a step fails."""
-        if self.solve_step(dt):
+        """Advance by ``dt``, splitting into halves (recursively, ``depth`` levels) where a step fails. The smallest
+        steps get more Newton iterations: a node sliding over an edge (a fingertip over a box's corner) can need ~80."""
+        if self.solve_step(dt, max_iter=60 if depth else 300):
             return True
         if depth == 0:
             return False

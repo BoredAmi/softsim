@@ -133,7 +133,7 @@ corners and the box never leaves the table; the fast finger lifts it 1.5 mm at m
 | --- | --- | --- |
 | Final rise of the box | 0.001 mm | 0.08 mm |
 | Grip before the lift | 0.122 N | 0.108 N |
-| Grip while holding (the tips at the corners) | 0.074 N | 0.092 N |
+| Grip while holding (the tips at the corners) | 0.073 N | 0.092 N |
 | `held` | 0 | 0 |
 
 The hand check: grip is per finger, so two fingers at μ 0.8 and 0.122 N carry 2 × 0.8 × 0.122 = 0.195 N, which is 19.9 g. The
@@ -142,7 +142,7 @@ limit, on a coarse mesh, so it checks the map's boundary for the box at 25 kPa, 
 
 ```bash
 python tools/run_fe_grasp.py --mass 30 --out runs/grasp/coulomb_30g_2mm.npz --checkpoint runs/grasp/coulomb_30g_2mm.ckpt.npz \
-    --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0 --set body.material.friction.sliding=0.8    # about 2.7 hours
+    --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0 --set body.material.friction.sliding=0.8    # about 8 hours
 python tools/plot_fe_grasp.py runs/grasp/coulomb_30g_2mm.npz --finger softsim/reduced/wang_finger.json --mass 30 --out docs/media/gripper_fe_drop.png
 ```
 
@@ -177,10 +177,10 @@ schedule and is asked for the same palm path, but its palm follows about 6 mm be
 ## Limits
 
 - **The 10 g finite-element grasps were re-run with the friction default** (a slip speed,
-  [decisions.md](decisions.md), entry 6) on 2026-11-13 and give the 2 mm numbers of the earlier run. The 30 g drop above
-  predates it: re-run with the default, the 2 mm 30 g grasp stops converging at t = 1.04 s, during the lift (Newton fails
-  even with 0.6 ms substeps; the checkpoint at sample 104 of 150 is kept, `runs/grasp/coulomb_30g_2mm.ckpt.npz`). Its
-  dropped-box numbers are therefore from the old smoothing (`--set contact.slip_speed=null`).
+  [decisions.md](decisions.md), entry 6) on 2026-11-13 and give the 2 mm numbers of the earlier run; so does the 30 g
+  drop, re-run the same day (0.073 against 0.074 N while holding, the rest equal). Its fingertips going over the box's
+  top corners (t = 1.04-1.05 s) need up to 76 Newton iterations in a 0.6 ms substep, so the smallest substeps now allow
+  300 instead of 60; that run is 8 hours, against 2.7 with the old smoothing.
 - **Held on the map means held at 20 s**, not indefinitely, and every grasp is still creeping then (see above).
 - **The map is the fast model's prediction.** Two coarse finite-element grasps check it, the box at 25 kPa held at 10 g and
   dropped at 30 g, as the map says. Every other cell, and the cylinder and bottle entirely, are unchecked.
