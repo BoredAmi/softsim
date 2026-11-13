@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-13)
 
 The first release: a validated core, three robot families and the reference solver they are checked against.
 See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.

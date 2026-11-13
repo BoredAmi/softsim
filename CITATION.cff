@@ -4,7 +4,7 @@ title: "softsim: data-driven simulation of soft materials and soft robots"
 type: software
 license: Apache-2.0
 version: 0.1.0
-# date-released: set to the tag date (YYYY-MM-DD) when v0.1.0 is tagged
+date-released: "2026-11-13"
 repository-code: "https://github.com/BoredAmi/softsim"
 url: "https://boredami.github.io/softsim/"
 authors:
