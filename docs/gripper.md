@@ -115,8 +115,11 @@ the real height.
 python tools/run_fe_grasp.py --mass 10 --out runs/grasp/coulomb_10g_2mm.npz --checkpoint runs/grasp/coulomb_10g_2mm.ckpt.npz \
     --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0 --set body.material.friction.sliding=0.8    # about 5 hours with other jobs running
 python tools/plot_fe_grasp.py runs/grasp/coulomb_10g_2mm.npz --finger softsim/reduced/wang_finger.json --out docs/media/gripper_fe_grasp.png
-python tools/make_gripper_page.py --finger softsim/reduced/wang_finger.json --map runs/reduced/grasp_map.json --truth runs/grasp/coulomb_10g_2mm.npz
-python tools/check_gripper_page.py docs/viewer/gripper.html --finger softsim/reduced/wang_finger.json --truth runs/grasp/coulomb_10g_2mm.npz --shots runs/page
+python tools/run_fe_grasp.py --mass 10 --out runs/grasp/coulomb_10g_1p5mm.npz --checkpoint runs/grasp/coulomb_10g_1p5mm.ckpt.npz \
+    --set body.material.friction.sliding=0.8    # the validated finger: 19 hours on an i5-13500, alone
+python tools/make_gripper_page.py --finger softsim/reduced/wang_finger.json --map runs/reduced/grasp_map.json \
+    --truth runs/grasp/coulomb_10g_1p5mm.npz --truth-label "1.5 mm mesh with teeth, friction 0.8"
+python tools/check_gripper_page.py docs/viewer/gripper.html --finger softsim/reduced/wang_finger.json --truth runs/grasp/coulomb_10g_1p5mm.npz --shots runs/page
 ```
 
 ### The first finite-element drop
