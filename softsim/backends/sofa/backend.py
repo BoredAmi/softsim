@@ -417,7 +417,8 @@ class SofaBackend(Backend):
         points = child.addObject("MechanicalObject", position=via.tolist())
         springs = child.addObject("StiffSpringForceField", name="tension", indices1=list(range(len(seg))),
                                   indices2=list(range(1, len(seg) + 1)), lengths=seg.tolist(),
-                                  stiffness=[k] * len(seg), damping=[0.0] * len(seg))
+                                  stiffness=[k] * len(seg), damping=[0.0] * len(seg),
+                                  elongationOnly=[0] * len(seg), enabled=[1] * len(seg))
         child.addObject("BarycentricMapping", mapForces=True, mapMasses=False)
         return a, points, springs, k
 
