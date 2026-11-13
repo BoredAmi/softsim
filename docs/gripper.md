@@ -86,20 +86,21 @@ python tools/check_long_hold.py runs/reduced/grasp_map_3p5s.json --finger softsi
 
 ![Finite-element grasp against the fast finger](media/gripper_fe_grasp.png)
 
-The same grasp on the reference: 25 kPa, a 10 g box, a 30 mm lift, Coulomb friction 0.8 on both models. This run is coarse,
-2 mm and toothless, so it is not the validated finger; the 1.5 mm finger with teeth is the one to trust.
+The same grasp on the reference: 25 kPa, a 10 g box, a 30 mm lift, Coulomb friction 0.8 on both models. Two meshes: 2 mm and toothless, and the validated 1.5 mm finger with teeth (19 hours). Both ran with the default
+contact (a slip speed, [decisions.md](decisions.md) entry 6).
 
-| | Finite element, 2 mm, μ 0.8 | Fast finger | Finite element, no-slip (earlier) |
-| --- | --- | --- | --- |
-| Palm rise when the box leaves the table | 1.3 mm | 0.2 mm | 13.9 mm |
-| Final rise of the box | 28.9 mm | 27.1 mm | 17.2 mm |
-| Grip before the lift | 0.122 N | 0.107 N | 0.170 N |
-| Grip while holding | 0.100 N | 0.092 N | 0.100 N |
-| `held` | 1 | 1 | 1 |
+| | FE, 1.5 mm with teeth, μ 0.8 | FE, 2 mm, μ 0.8 | Fast finger | FE, no-slip (earlier) |
+| --- | --- | --- | --- | --- |
+| Palm rise when the box leaves the table | 1.3 mm | 1.3 mm | 0.2 mm | 13.9 mm |
+| Final rise of the box | 29.0 mm | 28.9 mm | 27.1 mm | 17.2 mm |
+| Grip before the lift | 0.133 N | 0.122 N | 0.107 N | 0.170 N |
+| Grip while holding | 0.113 N | 0.100 N | 0.092 N | 0.100 N |
+| `held` | 1 | 1 | 1 | 1 |
 
 **The two agree on how the grasp works, not only that it holds.** The pads stay on the box's sides, the box leaves the table
-almost at once and follows the palm, and the grip is within 8% while holding and 12% before the lift. The fast finger's friction
-was not tuned to this run.
+almost at once and follows the palm. Against the 2 mm run the grip is within 8% while holding and 12% before the lift; against
+the validated 1.5 mm finger the fast finger grips about 19% less (0.092 against 0.113 N while holding, 0.107 against
+0.133 N before the lift). The fast finger's friction was not tuned to either run.
 
 **The earlier comparison was wrong, and why.** The first finite-element grasps ran with no-slip contact while the fast finger
 ran at 0.8: the backend takes the larger of the silicone card's friction (1.0) and the object's, and from `STICK_MU` = 1.0 up it
@@ -112,7 +113,7 @@ the real height.
 
 ```bash
 python tools/run_fe_grasp.py --mass 10 --out runs/grasp/coulomb_10g_2mm.npz --checkpoint runs/grasp/coulomb_10g_2mm.ckpt.npz \
-    --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0 --set body.material.friction.sliding=0.8    # about an hour
+    --set body.mesh.size=2mm --set body.geometry.finger.tooth_height=0 --set body.material.friction.sliding=0.8    # about 5 hours with other jobs running
 python tools/plot_fe_grasp.py runs/grasp/coulomb_10g_2mm.npz --finger softsim/reduced/wang_finger.json --out docs/media/gripper_fe_grasp.png
 python tools/make_gripper_page.py --finger softsim/reduced/wang_finger.json --map runs/reduced/grasp_map.json --truth runs/grasp/coulomb_10g_2mm.npz
 python tools/check_gripper_page.py docs/viewer/gripper.html --finger softsim/reduced/wang_finger.json --truth runs/grasp/coulomb_10g_2mm.npz --shots runs/page
@@ -142,9 +143,12 @@ python tools/run_fe_grasp.py --mass 30 --out runs/grasp/coulomb_30g_2mm.npz --ch
 python tools/plot_fe_grasp.py runs/grasp/coulomb_30g_2mm.npz --finger softsim/reduced/wang_finger.json --mass 30 --out docs/media/gripper_fe_drop.png
 ```
 
-**Mesh error.** A no-slip run on the validated 1.5 mm finger with teeth (11 hours) gripped 12% harder while holding than the
-same run at 2 mm (0.112 against 0.100 N), and left the table at 11.7 mm of palm rise against 13.9. Take about 12% as the
-uncertainty of the 2 mm grips above until a 1.5 mm friction run exists.
+**Mesh error.** With friction (μ 0.8, the default slip speed) the 1.5 mm finger with teeth grips 13% harder while holding
+than the 2 mm toothless one (0.113 against 0.100 N) and 9% harder before the lift (0.133 against 0.122 N); the lift-off
+(1.3 mm of palm rise), the final rise (29.0 against 28.9 mm) and `held` are the same. The earlier no-slip pair showed the
+same 12% (0.112 against 0.100 N). Take about 13% as the uncertainty of a 2 mm grip. It is the teeth and the mesh together,
+since the two runs differ in both. The 2 mm numbers equal those of the earlier run with the old friction smoothing to the
+digits shown, so the slip speed does not change this grasp.
 
 The Truth tab draws the finger's side face. Contact is usually mid-width, where the cavity bulges the pad past that face,
 so a marked node can sit in a gap between the drawn finger and the box. The fast finger there gets the same pressure
@@ -169,10 +173,11 @@ schedule and is asked for the same palm path, but its palm follows about 6 mm be
 
 ## Limits
 
-- **The finite-element grasps here predate the friction default of 2026-11-11.** They ran with the reference's old
-  per-step friction smoothing, which lets a held grasp creep at a rate set by the time step; the default is now a slip
-  speed ([decisions.md](decisions.md), entry 6). They are to be re-run on the GPU machine; until then, reproduce them
-  with `--set contact.slip_speed=null`.
+- **The 10 g finite-element grasps were re-run with the friction default** (a slip speed,
+  [decisions.md](decisions.md), entry 6) on 2026-11-13 and give the 2 mm numbers of the earlier run. The 30 g drop above
+  predates it: re-run with the default, the 2 mm 30 g grasp stops converging at t = 1.04 s, during the lift (Newton fails
+  even with 0.6 ms substeps; the checkpoint at sample 104 of 150 is kept, `runs/grasp/coulomb_30g_2mm.ckpt.npz`). Its
+  dropped-box numbers are therefore from the old smoothing (`--set contact.slip_speed=null`).
 - **Held on the map means held at 20 s**, not indefinitely, and every grasp is still creeping then (see above).
 - **The map is the fast model's prediction.** Two coarse finite-element grasps check it, the box at 25 kPa held at 10 g and
   dropped at 30 g, as the map says. Every other cell, and the cylinder and bottle entirely, are unchecked.

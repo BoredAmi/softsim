@@ -29,6 +29,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the details of each milestone.
 - **Robots (M7-M10):** PneuNet and the Wang et al. ribbed finger (reference within 0.8 deg RMS of the
   measurements), cable finger and arm, a two-finger gripper with finite-element grasps and a live page,
   soft-magnetic elastomers (MRE) on the reference.
+- **Benchmarks, full tier:** `docs/benchmarks.md` now has the full tier (hard-magnetic cantilever and the Wang finger: the reference is 0.76 deg RMS from the measurement, MuJoCo and SOFA 18-19 deg, listed as known failures). The 10 g finite-element grasp was re-run with the default friction on the 2 mm mesh (unchanged) and on the validated 1.5 mm finger with teeth (grip while holding 13% higher); the 30 g one stops converging at t = 1.04 s.
 - **Drop comparisons:** calibrations made before the measured landing tilt was applied (28-29 Oct) are re-simulated
   without it (`tilt: false` in the calibration file); with the tilt the SOFA 500 g fits blew up and were missing from
   the figures. The SOFA Ogden fit's 500 g NRMSE is 79% without the rim artefact (it was reported as 58%).

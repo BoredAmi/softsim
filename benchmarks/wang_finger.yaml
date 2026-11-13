@@ -18,9 +18,9 @@ runs:
     overrides: [body.material.preset=posilicone_a20_wang2026_nh]
     tolerance: 2.0
     known_failure: true
-    note: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md)
+    note: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md)
   - backend: sofa
     overrides: [body.material.preset=posilicone_a20_wang2026_nh, simulation.timestep=2ms]
     tolerance: 2.0
     known_failure: true
-    note: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md)
+    note: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md)

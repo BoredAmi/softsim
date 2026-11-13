@@ -12,41 +12,41 @@ Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU 
 
 | Case | Quantity | Truth | Backend | Value | Error | Tolerance | Status | Mesh | Wall [s] | Run |
 |---|---|---|---|---|---|---|---|---|---|---|
-| cable_cantilever | tip angle [rad] | 0.2696 | fem | 0.2675 | -0.8% | ±2% | … stale (re-run) | 2 mm (4500 tets) | 249 | 2026-11-11 771b49a+dirty |
-| cable_cantilever | tip angle [rad] | 0.2696 | rod | 0.2775 | +2.9% | ±4% | … stale (re-run) | 2 mm (4500 tets) | 2 | 2026-11-11 771b49a+dirty |
-| cable_cantilever | tip angle [rad] | 0.2696 | mujoco | 0.188 | -30.3% | ±35% | … stale (re-run) | 2 mm (4500 tets) | 54 | 2026-11-11 771b49a+dirty |
-| cable_cantilever | tip angle [rad] | 0.2696 | sofa | 0.188 | -30.3% | ±35% | … stale (re-run) | 2 mm (4500 tets) | 609 | 2026-11-11 771b49a+dirty |
+| cable_cantilever | tip angle [rad] | 0.2696 | fem | 0.2675 | -0.8% | ±2% | ✅ pass | 2 mm (4500 tets) | 707 | 2026-11-12 93c5483 |
+| cable_cantilever | tip angle [rad] | 0.2696 | rod | 0.2775 | +2.9% | ±4% | ✅ pass | 2 mm (4500 tets) | 2 | 2026-11-12 93c5483 |
+| cable_cantilever | tip angle [rad] | 0.2696 | mujoco | 0.188 | -30.3% | ±35% | ✅ pass | 2 mm (4500 tets) | 43 | 2026-11-12 93c5483 |
+| cable_cantilever | tip angle [rad] | 0.2696 | sofa | 0.188 | -30.3% | ±35% | ✅ pass | 2 mm (4500 tets) | 326 | 2026-11-12 93c5483 |
 | | *truth: Euler-Bernoulli, pure moment (softsim.analytic.cable_beam_tip_angle)* | | | | | | | | | |
-| self_collision | smallest wall gap [m] | 0 | mujoco | 1.868e-04 | +0.000187 | ±0.0003 | ✅ pass | 2 mm (1586 tets) | 15 | 2026-11-11 771b49a+dirty |
-| self_collision | smallest wall gap [m] | 0 | sofa | 9.998e-05 | +0.0001 | ±0.0003 | ✅ pass | 2 mm (1586 tets) | 22 | 2026-11-11 771b49a+dirty |
+| self_collision | smallest wall gap [m] | 0 | mujoco | 1.868e-04 | +0.000187 | ±0.0003 | ✅ pass | 2 mm (1586 tets) | 11 | 2026-11-12 93c5483 |
+| self_collision | smallest wall gap [m] | 0 | sofa | 9.998e-05 | +0.0001 | ±0.0003 | ✅ pass | 2 mm (1586 tets) | 15 | 2026-11-12 93c5483 |
 | | *truth: contact (the walls touch, neither goes through)* | | | | | | | | | |
-| sliding_block | travel at 300 ms [m] | 0.06979 | fem | 0.07045 | +0.9% | ±3% | … stale (re-run) | 5 mm (768 tets) | 57 | 2026-11-11 771b49a+dirty |
-| sliding_block | travel at 300 ms [m] | 0.06979 | mujoco | 0.07035 | +0.8% | ±3% | … stale (re-run) | 5 mm (768 tets) | 8 | 2026-11-11 771b49a+dirty |
-| sliding_block | travel at 300 ms [m] | 0.06979 | sofa | 0.07039 | +0.9% | ±3% | … stale (re-run) | 5 mm (768 tets) | 241 | 2026-11-11 771b49a+dirty |
+| sliding_block | travel at 300 ms [m] | 0.06979 | fem | 0.07045 | +0.9% | ±3% | ✅ pass | 5 mm (768 tets) | 107 | 2026-11-12 93c5483 |
+| sliding_block | travel at 300 ms [m] | 0.06979 | mujoco | 0.07035 | +0.8% | ±3% | ✅ pass | 5 mm (768 tets) | 6 | 2026-11-12 93c5483 |
+| sliding_block | travel at 300 ms [m] | 0.06979 | sofa | 0.07039 | +0.9% | ±3% | ✅ pass | 5 mm (768 tets) | 183 | 2026-11-12 93c5483 |
 | | *truth: Coulomb friction, rigid block (softsim.analytic.sliding_block_travel)* | | | | | | | | | |
-| sticking_block | travel at 300 ms [m] | 0 | fem | 1.006e-05 | +1.01e-05 | ±5e-05 | … stale (re-run) | 5 mm (768 tets) | 58 | 2026-11-11 771b49a+dirty |
-| sticking_block | travel at 300 ms [m] | 0 | mujoco | 4.296e-05 | +4.3e-05 | ±5e-05 | … stale (re-run) | 5 mm (768 tets) | 10 | 2026-11-11 771b49a+dirty |
-| sticking_block | travel at 300 ms [m] | 0 | sofa | 3.123e-05 | +3.12e-05 | ±5e-05 | … stale (re-run) | 5 mm (768 tets) | 240 | 2026-11-11 771b49a+dirty |
+| sticking_block | travel at 300 ms [m] | 0 | fem | 1.006e-05 | +1.01e-05 | ±5e-05 | ✅ pass | 5 mm (768 tets) | 109 | 2026-11-12 93c5483 |
+| sticking_block | travel at 300 ms [m] | 0 | mujoco | 4.296e-05 | +4.3e-05 | ±5e-05 | ✅ pass | 5 mm (768 tets) | 6 | 2026-11-12 93c5483 |
+| sticking_block | travel at 300 ms [m] | 0 | sofa | 3.123e-05 | +3.12e-05 | ±5e-05 | ✅ pass | 5 mm (768 tets) | 181 | 2026-11-12 93c5483 |
 | | *truth: Coulomb friction, sticking (F < mu m g)* | | | | | | | | | |
-| tension_test | pull [N] | 0.9089 | fem | 0.9089 | -0.0% | ±0.1% | … stale (re-run) | 2.5 mm (768 tets) | 8 | 2026-11-11 771b49a+dirty |
-| tension_test | pull [N] | 0.9089 | mujoco | 0.9173 | +0.9% | ±1.5% | … stale (re-run) | 2.5 mm (768 tets) | 6 | 2026-11-11 771b49a+dirty |
-| tension_test | pull [N] | 0.9089 | sofa | 0.9174 | +0.9% | ±1.5% | … stale (re-run) | 2.5 mm (768 tets) | 44 | 2026-11-11 771b49a+dirty |
+| tension_test | pull [N] | 0.9089 | fem | 0.9089 | -0.0% | ±0.1% | ✅ pass | 2.5 mm (768 tets) | 20 | 2026-11-12 93c5483 |
+| tension_test | pull [N] | 0.9089 | mujoco | 0.9173 | +0.9% | ±1.5% | ✅ pass | 2.5 mm (768 tets) | 4 | 2026-11-12 93c5483 |
+| tension_test | pull [N] | 0.9089 | sofa | 0.9174 | +0.9% | ±1.5% | ✅ pass | 2.5 mm (768 tets) | 29 | 2026-11-12 93c5483 |
 | | *truth: exact homogeneous uniaxial stress (softsim.analytic.uniaxial_force)* | | | | | | | | | |
-| tip_load_cantilever | tip deflection [m] | 8.640e-04 | fem | 8.662e-04 | +0.3% | ±3% | … stale (re-run) | 2 mm (4500 tets) | 239 | 2026-11-11 771b49a+dirty |
-| tip_load_cantilever | tip deflection [m] | 8.640e-04 | rod | 8.635e-04 | -0.1% | ±2% | … stale (re-run) | 2 mm (4500 tets) | 2 | 2026-11-11 771b49a+dirty |
-| tip_load_cantilever | tip deflection [m] | 8.640e-04 | mujoco | 6.005e-04 | -30.5% | ±35% | … stale (re-run) | 2 mm (4500 tets) | 51 | 2026-11-11 771b49a+dirty |
-| tip_load_cantilever | tip deflection [m] | 8.640e-04 | sofa | 6.005e-04 | -30.5% | ±35% | … stale (re-run) | 2 mm (4500 tets) | 427 | 2026-11-11 771b49a+dirty |
+| tip_load_cantilever | tip deflection [m] | 8.640e-04 | fem | 8.662e-04 | +0.3% | ±3% | ✅ pass | 2 mm (4500 tets) | 701 | 2026-11-12 93c5483 |
+| tip_load_cantilever | tip deflection [m] | 8.640e-04 | rod | 8.635e-04 | -0.1% | ±2% | ✅ pass | 2 mm (4500 tets) | 2 | 2026-11-12 93c5483 |
+| tip_load_cantilever | tip deflection [m] | 8.640e-04 | mujoco | 6.005e-04 | -30.5% | ±35% | ✅ pass | 2 mm (4500 tets) | 43 | 2026-11-12 93c5483 |
+| tip_load_cantilever | tip deflection [m] | 8.640e-04 | sofa | 6.005e-04 | -30.5% | ±35% | ✅ pass | 2 mm (4500 tets) | 323 | 2026-11-12 93c5483 |
 | | *truth: Euler-Bernoulli F L^3 / (3 E I)* | | | | | | | | | |
 
 ## Full tier
 
 | Case | Quantity | Truth | Backend | Value | Error | Tolerance | Status | Mesh | Wall [s] | Run |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hard_magnetic_cantilever | tip deflection [m] | 0.001018 | fem | 0.001033 | +1.5% | ±2% | … stale (re-run) | 1 mm (5760 tets) | 557 | 2026-11-11 9484a62+dirty |
+| hard_magnetic_cantilever | tip deflection [m] | 0.001018 | fem | 0.001033 | +1.5% | ±2% | ✅ pass | 1 mm (5760 tets) | 765 | 2026-11-12 93c5483 |
 | | *truth: Euler-Bernoulli under a uniform couple c = mu0 M_r H A* | | | | | | | | | |
-| wang_finger | chord angle [deg] vs pressure | 8 points | fem | | | ≤1 RMS | – not run | | | |
-| wang_finger | chord angle [deg] vs pressure | 8 points | mujoco | | | ≤2 RMS | – not run | | | |
-| wang_finger | chord angle [deg] vs pressure | 8 points | sofa | | | ≤2 RMS | – not run | | | |
+| wang_finger | chord angle [deg] vs pressure | 8 points | fem | curve | 0.76 RMS | ≤1 RMS | ✅ pass | 1.5mm (41739 tets) | 5436 | 2026-11-12 93c5483 |
+| wang_finger | chord angle [deg] vs pressure | 8 points | mujoco | curve | 18.01 RMS | ≤2 RMS | ❌ fail (known) | 1.5 mm (41739 tets) | 11998 | 2026-11-12 93c5483 |
+| wang_finger | chord angle [deg] vs pressure | 8 points | sofa | curve | 18.86 RMS | ≤2 RMS | ❌ fail (known) | 1.5 mm (41739 tets) | 403 | 2026-11-12 93c5483 |
 | | *truth: measured, Wang et al. 2026 Table 5 (doi:10.3390/act15090488)* | | | | | | | | | |
 
 ## Cases
@@ -58,4 +58,4 @@ Regenerate: `softsim bench --tier quick` (minutes) or `--tier full` (hours; GPU 
 - **sticking_block**: The same block pushed by 0.06 N, 0.71 of the friction limit (0.084 N): Coulomb says it sticks, so the top face moves only by the block's shear (about 0.005 mm). MuJoCo's friction is a soft constraint and creeps at a steady rate instead (about 0.13 mm/s here), which is what a held grasp does on MuJoCo; the tolerance is that creep over 300 ms. Notes: fem: creeps at about 0.005 mm/s with the default contact.slip_speed (1e-5 m/s); the old per-step smoothing (slip_speed null) crept 0.233 mm/s at 2 ms (docs/decisions.md, entry 6); mujoco: soft-constraint friction creeps at about 0.13 mm/s while sticking.
 - **tension_test**: Roller tension test, 10 x 10 x 20 mm Neo-Hookean bar (E 100 kPa, nu 0.45) pulled 10% by prescribed motion; the pull at the hold is the homogeneous uniaxial stress times the area, which linear and quadratic tetrahedra both represent exactly. MuJoCo and SOFA run the stable Neo-Hookean of Smith et al., 0.9% stiffer at 10%. Notes: mujoco: stable Neo-Hookean is 0.9% stiffer than the split form at 10%; sofa: stable Neo-Hookean is 0.9% stiffer than the split form at 10%.
 - **tip_load_cantilever**: The same beam under a 5 mN dead load along +x spread over its top face. Euler-Bernoulli F L^3 / (3 E I) = 0.864 mm; the reference converges to it (Timoshenko's 2.4% shear is offset by the fully clamped root). Notes: mujoco: linear tetrahedra lock in bending; sofa: linear tetrahedra lock in bending.
-- **wang_finger**: Cast ribbed pneumatic finger of Wang et al., Actuators 15(9), 488 (2026), CC BY 4.0: geometry from the paper's Abaqus mesh, Yeoh card from its tensile data, plane strain as in the paper; chord angle against the eight measured points, 5-40 kPa (one finger, one ascending sequence; reading uncertainty about 1 deg). Notes: mujoco: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md); sofa: does not reproduce this finger at 1-2 mm (8-16 deg RMS, docs/actuation.md).
+- **wang_finger**: Cast ribbed pneumatic finger of Wang et al., Actuators 15(9), 488 (2026), CC BY 4.0: geometry from the paper's Abaqus mesh, Yeoh card from its tensile data, plane strain as in the paper; chord angle against the eight measured points, 5-40 kPa (one finger, one ascending sequence; reading uncertainty about 1 deg). Notes: mujoco: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md); sofa: does not reproduce this finger at 1-2 mm (8-19 deg RMS, docs/actuation.md).
