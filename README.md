@@ -127,6 +127,11 @@ reported, not fitted. The magnets' fields are exact, checked against current loo
 *A cable-bent cantilever against the Euler-Bernoulli solution: tip angle over the tension ramp, and the deformed beam.
 See [docs/actuation.md](docs/actuation.md).*
 
+## Built on softsim
+
+[Squishlings](https://github.com/BoredAmi/squishlings) evolves soft voxel creatures that crawl, made of softsim's
+silicone cards (Ecoflex 00-30, Dragon Skin 10) and driven by its muscle actuators, in the spirit of Framsticks.
+
 ## Why
 
 Gazebo has no deformable bodies, SOFA is powerful but hard to use from ROS,
