@@ -1,0 +1,29 @@
+# Voxel blob: a free 4 x 3 x 2 body of 1 cm voxels (Ecoflex "E" with a stiffer Dragon Skin 10 "S" core, both neo-Hookean
+# with the same damping, as one MuJoCo flex needs) dropped 2 mm onto a frictional ground; it should settle stably.
+#   softsim run scenarios/actuation/voxel_blob.yaml --quiet
+scenario: actuation
+description: Free voxel body (two materials) settling on a frictional ground.
+backend: mujoco
+
+simulation:
+  timestep: 1 ms
+  duration: 0.5 s
+  output_rate: 200 Hz
+
+ground:
+  friction: {sliding: 0.8}
+
+body:
+  name: blob
+  geometry:
+    type: voxels
+    voxel: 10 mm
+    cells:
+      - ["EEEE", "ESSE", "EEEE"]
+      - ["EEEE", "ESSE", "EEEE"]
+  material: ecoflex_00_30
+  zones:
+    - {name: stiff, material: dragon_skin_10, region: S}
+  position: [0 mm, 0 mm, 2 mm]
+
+actuators: []

@@ -3,7 +3,7 @@
 The actuation scenario (M6): a soft body, e.g. a hollow sphere or a closed tube
 (balloon actuator) or a beam, optionally bonded to the ground through named
 regions (``fixed``), with pressure actuators on its regions and cables routed
-through it (``type: cable``), each following a schedule or a controller
+through it (``type: cable``) or muscles (``type: muscle``, an active stress in a volume region), each following a schedule or a controller
 (``Backend.set_control``). An actuator without ``type`` is a pressure actuator.
 ``body.zones`` give parts of the body other materials (e.g. a strain-limiting layer);
 ``body.mount_path`` moves the fixed regions along a prescribed translation (a moving mount,
@@ -14,7 +14,8 @@ Outputs per sample: each pressure actuator's pressure ``<name>_pressure`` [Pa]
 and the volume its region encloses ``<name>_volume`` [m^3] (from the backend's
 surface vertices); each cable's tension ``<name>_tension`` [N] and length
 through its via points ``<name>_length`` [m] (a stroke-controlled cable also gives its
-command ``<name>_command`` [m]; its tension follows from its length); each region force its
+command ``<name>_command`` [m]; its tension follows from its length); each muscle its stress
+``<name>_stress`` [Pa]; each region force its
 force ``<name>_force`` [N] and its region's displacement along it ``<name>_displacement`` [m]
 (area-weighted centroid); each prescribed region's reaction ``<region>_reaction_<axis>`` [N] and
 centroid motion ``<region>_displacement_<axis>`` [m] along its held axes; each gap gauge (``body.gaps``) the signed
@@ -38,7 +39,7 @@ import pandas as pd
 from pydantic import Field, model_validator
 
 from softsim.actuation import (CableActuator, CableActuatorConfig, ForceActuator, ForceActuatorConfig,
-                               PressureActuator, PressureActuatorConfig,
+                               MuscleActuator, MuscleActuatorConfig, PressureActuator, PressureActuatorConfig,
                                cable_length, cable_rows, enclosed_volume)
 from softsim.backends.base import SimState
 from softsim.config.schema import StrictModel
@@ -135,7 +136,8 @@ class InflatedBodyConfig(StrictModel):
 class InflationConfig(ScenarioConfig):
     scenario: Literal["inflation", "actuation"] = "inflation"
     body: InflatedBodyConfig
-    actuators: list[Annotated[Union[PressureActuatorConfig, CableActuatorConfig, ForceActuatorConfig],
+    actuators: list[Annotated[Union[PressureActuatorConfig, CableActuatorConfig, ForceActuatorConfig,
+                                     MuscleActuatorConfig],
                               Field(discriminator="type")]] = [
         PressureActuatorConfig()]
 
@@ -217,8 +219,22 @@ class InflationScenario(Scenario):
             if isinstance(a, CableActuatorConfig) and a.path == "geometry" and hasattr(cfg.geometry, "tendon_path"):
                 a = a.model_copy(update={"path": cfg.geometry.tendon_path()})
             configs.append(a)
+        def muscle_elements(a: MuscleActuatorConfig) -> np.ndarray:
+            if a.region is not None:
+                if a.region not in volumes:
+                    raise ConfigError(f"actuator {a.name!r}: {type(cfg.geometry).__name__} has no volume region "
+                                      f"{a.region!r}; have {sorted(volumes)} (or give a box)")
+                return np.asarray(volumes[a.region], int)
+            lo, hi = np.array(a.box[0]), np.array(a.box[1])
+            elements = np.nonzero(np.all((centroids >= lo) & (centroids <= hi), axis=1))[0]
+            if len(elements) == 0:
+                raise ConfigError(f"actuator {a.name!r}: no element centroid lies in the muscle's box")
+            return elements
+
         try:
             actuators = tuple(PressureActuator.from_config(a, cfg.name) if isinstance(a, PressureActuatorConfig)
+                              else MuscleActuator.from_config(a, cfg.name, muscle_elements(a))
+                              if isinstance(a, MuscleActuatorConfig)
                               else ForceActuator.from_config(a, cfg.name) if isinstance(a, ForceActuatorConfig)
                               else CableActuator.from_config(a, cfg.name, cfg.mesh.size) for a in configs)
         except ValueError as exc:
@@ -283,6 +299,9 @@ class InflationScenario(Scenario):
                 out[f"{a.name}_tension"] = cable.tension_at(length, value, rest)
                 out[f"{a.name}_length"] = length
                 continue
+            if isinstance(a, MuscleActuatorConfig):
+                out[f"{a.name}_stress"] = float(state.controls.get(a.name, np.nan))
+                continue
             if isinstance(a, ForceActuatorConfig):
                 centre0, direction = self._loaded[a.name]
                 out[f"{a.name}_force"] = float(state.controls.get(a.name, np.nan))
@@ -327,6 +346,9 @@ class InflationScenario(Scenario):
                 length = ts[f"{a.name}_length"].to_numpy()
                 out[f"{a.name}_final_tension"] = float(ts[f"{a.name}_tension"].iloc[-1])
                 out[f"{a.name}_stroke"] = float(length[0] - length[-1])
+                continue
+            if isinstance(a, MuscleActuatorConfig):
+                out[f"{a.name}_final_stress"] = float(ts[f"{a.name}_stress"].iloc[-1])
                 continue
             if isinstance(a, ForceActuatorConfig):
                 out[f"{a.name}_final_force"] = float(ts[f"{a.name}_force"].iloc[-1])

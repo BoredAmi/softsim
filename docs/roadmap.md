@@ -482,6 +482,14 @@ Open (needs the maintainer): set up the PyPI trusted publisher (project `softsim
 environment `pypi`), enable GitHub Pages from the `gh-pages` branch, set the 0.1.0 date in `CHANGELOG.md` and
 `CITATION.cff`, and push the tag `v0.1.0`.
 
+## M14: voxel bodies and muscles (done; creatures moved to Squishlings)
+
+`type: voxels` bodies (labelled cubes, each label a volume region) and the `type: muscle` active-stress actuator
+(fibre or isotropic, oscillator signal; MuJoCo and fem, checked against homogeneous closed forms; SOFA refuses),
+in [actuation.md](actuation.md#voxel-bodies). The evolution of soft voxel creatures built on them (the `locomotion`
+scenario, the genome, `evolve`, replays) is a separate package, [Squishlings](https://github.com/BoredAmi/squishlings), which depends on softsim and
+registers its scenario through the `softsim.scenarios` entry point: softsim keeps the validated, reusable parts.
+
 ## Open items
 
 - **The 500 g first contact** stops 2–3× harder and faster than any model

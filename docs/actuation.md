@@ -1,7 +1,8 @@
 # Actuation (M6, in progress)
 
-Three actuators so far: pressure on a surface region, cables routed through
-the body (by tension or by stroke), and forces on a surface region. The fixed
+Four actuators so far: pressure on a surface region, cables routed through
+the body (by tension or by stroke), forces on a surface region, and muscles
+(an active stress in a volume region). The fixed
 regions can also follow a prescribed translation (a moving mount), and any
 region can follow a prescribed path with its reaction reported (displacement
 control). See
@@ -516,6 +517,75 @@ transferred modulus would be needed to say anything. Not done.
 
 The **rod backend** ([backends/rod.md](backends/rod.md)) runs this arm in seconds and gives the linear
 piecewise Euler–Bernoulli S (0.2298, 0.1221 rad); the reference sits 8% lower from the compression stiffening.
+
+## Muscles (active stress)
+
+```yaml
+actuators:
+  - name: flexor
+    type: muscle
+    region: layer                 # a volume region of the shape (as for zones), or `box: [[x0, y0, z0], [x1, y1, z1]]`
+    direction: [1, 0, 0]          # fibre in the body frame; or `isotropic`
+    oscillator: {frequency: 2 Hz, amplitude: 8 kPa, phase: 0 deg, offset: 0 kPa, start: 0.5 s}
+    # or `stress: 10 kPa`, or `schedule: [[0 ms, 0 kPa], [200 ms, 10 kPa]]`
+```
+
+An effective model (`kind: effective`): no real device, but a convenient
+actuator for evolved soft creatures ([Squishlings](https://github.com/BoredAmi/squishlings) is built on it). The elements of the region carry an
+active Cauchy stress `s` [Pa] on top of the material's: `+s m m^T` along the
+fibre, `m = F m0 / |F m0|` the fibre direction in the current configuration (it
+follows the material), or `+s I` for `isotropic`. **`s > 0` contracts**: the
+fibre pulls like a muscle (a free bar shortens), an isotropic element shrinks. The
+nodal loads are `f_a = -integral(sigma_a grad N_a dv)` over the current volume
+(on a linear tet with a fibre, `-s v (m . grad N_a) m`); they add up to zero
+force and zero moment (`softsim.actuation.muscle_forces`). The oscillator is
+`offset + amplitude sin(2 pi f (t - start) + phase)` for `t >= start` and 0
+before, times a smoothstep envelope over `ramp` (default 0 for `start: 0`, else one
+period, so a delayed muscle starts smoothly). `Backend.set_control(name, s)`
+overrides the value. Output: `<name>_stress`.
+
+- **MuJoCo:** explicit follower forces every step.
+- **fem (reference):** the same loads on the quadratic elements' quadrature
+  points at every Newton iterate. They are no potential, so the iteration
+  uses the symmetric part of their tangent. Without it the iteration does not
+  converge: the passive material carries the compression that balances the
+  fibre's tension, and omitting the tension's stiffening makes a slender bar
+  look unstable.
+- **SOFA:** refused (capability `muscle actuators`).
+
+**Verification** (`tests/test_muscle.py`): a free 40 x 10 x 10 mm bar (E = 100 kPa,
+nu = 0.45, stable Neo-Hookean, no gravity or ground), all of it a muscle along x with
+s = 10 kPa. The bar is in uniaxial stress with Cauchy `sigma_xx = -s` (the active
+tension balanced by passive compression), so its length is the stretch
+`homogeneous.curve(..., "uniaxial")` gives: 0.9016. MuJoCo reaches
+0.9007 (-0.10%, at 10 and 5 mm: a uniform field is exact on linear tets), the
+reference 0.9016 (0.00%). Isotropic, nu = 0.3, volume ratio J of the
+hydrostatic closed form 0.8872: MuJoCo 0.8783 (-1.0%), the reference 0.8872.
+
+## Voxel bodies
+
+```yaml
+body:
+  geometry:
+    type: voxels
+    voxel: 10 mm                  # cube edge
+    subdivide: 2                  # optional: each cube split into 2^3 (the mesh size is set here, not by body.mesh)
+    cells:                        # z layers from the bottom up; rows are y, characters x
+      - ["b1122a", "b1122a"]      # `.` is empty, any other character a label
+  zones:
+    - {name: foot, material: dragon_skin_10, region: b}   # every label is a volume region
+```
+
+A body of occupied cubes on a regular grid, bonded through shared nodes. Each cube is split into the same six
+tetrahedra (Kuhn), which conform across faces, so the mesh is exact for the cubes' volume. Every label is a volume
+region, which can carry a material zone or a muscle (above). Regions: `base` (downward faces at z = 0), `top` (every
+upward face) and `side` (the rest). The cells must be face-connected and touch the bottom layer; the error names the
+islands otherwise. `SoftVoxels.from_array` and `to_array` convert to and from a `(nx, ny, nz)` array of labels.
+Example: `scenarios/actuation/voxel_blob.yaml` (two materials, settling on the ground). Tests: `tests/test_voxels.py`.
+
+Linear tetrahedra are too stiff in bending, and a one-cube-thick limb is six of them: distances of a muscle-driven
+voxel body fell 45-80% when each cube was split into 2^3, and still 13-26% from 2^3 to 3^3. Use `subdivide: 2` or
+more where a voxel body bends.
 
 ## Region forces
 

@@ -43,6 +43,7 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
+from softsim.actuation import active_stress_loads
 from softsim.fem import jax_setup
 from softsim.fem.axisym import ContactSettings
 from softsim.fem.magnetic import FIELD_SIZE, SoftMagnet as SoftMagnetic, element_kernels
@@ -492,6 +493,8 @@ class Problem3D:
     cable_stiffness: tuple[float, ...] = ()  # per cable: 0 = tension-controlled, k > 0 = stroke-controlled
     force_loads: tuple[tuple[np.ndarray, np.ndarray], ...] = ()  # per region force: (faces (K, 6), direction (3,));
     #   ``Solid3DSolver.forces`` [N]: uniform traction, consistent (mid-edge nodes, a third of the face area each)
+    muscles: tuple[tuple[np.ndarray, np.ndarray | None], ...] = ()  # per muscle: (elements, unit fibre or None);
+    #   ``Solid3DSolver.muscle_stress`` [Pa]: active stress s (> 0 contracts), a follower load without tangent
     zones: tuple[tuple[np.ndarray, IsochoricLaw, float], ...] = ()  # (elements, law, bulk modulus) replacing ``law``
     zone_pronys: tuple[Prony | None, ...] = ()  # each zone's own series (None: undamped); empty: the body's ``prony``
     magnetic: SoftMagnetic | None = None  # the body takes up a field; ``Solid3DSolver.magnetic_field`` sets it
@@ -507,7 +510,7 @@ class Problem3D:
 
 # What a step changes: dofs and their rates, rotations, viscous memory, contact memory, the loads and the last residual.
 _SOLVER_STATE = ("y", "v", "a", "R", "omega", "alpha", "_q", "_s_prev", "_bond", "_anchor", "_lam", "pressures", "tensions",
-                 "forces", "free_lengths", "gravity", "residual", "magnetic_field")
+                 "forces", "muscle_stress", "free_lengths", "gravity", "residual", "magnetic_field")
 
 
 class Solid3DSolver:
@@ -581,6 +584,7 @@ class Solid3DSolver:
         groups = [self._edofs]
         self.pressures = np.zeros(len(problem.pressure_faces))
         self.forces = np.zeros(len(problem.force_loads))
+        self.muscle_stress = np.zeros(len(problem.muscles))
         self.gravity = np.asarray(problem.gravity, float)  # changeable between steps (a moving frame)
         self.fixed_motion = None  # optional t -> values of the fixed dofs (``self.fixed``): prescribed motion
         # gradient of the last accepted step's incremental potential, all dofs: zero at free dofs, and at
@@ -658,6 +662,7 @@ class Solid3DSolver:
                 self.v[dofs] = body.velocity[2]
         self.t = 0.0
         self._build_kernels()
+        self._muscle_jac = [self._muscle_kernel(m0) for _, m0 in problem.muscles]
 
     # -- kernels (JAX) -----------------------------------------------------------------------------
 
@@ -1016,6 +1021,37 @@ class Solid3DSolver:
             grad[dof] += FLOOR_STIFFNESS * sunk
         return e, grad
 
+    @staticmethod
+    def _muscle_kernel(m0):
+        """Jacobian (E, 30, 30) of an element's muscle loads for ``s = 1`` (fibre ``m0``, None: isotropic) with
+        respect to its dofs: ``jax.jacfwd`` of the same expression as :func:`softsim.actuation.active_stress_loads`."""
+        fibre = None if m0 is None else jnp.asarray(m0, float)
+
+        def loads(ue, x0, dndx, wv):
+            f = jnp.einsum("ni,qnj->qij", x0 + ue.reshape(10, 3), dndx)
+            j = jnp.linalg.det(f)
+            if fibre is None:
+                sigma = jnp.broadcast_to(jnp.eye(3), f.shape)
+            else:
+                fm = jnp.einsum("qij,j->qi", f, fibre)
+                m = fm / jnp.linalg.norm(fm, axis=-1, keepdims=True)
+                sigma = m[:, :, None] * m[:, None, :]
+            p = j[:, None, None] * sigma @ jnp.linalg.inv(f).swapaxes(-1, -2)
+            return -jnp.einsum("q,qij,qnj->ni", wv, p, dndx).reshape(30)
+
+        return jax.jit(jax.vmap(jax.jacfwd(loads), in_axes=(0, 0, 0, 0)))
+
+    def muscle_loads(self, y: np.ndarray) -> np.ndarray:
+        """Nodal loads (all dofs) of the muscles' active stress at the displacements ``y``
+        (:func:`softsim.actuation.active_stress_loads` on the quadratic elements' quadrature points)."""
+        out = np.zeros(self.ndof)
+        x = self.p.mesh.nodes + y[:3 * self.n].reshape(self.n, 3)
+        for s, (elements, m0) in zip(self.muscle_stress, self.p.muscles):
+            if s:
+                f = active_stress_loads(x[self.p.mesh.tets[elements]], self._dndx[elements], self._wv[elements], s, m0)
+                out[:3 * self.n] += np.bincount(self._edofs[elements].ravel(), weights=f.ravel(), minlength=3 * self.n)
+        return out
+
     def energy(self, y: np.ndarray, ctx) -> float:
         u = y[:3 * self.n].reshape(self.n, 3)
         e = float(self._elem_energy(jnp.asarray(u[self.p.mesh.tets].reshape(-1, 30)), ctx["c"], ctx["b"]))
@@ -1108,6 +1144,13 @@ class Solid3DSolver:
                 hm = self._project_psd(hm)
             grad += np.bincount(self._edofs.ravel(), weights=gm.ravel(), minlength=self.ndof)
             hess += pat.scatter(self._epos, hm.reshape(-1))
+        for k, s in enumerate(self.muscle_stress):  # the load's tangent, symmetrised: its geometric part
+            if s:  # (the active tension stiffens the bar and balances the passive compression's buckling)
+                elements = self.p.muscles[k][0]
+                ue = u[self.p.mesh.tets[elements]].reshape(-1, 30)
+                jac = np.asarray(self._muscle_jac[k](jnp.asarray(ue), jnp.asarray(self.p.mesh.nodes[self.p.mesh.tets[elements]]),
+                                                      jnp.asarray(self._dndx[elements]), jnp.asarray(self._wv[elements])))
+                hess += pat.scatter(self._epos.reshape(len(self.p.mesh.tets), -1)[elements].ravel(), (-0.5 * s * (jac + jac.swapaxes(1, 2))).reshape(-1))
         for k, pressure in enumerate(self.pressures):
             if not pressure:
                 continue
@@ -1162,6 +1205,10 @@ class Solid3DSolver:
         held = self.y[self.fixed] if self.fixed_motion is None else self.fixed_motion(self.t + dt)
         y[self.fixed] = held
         scale = max(float(np.ptp(self.p.mesh.nodes, axis=0).max()), 1e-3)
+        muscled = bool(np.any(self.muscle_stress))
+        if muscled:  # not a potential: the load is frozen at each Newton iterate (energy and gradient consistent)
+            f_base = ctx["f_ext"]
+            ctx["f_ext"] = f_base + self.muscle_loads(y)
         e_old = self.energy(y, ctx)
         if not np.isfinite(e_old):  # no predictor; a prescribed path must still be followed, or the step fails and splits
             y = self.y.copy()
@@ -1171,6 +1218,9 @@ class Solid3DSolver:
                 return False
         for _ in range(max_iter):
             converged = False
+            if muscled:
+                ctx["f_ext"] = f_base + self.muscle_loads(y)
+                e_old = self.energy(y, ctx)
             for project in (False, True):
                 grad, hess = self._grad_hess(y, ctx, project)
                 g_free = grad[self.free]

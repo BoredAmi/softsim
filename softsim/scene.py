@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 import numpy as np
 from pydantic import Field
 
-from softsim.actuation import Actuator, CableActuator, ForceActuator, PressureActuator, cable_rows
+from softsim.actuation import Actuator, CableActuator, ForceActuator, MuscleActuator, PressureActuator, cable_rows
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
 from softsim.config.units import Frequency, Length, Time, Velocity
@@ -496,6 +496,10 @@ class Scene:
             body = self.soft(a.body)
             if isinstance(a, (PressureActuator, ForceActuator)):
                 body.region(a.region)
+            elif isinstance(a, MuscleActuator):
+                if len(a.elements) == 0 or a.elements.min() < 0 or a.elements.max() >= len(body.mesh.tets):
+                    raise ValueError(f"actuator {a.name!r}: muscle region {a.region!r} has no elements "
+                                     "(or elements outside the body's mesh)")
             elif isinstance(a, CableActuator):
                 try:
                     body.cable_rows(a)

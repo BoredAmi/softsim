@@ -180,15 +180,52 @@ def structured_box(size_xyz: tuple[float, float, float], size: float) -> TetMesh
     gx, gy, gz = np.meshgrid(*axes, indexing="ij")
     points = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
     idx = np.arange(len(points)).reshape(n[0] + 1, n[1] + 1, n[2] + 1)
-    base = idx[:-1, :-1, :-1].ravel()
+    tets = _kuhn_tets(idx, idx[:-1, :-1, :-1].ravel())
+    return TetMesh(points, _orient(points, tets))
+
+
+def _kuhn_tets(idx: np.ndarray, base: np.ndarray) -> np.ndarray:
+    """Split the hexes whose lowest corner is node ``base`` (flat ids into the grid ``idx`` of node ids)
+    into 6 Kuhn tets each, rows ordered split-major. The same split everywhere makes the mesh conforming
+    on a regular grid (neighbouring hexes pick the same diagonal on a shared face)."""
     step = np.array([idx[1, 0, 0] - idx[0, 0, 0], idx[0, 1, 0] - idx[0, 0, 0], idx[0, 0, 1] - idx[0, 0, 0]])
     tets = []
     for perm in [(0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)]:
         v1 = base + step[perm[0]]
         v2 = v1 + step[perm[1]]
         tets.append(np.column_stack([base, v1, v2, base + step.sum()]))
-    tets = np.concatenate(tets)
-    return TetMesh(points, _orient(points, tets))
+    return np.concatenate(tets)
+
+
+def voxel_mesh(occupancy: np.ndarray, voxel: float, subdivide: int = 1) -> tuple[TetMesh, np.ndarray]:
+    """Mesh of the occupied cells of a regular grid; ``occupancy`` is a bool array (nx, ny, nz) of cubes
+    with edge ``voxel``, each split into ``subdivide``^3 sub-cubes and 6 Kuhn tets per sub-cube.
+
+    Nodes are shared between neighbouring cubes (they are bonded) and unused nodes are dropped. Frame: the
+    centre of the grid's full footprint (nx*voxel, ny*voxel) at the origin, z from 0, +z up. Returns the
+    mesh and, per tet, the flat (C-order) index ``(i * ny + j) * nz + k`` of the grid cell it lies in."""
+    occ = np.asarray(occupancy, bool)
+    if occ.ndim != 3 or not occ.any():
+        raise ConfigError("voxel mesh needs a non-empty 3D occupancy array")
+    if voxel <= 0 or subdivide < 1:
+        raise ConfigError("voxel size must be positive and subdivide >= 1")
+    s = int(subdivide)
+    nx, ny, nz = occ.shape
+    h = voxel / s
+    fine = np.repeat(np.repeat(np.repeat(occ, s, 0), s, 1), s, 2)
+    cell = np.repeat(np.repeat(np.repeat(np.arange(occ.size).reshape(occ.shape), s, 0), s, 1), s, 2)
+    gx, gy, gz = np.meshgrid(np.arange(nx * s + 1) * h - nx * voxel / 2, np.arange(ny * s + 1) * h - ny * voxel / 2,
+                             np.arange(nz * s + 1) * h, indexing="ij")
+    points = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
+    idx = np.arange(len(points)).reshape(nx * s + 1, ny * s + 1, nz * s + 1)
+    sel = fine.ravel()
+    tets = _kuhn_tets(idx, idx[:-1, :-1, :-1].ravel()[sel])
+    owner = np.tile(cell.ravel()[sel], 6)
+    used = np.unique(tets)
+    remap = np.full(len(points), -1)
+    remap[used] = np.arange(len(used))
+    points = points[used]
+    return TetMesh(points, _orient(points, remap[tets])), owner
 
 
 def _gmsh_mesh(build, size: float, export: str | None = None) -> TetMesh | None:

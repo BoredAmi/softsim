@@ -1,4 +1,4 @@
-"""Actuators: inputs that drive soft bodies (pressure, cables and region forces).
+"""Actuators: inputs that drive soft bodies (pressure, cables, region forces and muscles).
 
 A :class:`PressureActuator` loads a named surface region of a soft body (e.g. a
 hollow shape's ``cavity``) with a gauge pressure ``p``: the traction ``-p n``,
@@ -39,11 +39,29 @@ consistent load of a uniform traction on its quadratic faces (all of it on the
 mid-edge nodes); MuJoCo and SOFA give each triangle's vertices a third of its
 share (:func:`region_force_weights`). It depends on no position, so it has no
 stability limit.
+
+A :class:`MuscleActuator` is an active stress ``s`` [Pa] in the elements of a volume region (a zone's
+elements, or those whose centroid lies in a box): an *effective* model (``kind: effective``: no real
+device), a contracting muscle for evolved soft creatures. The total Cauchy stress of an element is the
+material's plus the active ``sigma_a``, and ``s > 0`` **contracts**: along the fibre ``sigma_a = +s m m^T``
+(tension in the fibre, which the surroundings balance by compressing the passive material, so a free
+bar shortens), ``m = F m0 / |F m0|`` the fibre direction in the current configuration (it follows the
+material; ``m0`` is given in the body frame), or isotropic ``sigma_a = +s I`` (the element shrinks).
+The nodal loads are the external-equivalent forces of the internal virtual work ``int sigma_a : grad(du) dv``:
+``f_a = -int sigma_a grad(N_a) dv`` over the current volume (:func:`muscle_forces`: for a fibre on a linear tet
+``f_a = -s v (m . grad N_a) m``). They sum to zero force and zero moment. They are follower loads that
+are not the gradient of a potential: MuJoCo and the reference apply them from the current positions (the
+reference at the Newton iterate, without a tangent: the active stress is a fraction of the passive
+stiffness, so the iteration converges linearly). SOFA refuses (``Capability.MUSCLE_ACTUATION``).
+``s(t)`` is a constant, a piecewise-linear schedule, or an oscillator
+``(offset + amplitude sin(2 pi f (t - start) + phase)) e(t)`` for ``t >= start``, 0 before, with the
+smoothstep envelope ``e`` rising over ``ramp`` (default: 0 if ``start`` is 0, else one period 1/f, so a
+delayed muscle starts smoothly).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
 import numpy as np
@@ -51,7 +69,7 @@ from pydantic import Field, model_validator
 
 from softsim.capabilities import Capability
 from softsim.config.schema import StrictModel
-from softsim.config.units import Force, Length, Pressure, Stiffness, Time, parse_quantity
+from softsim.config.units import Angle, Force, Frequency, Length, Pressure, Stiffness, Time, parse_quantity
 
 
 class PressureActuatorConfig(StrictModel):
@@ -227,8 +245,93 @@ class ForceActuator:
         return frozenset({Capability.REGION_FORCE})
 
 
-Actuator = PressureActuator | CableActuator | ForceActuator
-ActuatorConfig = PressureActuatorConfig | CableActuatorConfig | ForceActuatorConfig
+class OscillatorConfig(StrictModel):
+    """Sinusoidal muscle stress ``offset + amplitude sin(2 pi frequency (t - start) + phase)`` for
+    ``t >= start`` and 0 before, times a smoothstep envelope rising over ``ramp`` (default: none if
+    ``start`` is 0, else one period)."""
+
+    frequency: Annotated[Frequency, Field(gt=0)]
+    amplitude: Pressure
+    phase: Angle = 0.0
+    offset: Pressure = 0.0
+    start: Annotated[Time, Field(ge=0)] = 0.0
+    ramp: Annotated[Time, Field(ge=0)] | None = None
+
+
+class MuscleActuatorConfig(StrictModel):
+    """YAML form of a muscle: the volume ``region`` of the body (or ``box`` ``[[x0, y0, z0], [x1, y1, z1]]``,
+    the elements whose centroid lies in it; exactly one), the fibre ``direction`` in the body frame
+    (normalised) or ``isotropic``, and the stress ``s`` [Pa] (``s > 0`` contracts) as a constant
+    ``stress``, a piecewise-linear ``schedule: [[time, stress], ...]`` (held outside) or an ``oscillator``."""
+
+    name: str = "muscle"
+    type: Literal["muscle"] = "muscle"
+    region: str | None = None
+    box: tuple[tuple[Length, Length, Length], tuple[Length, Length, Length]] | None = None
+    direction: tuple[float, float, float] | Literal["isotropic"] = "isotropic"
+    stress: Pressure = 0.0
+    schedule: list[tuple[Annotated[Time, Field(ge=0)], Pressure]] = []
+    oscillator: OscillatorConfig | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "MuscleActuatorConfig":
+        if (self.region is None) == (self.box is None):
+            raise ValueError(f"muscle {self.name!r}: give exactly one of region and box")
+        if self.direction != "isotropic" and not np.linalg.norm(self.direction) > 0:
+            raise ValueError(f"muscle {self.name!r}: direction must be a non-zero vector or 'isotropic'")
+        if sum([bool(self.stress), bool(self.schedule), self.oscillator is not None]) > 1:
+            raise ValueError(f"muscle {self.name!r}: give one of stress, schedule and oscillator")
+        return self
+
+
+@dataclass(frozen=True)
+class MuscleActuator:
+    """Active stress [Pa] in ``elements`` of soft body ``body`` along the unit body-frame ``direction`` (None:
+    isotropic); ``region`` is the selector's name (or ``box``) for messages. ``oscillator`` is
+    ``(frequency, amplitude, phase, offset, start, ramp)``; see module docstring."""
+
+    name: str
+    body: str
+    region: str
+    direction: tuple[float, float, float] | None = None
+    stress: float = 0.0
+    schedule: tuple[tuple[float, float], ...] = ()
+    oscillator: tuple[float, float, float, float, float, float] | None = None
+    elements: np.ndarray = field(default_factory=lambda: np.zeros(0, int), compare=False, repr=False)
+
+    @classmethod
+    def from_config(cls, cfg: MuscleActuatorConfig, body: str, elements: np.ndarray) -> "MuscleActuator":
+        d = None
+        if cfg.direction != "isotropic":
+            v = np.asarray(cfg.direction, float)
+            d = tuple((v / np.linalg.norm(v)).tolist())
+        o = cfg.oscillator
+        osc = None if o is None else (o.frequency, o.amplitude, o.phase, o.offset, o.start,
+                                      (0.0 if o.start == 0 else 1.0 / o.frequency) if o.ramp is None else o.ramp)
+        return cls(cfg.name, body, cfg.region or "box", d, cfg.stress, tuple(map(tuple, cfg.schedule)), osc,
+                   np.asarray(elements, int))
+
+    def value(self, t: float) -> float:
+        """The stress s(t) [Pa]."""
+        if self.oscillator is not None:
+            f, amp, phase, offset, start, ramp = self.oscillator
+            if t < start:
+                return 0.0
+            r = min((t - start) / ramp, 1.0) if ramp > 0 else 1.0
+            return float((3 * r * r - 2 * r ** 3) * (offset + amp * np.sin(2 * np.pi * f * (t - start) + phase)))
+        if self.schedule:
+            times, values = zip(*self.schedule)
+            return float(np.interp(t, times, values))
+        return self.stress
+
+    @property
+    def requires(self) -> frozenset[Capability]:
+        return frozenset({Capability.MUSCLE_ACTUATION})
+
+
+Actuator = PressureActuator | CableActuator | ForceActuator | MuscleActuator
+ActuatorConfig = (PressureActuatorConfig | CableActuatorConfig | ForceActuatorConfig
+                  | MuscleActuatorConfig)
 
 
 def region_force_weights(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
@@ -367,6 +470,54 @@ def pressure_forces(points: np.ndarray, tris: np.ndarray, pressure: float) -> np
     out = np.zeros_like(points, dtype=float)
     np.add.at(out, tris.ravel(), np.repeat(share, 3, axis=0))
     return out
+
+
+def muscle_rest(points: np.ndarray, tets: np.ndarray) -> np.ndarray:
+    """Reference gradients of the shape functions of linear tets at rest (E, 4, 3), and nothing else is needed
+    per element: ``grad_X N_a`` (``muscle_forces`` takes the current volume from the positions)."""
+    x = points[tets]
+    inv = np.linalg.inv(np.swapaxes(x[:, 1:] - x[:, :1], 1, 2))      # (E, 3, 3): dX -> barycentric
+    g = np.concatenate([-inv.sum(axis=1, keepdims=True), inv], axis=1)  # (E, 4, 3): rows grad_X lambda_a
+    return g
+
+
+def active_stress_loads(xe: np.ndarray, dndx: np.ndarray, wv: np.ndarray, s: float,
+                        m0: np.ndarray | None) -> np.ndarray:
+    """Element nodal loads (E, n, 3) of an active stress ``s`` (``s > 0`` contracts) from quadrature:
+    ``xe`` current positions (E, n, 3), ``dndx`` reference gradients (E, Q, n, 3), ``wv`` reference weights
+    (E, Q) (rest volume), ``m0`` unit fibre (3,) or (E, 3) in the reference frame, None for isotropic.
+    The Cauchy stress is ``sigma_a = s m m^T`` (``m = F m0 / |F m0|``) or ``s I``, the load
+    ``f_a = -int sigma_a grad_x N_a dv = -wv P grad_X N_a`` with ``P = J sigma_a F^-T``."""
+    f = np.einsum("eni,eqnj->eqij", xe, dndx)                       # (E, Q, 3, 3), F = dx/dX
+    j = np.linalg.det(f)
+    finv_t = np.swapaxes(np.linalg.inv(f), -1, -2)
+    if m0 is None:
+        sigma = s * np.eye(3) * np.ones((len(f), f.shape[1], 1, 1))
+    else:
+        fm = np.einsum("eqij,ej->eqi", f, np.broadcast_to(m0, (len(f), 3)))
+        m = fm / np.linalg.norm(fm, axis=-1, keepdims=True)
+        sigma = s * m[..., :, None] * m[..., None, :]
+    p = j[..., None, None] * sigma @ finv_t
+    return -np.einsum("eq,eqij,eqnj->eni", wv, p, dndx)
+
+
+def muscle_forces(x: np.ndarray, tets: np.ndarray, s: float, m0: np.ndarray | None, rest: tuple) -> np.ndarray:
+    """Nodal forces (N, 3) of the active stress ``s`` [Pa] on linear ``tets`` at the current positions ``x``:
+    ``f_a = -v sigma_a grad N_a`` with ``sigma_a = s m m^T`` (``m = F m0 / |F m0|``; ``m0`` the unit
+    fibre in the rest frame, (3,) or (E, 3)) or ``s I`` (``m0`` None), ``s > 0`` contracting (a free
+    fibre shortens). ``rest = muscle_data(points, tets)`` (computed once). Forces and moments sum to zero."""
+    dndx, vol0 = rest
+    out = np.zeros_like(x, dtype=float)
+    f = active_stress_loads(x[tets], dndx[:, None], vol0[:, None], s, m0)
+    np.add.at(out, tets.ravel(), f.reshape(-1, 3))
+    return out
+
+
+def muscle_data(points: np.ndarray, tets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Rest data of :func:`muscle_forces`: reference shape-function gradients (E, 4, 3) and rest volumes (E,)."""
+    x = points[tets]
+    vol0 = np.linalg.det(x[:, 1:] - x[:, :1]) / 6.0
+    return muscle_rest(points, tets), vol0
 
 
 def enclosed_volume(points: np.ndarray, tris: np.ndarray) -> float:

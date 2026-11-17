@@ -22,6 +22,7 @@ from softsim.geometry.soft import (
     SoftGripper,
     SoftRibbedFinger,
     SoftShape,
+    SoftVoxels,
     check_resolution,
     bind_files,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "SoftGripper",
     "SoftRibbedFinger",
     "SoftShape",
+    "SoftVoxels",
     "WeightWithKnob",
     "check_resolution",
     "load_rigid_body",

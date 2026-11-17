@@ -32,6 +32,7 @@ from softsim.meshing import (
     gmsh_pneunet,
     structured_box,
     structured_cylinder,
+    voxel_mesh,
 )
 
 PositiveLength = Annotated[Length, Field(gt=0)]
@@ -717,8 +718,139 @@ class SoftGripper(StrictModel):
                                "side": lambda p: local(p)[1] > f.width / 2 - tol})
 
 
+class SoftVoxels(StrictModel):
+    """Body of occupied cubes ("voxels") on a regular grid, each labelled with a material zone.
+
+    ``cells`` are z layers from the bottom up; a layer is a list of rows (row index = y, character index
+    = x). ``.`` is empty, any other character is a label (a volume region, e.g. a ``zones`` entry with
+    ``region: <label>``). Occupied cells must be face-connected and one must touch the bottom layer.
+    Each cube is cut into ``subdivide``^3 sub-cubes of 6 tets; ``mesh.size`` is ignored (voxel and
+    ``subdivide`` set the resolution). Frame: the grid's footprint centred on the origin, z from 0.
+
+    Regions (boundary triangles, by outward normal): ``base`` faces down at z = 0, ``top`` faces up (at any
+    height), ``side`` is every other boundary face (vertical ones and downward overhangs above the ground).
+    Volume regions: one per label."""
+
+    type: Literal["voxels"] = "voxels"
+    voxel: PositiveLength
+    cells: list[list[str]]
+    subdivide: int = Field(default=1, ge=1)
+    _cache: dict = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "SoftVoxels":
+        layers = self.cells
+        if not layers or not layers[0]:
+            raise ValueError("voxels: cells is empty")
+        shape = (len(layers[0][0]), len(layers[0]))
+        for z, layer in enumerate(layers):
+            if len(layer) != shape[1] or any(len(r) != shape[0] for r in layer):
+                raise ValueError(f"voxels: layer {z} is not {shape[1]} rows of {shape[0]} characters "
+                                 "(every layer and row must have the same size)")
+            if any(c.isspace() for r in layer for c in r):
+                raise ValueError(f"voxels: layer {z} contains whitespace; use '.' for empty cells")
+        occ = self.occupancy()
+        if not occ.any():
+            raise ValueError("voxels: no occupied cell (every cell is '.')")
+        if not occ[:, :, 0].any():
+            raise ValueError("voxels: no occupied cell in the bottom layer, the body would float")
+        sizes = _islands(occ)
+        if len(sizes) > 1:
+            raise ValueError(f"voxels: occupied cells are not face-connected (diagonal contact does not count); "
+                             f"{len(sizes)} islands of {sorted(sizes, reverse=True)} cells")
+        return self
+
+    @classmethod
+    def from_array(cls, labels: np.ndarray, voxel: float, subdivide: int = 1) -> "SoftVoxels":
+        """From an (nx, ny, nz) array of single-character labels (``.`` or ``''`` = empty), indexed [x, y, z]."""
+        a = np.asarray(labels).astype(str)
+        a = np.where(a == "", ".", a)
+        nx, ny, nz = a.shape
+        cells = [["".join(a[x, y, z] for x in range(nx)) for y in range(ny)] for z in range(nz)]
+        return cls(voxel=voxel, cells=cells, subdivide=subdivide)
+
+    def to_array(self) -> np.ndarray:
+        """(nx, ny, nz) array of one-character labels, ``.`` for empty; indexed [x, y, z]."""
+        return np.array([[list(r) for r in layer] for layer in self.cells]).transpose(2, 1, 0)
+
+    def occupancy(self) -> np.ndarray:
+        return self.to_array() != "."
+
+    @property
+    def n_cells(self) -> int:
+        return int(self.occupancy().sum())
+
+    @property
+    def labels(self) -> list[str]:
+        return sorted(set(self.to_array().ravel()) - {"."})
+
+    @property
+    def top_height(self) -> float:
+        return len(self.cells) * self.voxel
+
+    @property
+    def min_feature(self) -> float:
+        return self.voxel / self.subdivide
+
+    def volume(self) -> float:
+        return self.n_cells * self.voxel**3
+
+    def mesh(self, settings: MeshSettings) -> TetMesh:
+        """Mesh of the occupied cells; ``settings.size`` is ignored."""
+        mesh, owner = voxel_mesh(self.occupancy(), self.voxel, self.subdivide)
+        self._cache.clear()
+        self._cache["last"] = (mesh, owner)
+        return mesh
+
+    def export(self, path) -> None:
+        raise ConfigError("voxel bodies cannot be exported as CAD")
+
+    def regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        tris = mesh.surface_triangles()
+        p = mesh.points[tris]
+        nz = np.cross(p[:, 1] - p[:, 0], p[:, 2] - p[:, 0])[:, 2]
+        down, up = nz < 0, nz > 0
+        base = down & (p[:, :, 2].max(axis=1) < _tol(mesh))
+        return {"base": tris[base], "top": tris[up], "side": tris[~base & ~up]}
+
+    def volume_regions(self, mesh: TetMesh) -> dict[str, np.ndarray]:
+        """Elements of each label; exact for the mesh ``mesh()`` returned, else from the centroids."""
+        cached = self._cache.get("last")
+        if cached is not None and cached[0] is mesh:
+            owner = cached[1]
+        else:
+            nx, ny, nz = self.to_array().shape
+            c = mesh.points[mesh.tets].mean(axis=1)
+            i = np.clip(np.floor(c[:, 0] / self.voxel + nx / 2).astype(int), 0, nx - 1)
+            j = np.clip(np.floor(c[:, 1] / self.voxel + ny / 2).astype(int), 0, ny - 1)
+            k = np.clip(np.floor(c[:, 2] / self.voxel).astype(int), 0, nz - 1)
+            owner = (i * ny + j) * nz + k
+        lab = self.to_array().ravel()[owner]
+        return {name: np.nonzero(lab == name)[0] for name in self.labels}
+
+
+def _islands(occ: np.ndarray) -> list[int]:
+    """Sizes of the face-connected components of the occupied cells."""
+    todo = {tuple(i) for i in np.argwhere(occ)}
+    sizes = []
+    while todo:
+        stack = [todo.pop()]
+        n = 0
+        while stack:
+            c = stack.pop()
+            n += 1
+            for d in range(3):
+                for s in (-1, 1):
+                    q = c[:d] + (c[d] + s,) + c[d + 1:]
+                    if q in todo:
+                        todo.remove(q)
+                        stack.append(q)
+        sizes.append(n)
+    return sizes
+
+
 SoftShape = Annotated[Union[SoftCylinder, SoftBox, SoftHollowSphere, SoftClosedTube, SoftPneuNet, SoftRibbedFinger, SoftCableFinger,
-                            SoftGripper, SoftMeshFile],
+                            SoftGripper, SoftMeshFile, SoftVoxels],
                       Field(discriminator="type")]
 
 
@@ -736,7 +868,9 @@ def _check_hollow(inner: float, outer: float) -> None:
 
 
 def check_resolution(shape, settings: MeshSettings) -> None:
-    """Reject meshes so coarse they cannot represent the shape at all."""
+    """Reject meshes so coarse they cannot represent the shape at all (voxel bodies set their own resolution)."""
+    if isinstance(shape, SoftVoxels):
+        return
     if settings.size > shape.min_feature:
         raise ConfigError(
             f"mesh size {settings.size * 1e3:.2f} mm exceeds the smallest body dimension "

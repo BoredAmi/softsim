@@ -26,6 +26,9 @@ Mapping:
       quadratic faces (exact follower load, softsim.actuation), at the end-of-step value of the
       control; the region must be closed (or bounded only by pinned vertices).
     * material zones: each zone's elements with their own law (any law the reference has);
+    * muscle actuators: the active stress of ``softsim.actuation.muscle_forces`` on the quadratic elements'
+      quadrature points, evaluated at every Newton iterate (a follower load that is no potential, without
+      tangent), at the end-of-step value.
     * cable actuators: the potential ``T L`` of the cable's length through its via points,
       interpolated with the quadratic shape functions, at the end-of-step tension.
     * magneto-active material in the scene's magnetic field: the matrix's law, plus the soft-magnetic energy of
@@ -48,7 +51,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from softsim.actuation import (CableActuator, ForceActuator, PressureActuator, anchor_weights, embed, open_edges,
+from softsim.actuation import (CableActuator, ForceActuator, MuscleActuator, PressureActuator, anchor_weights, embed, open_edges,
                                pad_rows)
 from softsim.backends.base import Backend, ContactWrench, RigidState, SimState, SoftState
 from softsim.capabilities import Capability
@@ -112,6 +115,7 @@ class FemBackend(Backend):
         Capability.CONTACT_ADHESION,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,
+        Capability.MUSCLE_ACTUATION,
         Capability.REGION_FORCE,
         Capability.MOVING_MOUNT,
         Capability.ROTATING_MOUNT,
@@ -231,6 +235,7 @@ class FemBackend(Backend):
         self._pressure = [a for a in scene.actuators if isinstance(a, PressureActuator)]
         self._cables = [a for a in scene.actuators if isinstance(a, CableActuator)]
         self._forces = [a for a in scene.actuators if isinstance(a, ForceActuator)]
+        self._muscles = [a for a in scene.actuators if isinstance(a, MuscleActuator)]
         cables = []
         for a in self._cables:
             via = np.array(a.via) @ rot.T + np.asarray(body.pose.position, float)
@@ -246,6 +251,8 @@ class FemBackend(Backend):
                                   gravity=tuple(scene.simulation.gravity), rigid=tuple(rigid),
                                   pinned=np.array(pinned, int), fixed_dofs=held.astype(int),
                                   pressure_faces=tuple(mesh.faces_of(body.region(a.region)) for a in self._pressure),
+                                  muscles=tuple((a.elements, None if a.direction is None
+                                                 else rot @ np.asarray(a.direction)) for a in self._muscles),
                                   cables=tuple(cables),
                                   cable_stiffness=tuple(a.stiffness or 0.0 for a in self._cables),
                                   force_loads=tuple((mesh.faces_of(body.region(a.region)), np.array(a.direction))
@@ -359,6 +366,8 @@ class FemBackend(Backend):
                     self.solver.tensions[k] = value
             for k, a in enumerate(self._forces):
                 self.solver.forces[k] = self.control(a.name, self.solver.t + dt)
+            for k, a in enumerate(self._muscles):
+                self.solver.muscle_stress[k] = self.control(a.name, self.solver.t + dt)
             if self._problem.is_magnetic:
                 self.solver.magnetic_field = self._scene.magnetic_field.parameters(self.solver.t + dt)
             if self._scene.mount is not None and self._scene.spin is None:  # in the mount's frame (a rotating

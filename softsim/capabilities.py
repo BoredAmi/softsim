@@ -45,6 +45,7 @@ class Capability(str, Enum):
     # Actuation.
     PRESSURE_ACTUATION = "pressure actuators on surface regions"
     CABLE_ACTUATION = "cable actuators routed through the body"
+    MUSCLE_ACTUATION = "muscle actuators (active stress in volume regions)"
     REGION_FORCE = "forces spread over surface regions"
     MOVING_MOUNT = "a prescribed translation of the fixed vertices (moving mount)"
     ROTATING_MOUNT = "a prescribed rotation of the fixed vertices about an axis (rotating mount)"
