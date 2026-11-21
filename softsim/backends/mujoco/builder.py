@@ -146,11 +146,16 @@ def scene_to_mjcf(scene: Scene) -> str:
     world = ET.SubElement(root, "worldbody")
     ET.SubElement(world, "light", {"pos": "0 -0.3 0.5", "dir": "0 0.5 -1"})
     if scene.ground.enabled:
-        ET.SubElement(world, "geom", {
-            "name": GROUND, "type": "plane", "size": "1 1 0.01", "rgba": "0.2 0.5 0.3 1",
-            "condim": str(_condim(scene.ground.friction)),
-            "friction": _friction_attr(scene.ground.friction),
-        })
+        g = scene.ground
+        common = {"condim": str(_condim(g.friction)), "friction": _friction_attr(g.friction)}
+        if g.compliance is not None:  # the ground's own contact parameters win over the flex's (priority)
+            common.update(solref=_fmt([g.compliance.timeconst, g.compliance.dampratio]),
+                          solimp=_fmt(g.compliance.solimp), priority="1")
+        ET.SubElement(world, "geom", {"name": GROUND, "type": "plane", "size": "1 1 0.01",
+                                      "rgba": "0.2 0.5 0.3 1", **common})
+        for i, box in enumerate(g.obstacles):  # static: on the world body, so contacts report as the ground
+            ET.SubElement(world, "geom", {"name": f"{GROUND}/obs{i}", "type": "box", "pos": _fmt(box.center),
+                                          "size": _fmt(box.half_size), "rgba": "0.35 0.55 0.4 1", **common})
     for body in scene.soft_bodies:
         _soft_body_xml(world, body, scene)
     for body in scene.rigid_bodies:

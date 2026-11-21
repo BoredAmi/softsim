@@ -57,6 +57,8 @@ class MujocoBackend(Backend):
         Capability.SELF_COLLISION,
         Capability.CONTACT_FORCES,
         Capability.CONTACT_ADHESION,
+        Capability.GROUND_OBSTACLES,
+        Capability.GROUND_COMPLIANCE,
         Capability.VISCOELASTIC_PRONY,
         Capability.PRESSURE_ACTUATION,
         Capability.CABLE_ACTUATION,

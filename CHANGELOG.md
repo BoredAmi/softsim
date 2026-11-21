@@ -6,6 +6,8 @@
   for finer meshes ([docs/actuation.md](docs/actuation.md#voxel-bodies)).
 - **Muscle actuators** (`type: muscle`): active stress along a material fibre or isotropic, constant, scheduled or
   oscillating; MuJoCo and fem (with its tangent), SOFA refuses. Free bar within 0.1% of the closed form on MuJoCo.
+- **Terrain** (MuJoCo): `ground.obstacles`, static boxes on the ground (steps, ridges), and `ground.compliance`, a
+  soft damped ground with its own contact time constant (sand-like as a continuum). The other backends refuse both.
 - **fem: the smallest substeps get 300 Newton iterations** (was 60). A fingertip going over a box's corner needed 76, so
   the 30 g grasp stopped at t = 1.04 s with the default friction. Re-run, it drops the box as the earlier run with the old
   friction smoothing did (grip while holding 0.073 against 0.074 N). Runs that converged before are unchanged.

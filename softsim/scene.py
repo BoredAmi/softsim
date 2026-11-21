@@ -81,12 +81,43 @@ class ContactSettings(StrictModel):
         return 2.0 * timestep if self.timeconst == "auto" else float(self.timeconst)
 
 
+class GroundBox(StrictModel):
+    """A static box fixed to the ground (an obstacle: a step, a ridge), with the ground's friction and compliance.
+    ``center`` and ``half_size`` in metres, world axes."""
+
+    center: tuple[Length, Length, Length]
+    half_size: tuple[Annotated[Length, Field(gt=0)], Annotated[Length, Field(gt=0)], Annotated[Length, Field(gt=0)]]
+
+
+class GroundCompliance(StrictModel):
+    """A soft, damped ground (sand-like, as a continuum: no grains, no displaced material): its own contact
+    ``timeconst`` / ``dampratio`` / ``solimp`` (MuJoCo's solref and solimp), used for every contact with the
+    ground and its obstacles instead of the shared :class:`ContactSettings`. A longer ``timeconst`` lets bodies
+    sink deeper; a wide ``solimp`` softens the onset."""
+
+    timeconst: Annotated[Time, Field(gt=0)] = 0.02
+    dampratio: Annotated[float, Field(gt=0)] = 1.0
+    solimp: tuple[float, float, float] = (0.5, 0.95, 0.005)
+
+
 class GroundSettings(StrictModel):
-    """Flat rigid ground at z = 0, with optional adhesion of soft bodies to it."""
+    """Rigid ground at z = 0, with optional adhesion of soft bodies to it, static ``obstacles`` (boxes) on it and an
+    optional ``compliance`` (a soft ground)."""
 
     enabled: bool = True
     friction: Friction = Friction(sliding=0.8)
     adhesion: Adhesion | None = None
+    obstacles: list[GroundBox] = []
+    compliance: GroundCompliance | None = None
+
+    @property
+    def requires(self) -> frozenset[Capability]:
+        req = set(self.friction.requires)
+        if self.obstacles:
+            req.add(Capability.GROUND_OBSTACLES)
+        if self.compliance is not None:
+            req.add(Capability.GROUND_COMPLIANCE)
+        return frozenset(req)
 
 
 @dataclass(frozen=True)
@@ -528,7 +559,7 @@ class Scene:
         if self.magnetic_field is not None and self.magnetic_field.active:
             req.add(Capability.MAGNETO_ACTIVE)
         if self.ground.enabled:
-            req |= self.ground.friction.requires
+            req |= self.ground.requires
             if self.ground.adhesion is not None and self.soft_bodies:
                 req |= self.ground.adhesion.requires
         return frozenset(req)

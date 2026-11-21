@@ -9,7 +9,7 @@ The core package is ROS-agnostic. Typical use::
 
 from softsim.errors import ConfigError, SoftSimError, UnsupportedFeatureError
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "ConfigError",
